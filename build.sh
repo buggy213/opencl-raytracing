@@ -1,1 +1,1 @@
-g++ -Wall -Wextra -DCL_HPP_TARGET_OPENCL_VERSION=300 main.cpp -o opencl-raytracing -lOpenCL
+g++ -Wall -Wextra -DCL_HPP_TARGET_OPENCL_VERSION=300 main.cpp vec3.cpp transforms.cpp -o opencl-raytracing -lOpenCL

@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <sstream>
 #include <fstream>
+#include "transforms.h"
 
 #define cl_expect(code) cl_expect_debug((code), __FILE__, __LINE__) 
 void cl_expect_debug(cl_int code, const char* const file, int const line) {
@@ -26,17 +27,16 @@ int main() {
     cl::Context context = cl::Context::getDefault();
     cl::Device device = cl::Device::getDefault();
 
-
     cl::CommandQueue command_queue{context, device};
 
     // create frame buffer
-    uint32_t frame_height = 1080;
-    uint32_t frame_width = 1920;
+    uint32_t frame_height = 450;
+    uint32_t frame_width = 800;
     cl::Buffer frame_buffer{context, CL_MEM_READ_WRITE, frame_width * frame_height * sizeof(float) * 3, nullptr, &result};
     cl_expect(result);
 
     // load kernels from file
-    std::ifstream kernel_file("kernels/kernel.cl");
+    std::ifstream kernel_file("kernel.cl");
     std::stringstream buffer;
     buffer << kernel_file.rdbuf();
     std::string kernel_source = buffer.str();
@@ -54,6 +54,12 @@ int main() {
     auto kernel = cl::KernelFunctor<cl::Buffer, int, int>(program, "render", &result);
     cl_expect(result);
 
+    cl::Buffer seed_buffer{context, CL_MEM_READ_WRITE, frame_width * frame_height * 2 * sizeof(uint), nullptr, &result};
+    cl_expect(result);
+
+    // uint* seeds = (uint*) malloc(sizeof(uint) * frame_width * frame_height * 2);
+    // command_queue.enqueueWriteBuffer(seed_buffer, CL_TRUE, 0, sizeof(uint) * frame_width * frame_height * 2, seeds);
+
     cl::NDRange range{frame_width, frame_height};
     cl::NDRange workgroup_size{8, 8};
     cl::EnqueueArgs enqueue_args{command_queue, range, workgroup_size};
@@ -64,7 +70,7 @@ int main() {
     command_queue.enqueueReadBuffer(frame_buffer, CL_TRUE, 0, sizeof(float) * frame_width * frame_height * 3, result_buffer);
 
     std::cout << "P3\n" << frame_width << " " << frame_height << "\n255\n";
-    for (uint32_t j = 0; j < frame_height; j--) {
+    for (uint32_t j = 0; j < frame_height; j++) {
         for (uint32_t i = 0; i < frame_width; i++) {
             size_t pixel_index = ((frame_height - 1 - j) * frame_width + i) * 3;
             float r = result_buffer[pixel_index + 0];
@@ -73,9 +79,9 @@ int main() {
             int ir = int(255.99*r);
             int ig = int(255.99*g);
             int ib = int(255.99*b);
-            // std::cout << ir << " " << ig << " " << ib << "\n";
+            std::cout << ir << " " << ig << " " << ib << "\n";
         }
     }
-
+    
     return 0;
 }
