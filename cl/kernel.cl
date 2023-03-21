@@ -15,21 +15,21 @@ matrix4x4 transpose(matrix4x4 m) {
 // [uy vy wy ty]
 // [uz vz wz tz]
 // [ 0  0  0  1]
-matrix4x4 invert_transform_matrix(matrix4x4 m) {
-    // [ux uy uz -dot(u,t)]
-    // [vx vy vz -dot(v,t)]
-    // [wx wy wz -dot(w,t)]
-    // [ 0  0  0     1    ]
-    matrix4x4 inverse;
-    inverse.s012 = m.s048;
-    inverse.s456 = m.s159;
-    inverse.s89a = m.s26a;
-    inverse.scdef = (float4) (0.0f, 0.0f, 0.0f, 1.0f);
-    inverse.s3 = dot(m.s048, m.s37b);
-    inverse.s7 = dot(m.s159, m.s37b);
-    inverse.sb = dot(m.s26a, m.s37b);
-    return inverse;
-}
+// matrix4x4 invert_transform_matrix(matrix4x4 m) {
+//     // [ux uy uz -dot(u,t)]
+//     // [vx vy vz -dot(v,t)]
+//     // [wx wy wz -dot(w,t)]
+//     // [ 0  0  0     1    ]
+//     matrix4x4 inverse;
+//     inverse.s012 = m.s048;
+//     inverse.s456 = m.s159;
+//     inverse.s89a = m.s26a;
+//     inverse.scdef = (float4) (0.0f, 0.0f, 0.0f, 1.0f);
+//     inverse.s3 = dot(m.s048, m.s37b);
+//     inverse.s7 = dot(m.s159, m.s37b);
+//     inverse.sb = dot(m.s26a, m.s37b);
+//     return inverse;
+// }
 
 matrix4x4 matmul(matrix4x4 a, matrix4x4 b) {
     float4 a1t = a.s0123;
@@ -46,25 +46,6 @@ matrix4x4 matmul(matrix4x4 a, matrix4x4 b) {
         dot(a3t, b1), dot(a3t, b2), dot(a3t, b3), dot(a3t, b4),
         dot(a4t, b1), dot(a4t, b2), dot(a4t, b3), dot(a4t, b4)
     );
-}
-
-transform look_at(float3 position, float3 look, float3 up) {
-    float3 direction = normalize(look - position);
-    float3 right = normalize(cross(normalize(up), direction));
-    float3 new_up = cross(direction, right);
-
-    matrix4x4 m;
-    m.s37b = position;
-    m.scdef = (float4) (0.0f, 0.0f, 0.0f, 1.0f);
-    m.s048 = right;
-    m.s159 = new_up;
-    m.s26a = direction;
-    transform t = {
-        .m = m,
-        .inverse = invert_transform_matrix(m)
-    };
-
-    return t;
 }
 
 float3 apply_transform_vector(transform t, float3 v) {
@@ -144,22 +125,13 @@ bool ray_triangle_intersect(float3 v0, float3 v1, float3 v2, ray_t ray, float t_
     float3 P = cross(ray.direction, e2);
     float denom = dot(P, e1);
 
-    int i = get_global_id(0);
-    int j = get_global_id(1);
-
     if (denom > -FLT_EPSILON && denom < FLT_EPSILON) {
-        if (i == 0 && j == 0) {
-            printf("parallel");
-        }
         return false;
     }
 
     float3 T = ray.origin - v0;
     float u = dot(P, T) / denom;
     if (u < 0.0f || u > 1.0f) {
-        if (i == 0 && j == 0) {
-            printf("oob (u)");
-        }
         return false;
     }
 
@@ -167,17 +139,11 @@ bool ray_triangle_intersect(float3 v0, float3 v1, float3 v2, ray_t ray, float t_
     float v = dot(Q, ray.direction) / denom;
 
     if (v < 0.0f || u + v > 1.0f) {
-        if (i == 0 && j == 0) {
-            printf("oob (v)");
-        }
         return false;
     }
 
     float t = dot(Q, e2) / denom;
     if (t < t_min || t > t_max) {
-        if (i == 0 && j == 0) {
-            printf("invalid t %d", t);
-        }
         return false;
     }
 
@@ -248,11 +214,6 @@ void __kernel render(
     barrier(CLK_LOCAL_MEM_FENCE);
     
     ray_t ray = generate_ray(&seed, i, j, raster_to_camera_transform);
-    if ((i == 0 && j == 0) || (i == 511 && j == 511)) {
-        printf("%v3f\n", ray.origin);
-        printf("%v3f\n", ray.direction);
-    }
-
     float3 color = ray_color(ray);
 
     frame_buffer[pixel_index] = color.r;
