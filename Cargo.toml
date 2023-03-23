@@ -11,3 +11,6 @@ cl3 = "0.9.1"
 obj = "0.10.2"
 rand = "0.8.5"
 image = "0.24.5"
+
+[dependencies.embree4-sys]
+path = "../embree4-sys"

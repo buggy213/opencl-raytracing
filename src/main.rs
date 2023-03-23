@@ -1,10 +1,13 @@
-use std::{fs::{self, read_to_string}, ptr::{null_mut}};
+use std::{fs::{self, read_to_string}, ptr::{null_mut}, path::Path};
 
 use cl3::{ext::CL_DEVICE_TYPE_GPU, memory::CL_MEM_READ_WRITE, types::CL_TRUE};
 use geometry::{Transform, Matrix4x4, Vec3};
 use opencl3::{program::Program, platform::Platform, device::Device, context::Context, memory::Buffer, command_queue::CommandQueue, kernel::{Kernel, ExecuteKernel}};
 
+use crate::geometry::Mesh;
+
 mod geometry;
+mod accel;
 
 const WIDTH: usize = 512;
 const HEIGHT: usize = 512;
@@ -20,9 +23,14 @@ fn initialize_cl() -> (Platform, Device, Context, Program, Kernel, CommandQueue)
     let device = Device::new(device_ids[0]);
     let context = Context::from_device(&device).expect("unable to create context");
 
-    let source_strings: Vec<String> = fs::read_dir("cl").expect("unable to open directory").map(|p| {
+    let source_strings: Vec<String> = fs::read_dir("cl").expect("unable to open directory").filter_map(|p| {
         let p = p.expect("unable to read directory entry");
-        read_to_string(p.path()).expect("unable to read file")
+        if p.file_name() == "kernel.cl" {
+            Some(read_to_string(p.path()).expect("unable to read file"))
+        }
+        else {
+            None
+        }
     }).collect();
 
     let source_strs: Vec<&str> = source_strings.iter().map(|s| s.as_str()).collect();
@@ -132,6 +140,8 @@ fn main() {
     let image_buffer = create_image_buffer(&context, &command_queue);
     let camera_transform = create_perspective_transform(1000.0, 0.01, 30.0);
     let camera_transform_cl = camera_transform.to_opencl_buffer(&context, &command_queue);
+    let mesh = Mesh::from_file(Path::new("meshes/suzanne.obj")).expect("failed to load mesh");
+    let mesh_cl = mesh.to_cl_mesh(&context, &command_queue);
 
     println!("{:?}", camera_transform);
 
@@ -143,6 +153,8 @@ fn main() {
             .set_arg(&1)
             .set_arg(&seed_buffer)
             .set_arg(&camera_transform_cl)
+            .set_arg(&mesh_cl.vertices)
+            .set_arg(&mesh_cl.triangles)
             .set_global_work_sizes(&[WIDTH, HEIGHT])
             .enqueue_nd_range(&command_queue).expect("failed to enqueue kernel")
     };
