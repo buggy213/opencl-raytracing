@@ -65,6 +65,14 @@ impl Vec3 {
         let clamped_t = t.clamp(0.0, 1.0);
         a * clamped_t + (1.0 - clamped_t) * b
     }
+
+    pub fn elementwise_min(a: Vec3, b: Vec3) -> Vec3 {
+        Vec3(f32::min(a.0, b.0), f32::min(a.1, b.1), f32::min(a.2, b.2))
+    }
+
+    pub fn elementwise_max(a: Vec3, b: Vec3) -> Vec3 {
+        Vec3(f32::max(a.0, b.0), f32::max(a.1, b.1), f32::max(a.2, b.2))
+    }
 }
 
 impl ops::AddAssign for Vec3 {
@@ -146,3 +154,7 @@ impl ops::Div<f32> for Vec3 {
         self * (1.0 / rhs)
     }
 }
+
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, PartialOrd)]
+pub struct Vec3u(pub u32, pub u32, pub u32);

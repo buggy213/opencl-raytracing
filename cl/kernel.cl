@@ -1,33 +1,47 @@
 #include "cl/geometry.cl"
 #include "cl/utils.cl"
 #include "cl/accel.cl"
+#include "cl/camera.cl"
 
-ray_t generate_ray(uint2 *rng_state, int x, int y, transform raster_to_camera) {
-    float x_disp = (float) (MWC64X(rng_state) % 1024) / 1024.0f;
-    float y_disp = (float) (MWC64X(rng_state) % 1024) / 1024.0f;
-    float3 raster_loc = (float3) ((float)x + x_disp, (float)y + y_disp, 0.0f);
-
-    float3 camera_loc = apply_transform_point(raster_to_camera, raster_loc);
-    float3 camera_dir = camera_loc / length(camera_loc);
-
-    ray_t r = {
-        .origin = (float3) (0.0f, 0.0f, 0.0f),
-        .direction = camera_dir
-    };
-    
-    return r;
-}
-
-float3 ray_color(ray_t ray) {
-
-    float3 v0 = (float3) (-0.5f, -0.5f, 10.0f);
-    float3 v1 = (float3) (0.5f, -0.5f, 4.0f);
-    float3 v2 = (float3) (-0.5f, 0.5f, 4.0f);
+float3 ray_color(
+    ray_t ray, 
+    __global bvh_node_t* bvh,
+    __global uint* triangles, 
+    __global float* vertices
+) {
+    // printf("began traversal\n");
+    /*float3 v1 = (float3)(0.258717f, 1.015191f, 8.968245f);
+    float3 v2 = (float3)(-1.29084f, 0.534367f, 10.137722f);
+    float3 v3 = (float3)(1.290841f,-0.534367f, 9.698717f);
+    float3 v4 = (float3)(-0.25871f, -1.015191f, 10.868195f);
     float3 tuv;
-    if (ray_triangle_intersect(v0, v1, v2, ray, 0.01, INFINITY, &tuv)) {
+    bool hit = ray_triangle_intersect(v2, v3, v1, ray, 0.01f, 1000.0f, &tuv);
+    if (hit) {
         return tuv;
     }
+    hit = ray_triangle_intersect(v2, v4, v3, ray, 0.01f, 1000.0f, &tuv);
+    if (hit) {
+        return tuv;
+    }
+    */
+    hit_info_t hit_info;
+    hit_info.hit = false;
+    traverse_bvh(
+        ray,
+        0.01f,
+        1000.0f,
+        &hit_info,
+        bvh, 
+        triangles, 
+        vertices
+    );
 
+    // printf("finished traversal\n");
+    if (hit_info.hit) {
+        return hit_info.tuv;
+    }
+    
+    // printf("finished traversal\n");
     float3 normalized_direction = normalize(ray.direction);
     float t = 0.5f * (normalized_direction.y + 1.0f);
     return (1.0f - t) * (float3) (1.0f, 1.0f, 1.0f) + t * (float3) (0.5f, 0.7f, 1.0f);
@@ -40,8 +54,10 @@ void __kernel render(
     int num_samples, 
     __global uint* seeds_buffer,
     __global float* raster_to_camera_buf,
-    __global float* mesh_vertices,
-    __global uint* mesh_tris
+
+    __global float* vertices,
+    __global uint* tris,
+    __global bvh_node_t* bvh
 ) {
     int i = get_global_id(0);
     int j = get_global_id(1);
@@ -63,20 +79,12 @@ void __kernel render(
             .m = vload16(0, raster_to_camera_buf + 16),
             .inverse = vload16(0, raster_to_camera_buf)
         };
-        // if (i == 0 && j == 0) {
-        //     for (int i = 0; i < 32; i += 1) {
-        //         printf("%f\n", raster_to_camera_buf[i]);
-        //     }
-
-        //     printf("%v16f\n", raster_to_camera_transform.m);
-        //     printf("%v16f\n", raster_to_camera_transform.inverse);
-        // }
     }
 
     barrier(CLK_LOCAL_MEM_FENCE);
     
     ray_t ray = generate_ray(&seed, i, j, raster_to_camera_transform);
-    float3 color = ray_color(ray);
+    float3 color = ray_color(ray, bvh, tris, vertices);
 
     frame_buffer[pixel_index] = color.r;
     frame_buffer[pixel_index + 1] = color.g;

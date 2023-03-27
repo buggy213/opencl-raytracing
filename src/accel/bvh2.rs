@@ -1,21 +1,31 @@
-use std::{mem::{size_of, align_of}, ptr::null_mut, ffi::c_void, slice::from_raw_parts};
+use std::{mem::{size_of, align_of}, ptr::null_mut, ffi::c_void, slice::from_raw_parts, collections::VecDeque};
 
-use embree4_sys::{bvh::BVHCallbacks, rtcThreadLocalAlloc};
+use cl3::{memory::CL_MEM_READ_WRITE, types::CL_TRUE};
+use embree4_sys::{bvh::{BVHCallbacks, BVHProgressCallback}, rtcThreadLocalAlloc, BVH, RTCBounds, Device, bvh::BVHBuildArguments, RTCBuildQuality, RTCBuildPrimitive};
+use opencl3::{memory::Buffer, context::Context, command_queue::CommandQueue};
 
-use crate::geometry::Vec3;
+use crate::{geometry::{Vec3, AABB, Mesh, Vec3u}, macros::{variadic_min_comparator, variadic_max_comparator}};
 
 #[repr(C)]
 pub enum BVHNode {
     Inner {
         left: *mut BVHNode,
         right: *mut BVHNode,
-        left_min: Vec3,
-        left_max: Vec3,
-        right_min: Vec3,
-        right_max: Vec3
+        left_aabb: AABB,
+        right_aabb: AABB
     },
-    Leaf {
-        tri_indices: [usize; 3]
+    Leaf { // 8 triangles in a leaf at most
+        tri_count: u32, 
+        tri_indices: [u32; 8]
+    }
+}
+
+impl From<RTCBounds> for AABB {
+    fn from(value: RTCBounds) -> Self {
+        AABB {
+            minimum: Vec3(value.lower_x, value.lower_y, value.lower_z),
+            maximum: Vec3(value.upper_x, value.upper_y, value.upper_z)
+        }
     }
 }
 
@@ -35,10 +45,8 @@ impl BVHCallbacks for BVH2Functions {
         new_node.write(BVHNode::Inner { 
             left: null_mut(), 
             right: null_mut(), 
-            left_min: Vec3::default(), 
-            left_max: Vec3::default(), 
-            right_min: Vec3::default(), 
-            right_max: Vec3::default() 
+            left_aabb: AABB::default(),
+            right_aabb: AABB::default()
         });
 
         return new_node as *mut c_void
@@ -55,7 +63,17 @@ impl BVHCallbacks for BVH2Functions {
             size_of::<BVHNode>(), 
             align_of::<BVHNode>()
         ) as *mut BVHNode;
+        
+        let mut tris: [u32; 8] = [0; 8];
+        let primitives = from_raw_parts(primitives, primitiveCount);
+        for (i, primitive) in primitives.iter().enumerate() {
+            tris[i] = primitive.primID;
+        }
 
+        new_leaf.write(BVHNode::Leaf { 
+            tri_count: primitiveCount as u32, 
+            tri_indices: tris
+        });
 
         return new_leaf as *mut c_void;
     }
@@ -68,11 +86,9 @@ impl BVHCallbacks for BVH2Functions {
     ) {
         let node = (nodePtr as *mut BVHNode).as_mut().unwrap_unchecked();
         let bounds = from_raw_parts(bounds, childCount as usize);
-        if let BVHNode::Inner { left_min, left_max, right_min, right_max, .. } = node {
-            *left_min = Vec3((*bounds[0]).lower_x, (*bounds[0]).lower_y, (*bounds[0]).lower_z);
-            *left_max = Vec3((*bounds[0]).upper_x, (*bounds[0]).upper_y, (*bounds[0]).upper_z);
-            *right_min = Vec3((*bounds[1]).lower_x, (*bounds[1]).lower_y, (*bounds[1]).lower_z);
-            *right_max = Vec3((*bounds[1]).upper_x, (*bounds[1]).upper_y, (*bounds[1]).upper_z);
+        if let BVHNode::Inner { left_aabb, right_aabb, .. } = node {
+            *left_aabb = AABB::from(*bounds[0]);
+            *right_aabb = AABB::from(*bounds[1]);
         }
     }
 
@@ -88,5 +104,184 @@ impl BVHCallbacks for BVH2Functions {
             *left = children[0];
             *right = children[1];
         }
+    }
+}
+
+impl BVHProgressCallback for BVH2Functions {
+    fn progress(n: f64) -> bool {
+        println!("BVH constructing {:.3}", n);
+        true
+    }
+}
+
+pub struct BVH2 {
+    handle: BVH,
+    root: *mut BVHNode // drop is handled by dropping handle, which will deallocate things
+}
+
+impl BVH2 {
+    fn primitive_from_triangle(p0: Vec3, p1: Vec3, p2: Vec3, tri_index: u32) -> RTCBuildPrimitive {
+        let min = variadic_min_comparator!(Vec3::elementwise_min, p0, p1, p2);
+        let max = variadic_max_comparator!(Vec3::elementwise_max, p0, p1, p2);
+        RTCBuildPrimitive { 
+            lower_x: min.0, 
+            lower_y: min.1, 
+            lower_z: min.2, 
+            geomID: 0, 
+            upper_x: max.0, 
+            upper_y: max.1, 
+            upper_z: max.2, 
+            primID: tri_index 
+        }
+    }
+
+    fn primitives_from_mesh(mesh: &Mesh) -> Vec<RTCBuildPrimitive> {
+        let mut primitives = Vec::new();
+        for (i, tri) in mesh.tris.iter().cloned().enumerate() {
+            let (t0, t1, t2) = (tri.0, tri.1, tri.2);
+            let p0 = mesh.vertices[t0 as usize];
+            let p1 = mesh.vertices[t1 as usize];
+            let p2 = mesh.vertices[t2 as usize];
+            primitives.push(BVH2::primitive_from_triangle(p0, p1, p2, i as u32));
+        }
+
+        primitives
+    }
+
+    fn sanity_check(root_node: *mut BVHNode, top: bool) -> (i32, i32, i32, i32) {
+        let node = unsafe { root_node.read() };
+        let inner_nodes;
+        let leaf_nodes;
+        let tris;
+        let max_depth;
+        match node {
+            BVHNode::Inner { left, right, left_aabb, right_aabb } =>  {
+                let (left_inner_nodes, left_leaf_nodes, left_tris, left_max_depth) = BVH2::sanity_check(left, false);
+                let (right_inner_nodes, right_leaf_nodes, right_tris, right_max_depth) = BVH2::sanity_check(right, false);
+                inner_nodes = 1 + left_inner_nodes + right_inner_nodes;
+                leaf_nodes = left_leaf_nodes + right_leaf_nodes;
+                tris = left_tris + right_tris;
+                max_depth = i32::max(left_max_depth, right_max_depth) + 1;
+                eprintln!("height={}, left_aabb={:?}, right_aabb={:?}", max_depth, left_aabb, right_aabb);
+            },
+            BVHNode::Leaf { tri_count, tri_indices } => {
+                inner_nodes = 0;
+                leaf_nodes = 1;
+                tris = tri_count as i32;
+                max_depth = 1;
+            },
+        }
+
+        if top {
+            println!("inner nodes={} leaf nodes={} tris={}, max_depth={}", inner_nodes, leaf_nodes, tris, max_depth);
+        }
+
+        return (inner_nodes, leaf_nodes, tris, max_depth);
+    }
+
+    pub fn create(device: &Device, mesh: &Mesh) -> BVH2 {
+        let bvh = BVH::new(device);
+        println!("{}", device.get_error());
+
+        let mut primitives = BVH2::primitives_from_mesh(mesh);
+        let bvh_arguments = 
+            BVHBuildArguments::default()
+            .set_max_leaf_size(1)
+            .quality(RTCBuildQuality::RTC_BUILD_QUALITY_MEDIUM)
+            .register_callbacks::<BVH2Functions>()
+            .register_progress_callback::<BVH2Functions>()
+            .set_primitives(&mut primitives);
+        let build_result = bvh.build(bvh_arguments).expect("failed to build bvh") as *mut BVHNode;
+        BVH2::sanity_check(build_result, true);
+        BVH2 { handle: bvh, root: build_result }
+    }
+}
+
+// For sending to GPU, matches definition of `bvh_node_t`
+#[repr(C)]
+pub struct LinearizedBVHNode {
+    min_x: f32,
+    min_y: f32,
+    min_z: f32,
+    left_first: u32,
+    max_x: f32,
+    max_y: f32,
+    max_z: f32,
+    tri_count: u32
+}
+
+impl LinearizedBVHNode {
+    pub fn linearize_bvh_mesh(bvh: &BVH2, mesh: &mut Mesh) -> Vec<LinearizedBVHNode> {
+        // perform BFS over BVH, make triangles pointed to by leaf nodes contiguous
+        let mut queue: VecDeque<(*mut BVHNode, AABB)> = VecDeque::new();
+        let node = unsafe { bvh.root.read() };
+        let root_aabb;
+        if let BVHNode::Inner {left_aabb, right_aabb, .. } = node {
+            root_aabb = AABB::surrounding_box(left_aabb, right_aabb);
+        }
+        else {
+            panic!("root node is leaf node (this might be ok, but code needs to be changed to deal with it)");
+        }
+        let mut bvh_nodes: Vec<LinearizedBVHNode> = Vec::new();
+        let mut contiguous_tris: Vec<Vec3u> = Vec::new();
+        queue.push_back((bvh.root, root_aabb));
+        while !queue.is_empty() {
+            let (node, aabb) = queue.pop_front().unwrap();
+            let node = unsafe { node.read() };
+            match node {
+                BVHNode::Inner { left, right, left_aabb, right_aabb } => {
+                    let left_idx = bvh_nodes.len() + queue.len() + 1;
+                    queue.push_back((left, left_aabb));
+                    queue.push_back((right, right_aabb));
+                    bvh_nodes.push(LinearizedBVHNode { 
+                        min_x: aabb.minimum.0, 
+                        min_y: aabb.minimum.1, 
+                        min_z: aabb.minimum.2, 
+                        left_first: left_idx as u32, 
+                        max_x: aabb.maximum.0, 
+                        max_y: aabb.maximum.1, 
+                        max_z: aabb.maximum.2, 
+                        tri_count: 0
+                    });
+                },
+                BVHNode::Leaf { tri_count, tri_indices } => {
+                    bvh_nodes.push(LinearizedBVHNode { 
+                        min_x: aabb.minimum.0, 
+                        min_y: aabb.minimum.1, 
+                        min_z: aabb.minimum.2, 
+                        left_first: contiguous_tris.len() as u32, 
+                        max_x: aabb.maximum.0, 
+                        max_y: aabb.maximum.1, 
+                        max_z: aabb.maximum.2, 
+                        tri_count
+                    });
+
+                    
+                    for i in 0..tri_count {
+                        contiguous_tris.push(mesh.tris[tri_indices[i as usize] as usize]);
+                    }
+                },
+            }
+        }
+        mesh.tris = contiguous_tris;
+        bvh_nodes
+    }
+
+    pub fn to_cl_buffer(bvh: &[LinearizedBVHNode], context: &Context, command_queue: &CommandQueue) -> Buffer<LinearizedBVHNode> {
+        let mut buffer: Buffer<LinearizedBVHNode> = unsafe {
+            Buffer::create(context, CL_MEM_READ_WRITE, bvh.len(), null_mut()).expect("failed to create buffer")
+        };
+
+        unsafe {
+            command_queue.enqueue_write_buffer(
+                &mut buffer, 
+                CL_TRUE, 
+                0, 
+                bvh, 
+                &[]
+            ).expect("failed to write bvh buffer to gpu");
+        }
+
+        buffer
     }
 }

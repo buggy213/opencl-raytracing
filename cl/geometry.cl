@@ -1,10 +1,10 @@
 #ifndef RT_GEOMETRY
 #define RT_GEOMETRY
-typedef float16 matrix4x4;
+typedef float16 matrix4x4_t;
 
 typedef struct {
-    matrix4x4 m;
-    matrix4x4 inverse;
+    matrix4x4_t m;
+    matrix4x4_t inverse;
 } transform;
 
 typedef struct {
@@ -12,11 +12,11 @@ typedef struct {
     float3 direction;
 } ray_t;
 
-matrix4x4 transpose(matrix4x4 m) {
+matrix4x4_t transpose(matrix4x4_t m) {
     return m.s048c159d26ae37bf;
 }
 
-matrix4x4 matmul(matrix4x4 a, matrix4x4 b) {
+matrix4x4_t matmul(matrix4x4_t a, matrix4x4_t b) {
     float4 a1t = a.s0123;
     float4 a2t = a.s4567;
     float4 a3t = a.s89ab;
@@ -90,5 +90,11 @@ bool ray_triangle_intersect(float3 v0, float3 v1, float3 v2, ray_t ray, float t_
     *tuv = (float3) (t, u, v);
     return true;
 }
+
+typedef struct {
+    bool hit;
+    float3 tuv;
+    uint tri_idx;
+} hit_info_t;
 
 #endif

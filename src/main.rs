@@ -1,6 +1,8 @@
 use std::{fs::{self, read_to_string}, ptr::{null_mut}, path::Path};
 
+use accel::{bvh2::BVH2, LinearizedBVHNode};
 use cl3::{ext::CL_DEVICE_TYPE_GPU, memory::CL_MEM_READ_WRITE, types::CL_TRUE};
+use embree4_sys::rtcGetDeviceError;
 use geometry::{Transform, Matrix4x4, Vec3};
 use opencl3::{program::Program, platform::Platform, device::Device, context::Context, memory::Buffer, command_queue::CommandQueue, kernel::{Kernel, ExecuteKernel}};
 
@@ -8,6 +10,7 @@ use crate::geometry::Mesh;
 
 mod geometry;
 mod accel;
+mod macros;
 
 const WIDTH: usize = 512;
 const HEIGHT: usize = 512;
@@ -140,10 +143,13 @@ fn main() {
     let image_buffer = create_image_buffer(&context, &command_queue);
     let camera_transform = create_perspective_transform(1000.0, 0.01, 30.0);
     let camera_transform_cl = camera_transform.to_opencl_buffer(&context, &command_queue);
-    let mesh = Mesh::from_file(Path::new("meshes/suzanne.obj")).expect("failed to load mesh");
-    let mesh_cl = mesh.to_cl_mesh(&context, &command_queue);
-
-    println!("{:?}", camera_transform);
+    let mut mesh = Mesh::from_file(Path::new("meshes/suzanne.obj")).expect("failed to load mesh");
+    let embree_device = embree4_sys::Device::new();
+    let mesh_bvh = BVH2::create(&embree_device, &mesh);
+    
+    let bvh_device = LinearizedBVHNode::linearize_bvh_mesh(&mesh_bvh, &mut mesh);
+    let bvh_device = LinearizedBVHNode::to_cl_buffer(&bvh_device, &context, &command_queue);
+    let mesh_device = mesh.to_cl_mesh(&context, &command_queue);
 
     let kernel_event = unsafe {
         ExecuteKernel::new(&kernel)
@@ -153,8 +159,9 @@ fn main() {
             .set_arg(&1)
             .set_arg(&seed_buffer)
             .set_arg(&camera_transform_cl)
-            .set_arg(&mesh_cl.vertices)
-            .set_arg(&mesh_cl.triangles)
+            .set_arg(&mesh_device.vertices)
+            .set_arg(&mesh_device.triangles)
+            .set_arg(&bvh_device)
             .set_global_work_sizes(&[WIDTH, HEIGHT])
             .enqueue_nd_range(&command_queue).expect("failed to enqueue kernel")
     };
