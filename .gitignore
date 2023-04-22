@@ -1,5 +1,7 @@
 .vscode
+scenes
+output
 
 # Added by cargo
 
-/target
+target

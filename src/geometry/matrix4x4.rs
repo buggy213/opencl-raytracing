@@ -1,9 +1,11 @@
 use std::{ops::{Index, IndexMut, Add}, slice::from_raw_parts};
 
+use super::Vec3;
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Matrix4x4 {
-    data: [[f32; 4]; 4]
+    pub data: [[f32; 4]; 4]
 }
 
 // idk if this is sound at all lmao
@@ -191,5 +193,23 @@ impl Matrix4x4 {
             }
         }
         m
+    }
+
+    pub fn transpose(&mut self) {
+        for i in 0..4 {
+            for j in 0..i {
+                let tmp = self.data[i][j];
+                self.data[i][j] = self.data[j][i];
+                self.data[j][i] = tmp;
+            }
+        }
+    }
+
+    pub fn apply_point(&self, p: Vec3) -> Vec3 {
+        let a = self.data[0][0] * p.0 + self.data[0][1] * p.1 + self.data[0][2] * p.2 + self.data[0][3] * 1.0;
+        let b = self.data[1][0] * p.0 + self.data[1][1] * p.1 + self.data[1][2] * p.2 + self.data[1][3] * 1.0;
+        let c = self.data[2][0] * p.0 + self.data[2][1] * p.1 + self.data[2][2] * p.2 + self.data[2][3] * 1.0;
+        let d = self.data[3][0] * p.0 + self.data[3][1] * p.1 + self.data[3][2] * p.2 + self.data[3][3] * 1.0;
+        Vec3(a / d, b / d, c / d)
     }
 }

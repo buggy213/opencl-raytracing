@@ -83,6 +83,20 @@ impl Transform {
 
         buffer
     }
+
+    pub fn apply_point(&self, point: Vec3) -> Vec3 {
+        self.forward.apply_point(point)
+    }
+
+    pub fn invert_inplace(&mut self) {
+        let tmp = self.inverse;
+        self.inverse = self.forward;
+        self.forward = tmp;
+    }
+
+    pub fn invert(&self) -> Transform {
+        Transform { forward: self.inverse, inverse: self.forward }
+    }
 }
 
 impl From<Matrix4x4> for Transform {

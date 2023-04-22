@@ -53,7 +53,11 @@ void __kernel render(
      int frame_height,
     int num_samples, 
     __global uint* seeds_buffer,
-    __global float* raster_to_camera_buf,
+    __global float* raster_to_world_buf,
+
+    float camera_position_x,
+    float camera_position_y,
+    float camera_position_z,
 
     __global float* vertices,
     __global uint* tris,
@@ -71,19 +75,20 @@ void __kernel render(
 
     uint2 seed = (uint2) (seeds_buffer[(j * frame_width + i) * 2], seeds_buffer[(j * frame_width + i) * 2 + 1]);
 
-    __local transform raster_to_camera_transform;
+    __local transform raster_to_world_transform;
     int k = get_local_id(0);
     int l = get_local_id(0);
     if (k == 0 && l == 0) {
-        raster_to_camera_transform = (transform) {
-            .m = vload16(0, raster_to_camera_buf + 16),
-            .inverse = vload16(0, raster_to_camera_buf)
+        raster_to_world_transform = (transform) {
+            .m = vload16(0, raster_to_world_buf + 16),
+            .inverse = vload16(0, raster_to_world_buf)
         };
     }
 
     barrier(CLK_LOCAL_MEM_FENCE);
     
-    ray_t ray = generate_ray(&seed, i, j, raster_to_camera_transform);
+    float3 camera_position = (float3) (camera_position_x, camera_position_y, camera_position_z);
+    ray_t ray = generate_ray(&seed, i, j, raster_to_world_transform, camera_position);
     float3 color = ray_color(ray, bvh, tris, vertices);
 
     frame_buffer[pixel_index] = color.r;

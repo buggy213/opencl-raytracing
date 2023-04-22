@@ -181,18 +181,18 @@ impl BVH2 {
 
     pub fn create(device: &Device, mesh: &Mesh) -> BVH2 {
         let bvh = BVH::new(device);
-        println!("{}", device.get_error());
+        // println!("{}", device.get_error());
 
         let mut primitives = BVH2::primitives_from_mesh(mesh);
         let bvh_arguments = 
             BVHBuildArguments::default()
-            .set_max_leaf_size(1)
+            .set_max_leaf_size(8)
             .quality(RTCBuildQuality::RTC_BUILD_QUALITY_MEDIUM)
             .register_callbacks::<BVH2Functions>()
             .register_progress_callback::<BVH2Functions>()
             .set_primitives(&mut primitives);
         let build_result = bvh.build(bvh_arguments).expect("failed to build bvh") as *mut BVHNode;
-        BVH2::sanity_check(build_result, true);
+        // BVH2::sanity_check(build_result, true);
         BVH2 { handle: bvh, root: build_result }
     }
 }

@@ -4,7 +4,7 @@ use cl3::{memory::CL_MEM_READ_WRITE, types::CL_TRUE};
 use obj::{ObjError, MtlLibsLoadError, Obj, ObjData, IndexTuple};
 use opencl3::{memory::Buffer, command_queue::CommandQueue, context::Context};
 
-use super::{Vec3, vec3::Vec3u};
+use super::{Vec3, vec3::Vec3u, Transform};
 
 #[derive(Debug)]
 pub enum MeshError {
@@ -63,6 +63,43 @@ impl Mesh {
         Ok(
             Mesh { vertices: vertices, tris: tris }
         )
+    }
+
+    pub fn from_gltf_mesh(mesh: &gltf::Mesh, buffers: &[gltf::buffer::Data]) -> Mesh {
+        let mut vertices: Vec<Vec3> = Vec::new();
+        let mut tris: Vec<Vec3u> = Vec::new();
+
+        assert!(mesh.primitives().len() == 1);
+        let primitive = mesh.primitives().next().unwrap();
+        let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+        if let Some(iter) = reader.read_positions() {
+            for vertex in iter {
+                vertices.push(Vec3(vertex[0], vertex[1], vertex[2]));
+                println!("point {} {} {}", vertex[0], vertex[1], vertex[2]);
+            }
+        }
+        if let Some(iter) = reader.read_indices() {
+            let mut tri_indices = [0; 3];
+            for (i, tri) in iter.into_u32().enumerate() {
+                tri_indices[i % 3] = tri;
+                if i % 3 == 2 {
+                    tris.push(Vec3u(tri_indices[0], tri_indices[1], tri_indices[2]));
+                    println!("tri {} {} {}", tri_indices[0], tri_indices[1], tri_indices[2]);
+                }
+            }
+        }
+        
+        Mesh {
+            vertices,
+            tris,
+        }
+    }
+
+    pub fn apply_transform(&mut self, transform: Transform) {
+        for vertex in self.vertices.iter_mut() {
+            let transformed = transform.apply_point(*vertex);
+            *vertex = transformed;
+        }
     }
 
     pub fn to_cl_mesh(&self, context: &Context, command_queue: &CommandQueue) -> CLMesh {

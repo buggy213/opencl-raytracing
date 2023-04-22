@@ -58,6 +58,12 @@ float3 apply_transform_point(transform t, float3 p) {
     }
 }
 
+// reflects a vector about a normal vector
+inline float3 reflect(float3 vec, float3 normal) {
+    return vec - 2 * dot(vec, normal) * normal;
+}
+
+
 bool ray_triangle_intersect(float3 v0, float3 v1, float3 v2, ray_t ray, float t_min, float t_max, float3* tuv) {
     float3 e1 = v1 - v0;
     float3 e2 = v2 - v0;
