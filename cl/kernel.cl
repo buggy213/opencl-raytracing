@@ -50,7 +50,7 @@ float3 ray_color(
 void __kernel render(
     __global float* frame_buffer, 
     int frame_width,
-     int frame_height,
+    int frame_height,
     int num_samples, 
     __global uint* seeds_buffer,
     __global float* raster_to_world_buf,
@@ -58,6 +58,7 @@ void __kernel render(
     float camera_position_x,
     float camera_position_y,
     float camera_position_z,
+    int projective_camera,
 
     __global float* vertices,
     __global uint* tris,
@@ -88,7 +89,7 @@ void __kernel render(
     barrier(CLK_LOCAL_MEM_FENCE);
     
     float3 camera_position = (float3) (camera_position_x, camera_position_y, camera_position_z);
-    ray_t ray = generate_ray(&seed, i, j, raster_to_world_transform, camera_position);
+    ray_t ray = generate_ray(&seed, i, j, raster_to_world_transform, camera_position, projective_camera);
     float3 color = ray_color(ray, bvh, tris, vertices);
 
     frame_buffer[pixel_index] = color.r;

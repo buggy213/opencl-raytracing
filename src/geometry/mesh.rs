@@ -75,7 +75,7 @@ impl Mesh {
         if let Some(iter) = reader.read_positions() {
             for vertex in iter {
                 vertices.push(Vec3(vertex[0], vertex[1], vertex[2]));
-                println!("point {} {} {}", vertex[0], vertex[1], vertex[2]);
+                // println!("point {} {} {}", vertex[0], vertex[1], vertex[2]);
             }
         }
         if let Some(iter) = reader.read_indices() {
@@ -84,7 +84,7 @@ impl Mesh {
                 tri_indices[i % 3] = tri;
                 if i % 3 == 2 {
                     tris.push(Vec3u(tri_indices[0], tri_indices[1], tri_indices[2]));
-                    println!("tri {} {} {}", tri_indices[0], tri_indices[1], tri_indices[2]);
+                    // println!("tri {} {} {}", tri_indices[0], tri_indices[1], tri_indices[2]);
                 }
             }
         }

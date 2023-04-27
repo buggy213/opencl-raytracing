@@ -16,8 +16,6 @@ mod accel;
 mod macros;
 mod scene;
 
-
-
 fn initialize_cl() -> (Platform, Device, Context, Program, Kernel, CommandQueue) {
     let platform_ids = cl3::platform::get_platform_ids().expect("unable to get platform ids");
     assert!(platform_ids.len() == 1, "require only one platform be present");
@@ -123,33 +121,6 @@ fn output_image_buffer(buffer: &Buffer<f32>, command_queue: &CommandQueue, width
     ).expect("failed to write png");
 }
 
-// Creates transform from camera space to raster space through screen space
-// fov given in degrees
-fn create_perspective_transform(far_clip: f32, near_clip: f32, yfov: f32, width: usize, height: usize) -> Transform {
-    let persp: Matrix4x4 = Matrix4x4::create(
-        1.0, 0.0, 0.0, 0.0, 
-        0.0, 1.0, 0.0, 0.0, 
-        0.0, 0.0, far_clip / (far_clip - near_clip), - (far_clip * near_clip) / (far_clip - near_clip), 
-        0.0, 0.0, 1.0, 0.0
-    );
-
-    let persp: Transform = Transform::from(persp);
-    let wide = width >= height;
-    let fov = if wide { yfov * (width as f32 / height as f32) } else { yfov };
-    println!("height={}", height);
-    println!("width={}", width);
-    let invt = 1.0 / f32::tan(fov.to_radians() / 2.0);
-    let fov_scale = Transform::scale(Vec3(-invt, invt, 1.0)); // not sure why this is required, but oh well
-    // if image is wide, screen space x ranges from -1 to 1 and screen space y ranges from -k to k where k is proportionally smaller
-    // if image is tall, screen space x ranges from -k to k and screen space y ranges from -1 to 1 where k is proportionally smaller
-    let screen_space_top_left = if wide { Vec3(-1.0, -(height as f32 / width as f32), 0.0) } else { Vec3(-(width as f32 / height as f32), -1.0, 0.0) };
-    let screen_to_zero = Transform::translate(Vec3(0.0, 0.0, 0.0) - screen_space_top_left);
-    let scaling = if wide { width as f32 / 2.0 } else { height as f32 / 2.0 };
-    let screen_to_raster = 
-        screen_to_zero.compose(Transform::scale(Vec3(scaling, scaling, 1.0)));
-    return persp.compose(fov_scale).compose(screen_to_raster);
-}
-
 fn main() {
     let (platform, device, context, program, kernel, command_queue) = initialize_cl();
     let scene = Scene::from_file(Path::new("scenes/sibenik.gltf")).expect("failed to load gltf file");
@@ -178,6 +149,7 @@ fn main() {
             .set_arg(&scene.camera.camera_position[0])
             .set_arg(&scene.camera.camera_position[1])
             .set_arg(&scene.camera.camera_position[2])
+            .set_arg(&(scene.camera.is_perspective as i32))
             .set_arg(&mesh_device.vertices)
             .set_arg(&mesh_device.triangles)
             .set_arg(&bvh_device)
