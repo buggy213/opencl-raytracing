@@ -11,6 +11,12 @@ typedef struct {
     uint triCount;
 } bvh_node_t;
 
+typedef struct {
+    __global bvh_node_t* bvh_tree; 
+    __global uint* triangles;
+    __global float* vertices;
+} bvh_data_t;
+
 // returns t at which ray intersections an axis-aligned bounding box, or inf if it does not intersect it
 float bvh_intersect(bvh_node_t* node, ray_t ray) {
     // x slab
@@ -50,14 +56,16 @@ void traverse_bvh(
     float t_min,
     float t_max,
     hit_info_t* hit_info,
-    __global bvh_node_t* bvh, 
-    __global uint* triangles, 
-    __global float* vertices
+    bvh_data_t bvh
 ) {
+    __global bvh_node_t* bvh_tree = bvh.bvh_tree; 
+    __global uint* triangles = bvh.triangles; 
+    __global float* vertices = bvh.vertices;
+
     bvh_node_t* node;
     bvh_node_t* stack[32];
     
-    node = &bvh[0];
+    node = &bvh_tree[0];
     uint stack_ptr = 0;
     while (true) {
         if (node->triCount > 0) {
@@ -115,8 +123,8 @@ void traverse_bvh(
                 // printf("inner node\n");
                 // printf("%d %d\n", node->leftFirst, node->leftFirst + 1);
             }
-            bvh_node_t* left_child = &bvh[node->leftFirst];
-            bvh_node_t* right_child = &bvh[node->leftFirst + 1];
+            bvh_node_t* left_child = &bvh_tree[node->leftFirst];
+            bvh_node_t* right_child = &bvh_tree[node->leftFirst + 1];
             float left = bvh_intersect(left_child, ray);
             float right = bvh_intersect(right_child, ray);
             if (get_global_id(0) == 0 && get_global_id(1) == get_global_size(1) - 1) {

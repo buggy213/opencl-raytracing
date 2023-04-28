@@ -5,9 +5,8 @@
 
 float3 ray_color(
     ray_t ray, 
-    __global bvh_node_t* bvh,
-    __global uint* triangles, 
-    __global float* vertices
+    bvh_data_t bvh,
+    camera_t camera
 ) {
     // printf("began traversal\n");
     /*float3 v1 = (float3)(0.258717f, 1.015191f, 8.968245f);
@@ -28,12 +27,10 @@ float3 ray_color(
     hit_info.hit = false;
     traverse_bvh(
         ray,
-        0.01f,
-        1000.0f,
+        camera.near_clip,
+        camera.far_clip,
         &hit_info,
-        bvh, 
-        triangles, 
-        vertices
+        bvh
     );
 
     // printf("finished traversal\n");
@@ -97,9 +94,9 @@ void __kernel render(
     }
 
     barrier(CLK_LOCAL_MEM_FENCE);
-    
+    bvh_data_t bvh = { .bvh_tree = bvh_tree, .triangles = tris, .vertices = vertices };
     ray_t ray = generate_ray(&seed, i, j, camera);
-    float3 color = ray_color(ray, bvh_tree, tris, vertices);
+    float3 color = ray_color(ray, bvh, camera);
 
     frame_buffer[pixel_index] = color.r;
     frame_buffer[pixel_index + 1] = color.g;
