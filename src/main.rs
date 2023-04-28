@@ -15,6 +15,7 @@ mod geometry;
 mod accel;
 mod macros;
 mod scene;
+mod lights;
 
 fn initialize_cl() -> (Platform, Device, Context, Program, Kernel, CommandQueue) {
     let platform_ids = cl3::platform::get_platform_ids().expect("unable to get platform ids");

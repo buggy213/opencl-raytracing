@@ -2,13 +2,14 @@ use std::path::Path;
 
 use gltf::{camera::{Projection, Perspective}, Node};
 
-use crate::{geometry::{Transform, Mesh, Matrix4x4}};
+use crate::{geometry::{Transform, Mesh, Matrix4x4}, lights::Light};
 
 use super::camera::Camera;
 
 pub struct Scene {
     pub camera: Camera,
-    pub mesh: (Mesh, Transform)
+    pub mesh: (Mesh, Transform),
+    pub lights: Vec<Light>
 }
 
 const HEIGHT: usize = 512;
@@ -38,6 +39,7 @@ impl Scene {
 
         
         Ok(Scene {
+            lights: vec![],
             camera: camera.unwrap(),
             mesh: (mesh.unwrap(), mesh_transform.unwrap())
         })

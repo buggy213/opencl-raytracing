@@ -11,8 +11,11 @@ cl3 = "0.9.1"
 obj = "0.10.2"
 rand = "0.8.5"
 image = "0.24.5"
-gltf = "1.1.0"
 anyhow = "1.0.70"
 
 [dependencies.embree4-sys]
-path = "../embree4-sys"
+path = "libs/embree4-sys"
+
+[dependencies.gltf]
+version = "1.1.0"
+features = ["KHR_lights_punctual"]

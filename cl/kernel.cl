@@ -53,16 +53,16 @@ void __kernel render(
     int frame_height,
     int num_samples, 
     __global uint* seeds_buffer,
+    
     __global float* raster_to_world_buf,
-
     float camera_position_x,
     float camera_position_y,
     float camera_position_z,
-    int projective_camera,
+    int is_perspective,
 
     __global float* vertices,
     __global uint* tris,
-    __global bvh_node_t* bvh
+    __global bvh_node_t* bvh_tree
 ) {
     int i = get_global_id(0);
     int j = get_global_id(1);
@@ -76,21 +76,30 @@ void __kernel render(
 
     uint2 seed = (uint2) (seeds_buffer[(j * frame_width + i) * 2], seeds_buffer[(j * frame_width + i) * 2 + 1]);
 
-    __local transform raster_to_world_transform;
+    __local camera_t camera;
+
     int k = get_local_id(0);
     int l = get_local_id(0);
     if (k == 0 && l == 0) {
-        raster_to_world_transform = (transform) {
+        // TODO: see if this can be improved, shouldn't be a major bottleneck
+        transform raster_to_world_transform = (transform) {
             .m = vload16(0, raster_to_world_buf + 16),
             .inverse = vload16(0, raster_to_world_buf)
+        };
+
+        camera = (camera_t) {
+            .raster_to_world_transform = raster_to_world_transform,
+            .camera_position = (float3) (camera_position_x, camera_position_y, camera_position_z),
+            .is_perspective = is_perspective,
+            .near_clip = 0.01f,
+            .far_clip = 1000.0f
         };
     }
 
     barrier(CLK_LOCAL_MEM_FENCE);
     
-    float3 camera_position = (float3) (camera_position_x, camera_position_y, camera_position_z);
-    ray_t ray = generate_ray(&seed, i, j, raster_to_world_transform, camera_position, projective_camera);
-    float3 color = ray_color(ray, bvh, tris, vertices);
+    ray_t ray = generate_ray(&seed, i, j, camera);
+    float3 color = ray_color(ray, bvh_tree, tris, vertices);
 
     frame_buffer[pixel_index] = color.r;
     frame_buffer[pixel_index + 1] = color.g;

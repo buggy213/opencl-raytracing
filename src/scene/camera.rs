@@ -7,7 +7,9 @@ pub struct Camera {
     pub camera_position: [f32; 3],
     pub world_to_raster: Transform,
     pub raster_width: usize,
-    pub raster_height: usize
+    pub raster_height: usize,
+    pub near_clip: f32,
+    pub far_clip: f32
 }
 
 const DEFAULT_FAR_CLIP: f32 = 1000.0;
@@ -106,6 +108,8 @@ impl Camera {
             world_to_raster,
             raster_width,
             raster_height,
+            near_clip: 0.01,
+            far_clip: 1000.0
         }
     }
 }

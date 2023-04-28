@@ -3,6 +3,30 @@
 #ifndef RT_MATERIALS
 #define RT_MATERIALS
 
+// Lambertian reflection: BSDF is uniform over hemisphere
+typedef struct {
+    float3 albedo; // TODO: add texture sampling later
+} lambertian_t;
+
+
+const int BSDF_LAMBERTIAN = 0;
+typedef struct {
+    int tag;
+    union {
+        lambertian_t lambertian;
+    } value;
+} bsdf_t;
+
+float3 evaluate_bsdf(bsdf_t bsdf, float3 in_dir, float out_dir) {
+    switch (bsdf.tag) {
+        case BSDF_LAMBERTIAN:
+            return bsdf.value.lambertian.albedo * M_1_PI_F; // multiply by 1 / pi since radiance is conserved
+        default:
+            printf("invalid BSDF tag value");
+            return (float3) (0.0f, 0.0f, 0.0f);
+    }
+}
+
 // Specular reflection / transmission, describes interaction of light with perfectly flat surfaces
 
 // Calculates Fresnel reflectance given the cosine of the angle between an incoming ray and the normal of the surface 
