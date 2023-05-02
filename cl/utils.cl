@@ -1,5 +1,8 @@
 #ifndef RT_UTILS
 #define RT_UTILS
+
+#define IF_LEADER if (get_global_id(0) == 0 && get_global_id(1) == 0)
+
 // copied from https://cas.ee.ic.ac.uk/people/dt10/research/rngs-gpu-mwc64x.html
 uint MWC64X(uint2 *state)
 {
@@ -12,6 +15,12 @@ uint MWC64X(uint2 *state)
     *state=(uint2)(x,c);              // Pack the state back up
     return res;                       // Return the next result
 } // how does this work ???
+
+// returns a random integer in the range [min, max)
+int rand_int(uint2* rng_state, int min, int max) {
+    uint rand_uint = MWC64X(rng_state);
+    return (rand_uint % (max - min)) + min; // slightly biased if 2^32 is not divisible by (max - min), but should be ok
+}
 
 // returns a random floating point number in the range [0, 1)
 float rand_float(uint2* rng_state) {

@@ -2,27 +2,27 @@
 #include "cl/utils.cl"
 #include "cl/accel.cl"
 #include "cl/camera.cl"
+#include "cl/lights.cl"
+#include "cl/materials.cl"
+
+// #define DEBUG
 
 float3 ray_color(
     ray_t ray, 
     bvh_data_t bvh,
-    camera_t camera
+    camera_t camera,
+
+    uint2* rng_state,
+    __global light_t* lights,
+    int num_lights,
+
+    bool debug
 ) {
+    bsdf_t matte;
+    matte.tag = BSDF_LAMBERTIAN;
+    matte.value.lambertian = (lambertian_t) { .albedo = (float3) (1.0f, 1.0f, 1.0f) }; // 100% reflective test material
+
     // printf("began traversal\n");
-    /*float3 v1 = (float3)(0.258717f, 1.015191f, 8.968245f);
-    float3 v2 = (float3)(-1.29084f, 0.534367f, 10.137722f);
-    float3 v3 = (float3)(1.290841f,-0.534367f, 9.698717f);
-    float3 v4 = (float3)(-0.25871f, -1.015191f, 10.868195f);
-    float3 tuv;
-    bool hit = ray_triangle_intersect(v2, v3, v1, ray, 0.01f, 1000.0f, &tuv);
-    if (hit) {
-        return tuv;
-    }
-    hit = ray_triangle_intersect(v2, v4, v3, ray, 0.01f, 1000.0f, &tuv);
-    if (hit) {
-        return tuv;
-    }
-    */
     hit_info_t hit_info;
     hit_info.hit = false;
     traverse_bvh(
@@ -30,15 +30,31 @@ float3 ray_color(
         camera.near_clip,
         camera.far_clip,
         &hit_info,
-        bvh
+        bvh,
+        false
     );
 
     // printf("finished traversal\n");
     if (hit_info.hit) {
-        return hit_info.tuv;
+        if (debug) {
+            return hit_info.tuv;
+        }
+        // calculate direct illumination
+        int light_index = rand_int(rng_state, 0, num_lights);
+        float3 direction;
+        visibility_check_t visibility;
+        float3 incident_radiance = sample_light(lights[light_index], hit_info.point, &direction, &visibility);
+        bool light_occluded = occluded(bvh, visibility);
+        if (!light_occluded) {
+            float3 bsdf_value = evaluate_bsdf(matte, direction, -ray.direction);
+            float cos_theta = fabs(dot(hit_info.normal, direction));
+            return bsdf_value * incident_radiance * num_lights * cos_theta;
+        }
+        else {
+            return (float3) (0.0f, 0.0f, 0.0f);
+        }
     }
     
-    // printf("finished traversal\n");
     float3 normalized_direction = normalize(ray.direction);
     float t = 0.5f * (normalized_direction.y + 1.0f);
     return (1.0f - t) * (float3) (1.0f, 1.0f, 1.0f) + t * (float3) (0.5f, 0.7f, 1.0f);
@@ -59,7 +75,10 @@ void __kernel render(
 
     __global float* vertices,
     __global uint* tris,
-    __global bvh_node_t* bvh_tree
+    __global bvh_node_t* bvh_tree,
+
+    __global light_t* lights,
+    int num_lights
 ) {
     int i = get_global_id(0);
     int j = get_global_id(1);
@@ -75,6 +94,15 @@ void __kernel render(
 
     __local camera_t camera;
 
+    #ifdef DEBUG
+    IF_LEADER {
+        for (int i = 0; i < num_lights; i += 1) {
+            light_t light = lights[i];
+            debug_print_light(light);
+        }
+    }
+    #endif    
+
     int k = get_local_id(0);
     int l = get_local_id(0);
     if (k == 0 && l == 0) {
@@ -88,7 +116,7 @@ void __kernel render(
             .raster_to_world_transform = raster_to_world_transform,
             .camera_position = (float3) (camera_position_x, camera_position_y, camera_position_z),
             .is_perspective = is_perspective,
-            .near_clip = 0.01f,
+            .near_clip = 0.01f, // TODO: parameterize
             .far_clip = 1000.0f
         };
     }
@@ -96,9 +124,15 @@ void __kernel render(
     barrier(CLK_LOCAL_MEM_FENCE);
     bvh_data_t bvh = { .bvh_tree = bvh_tree, .triangles = tris, .vertices = vertices };
     ray_t ray = generate_ray(&seed, i, j, camera);
-    float3 color = ray_color(ray, bvh, camera);
 
-    frame_buffer[pixel_index] = color.r;
-    frame_buffer[pixel_index + 1] = color.g;
-    frame_buffer[pixel_index + 2] = color.b;    
+    bool debug_lighting = (num_lights == 0);
+    float3 color = (float3) (0.0f, 0.0f, 0.0f);
+    for (int i = 0; i < num_samples; i += 1) {
+        color += ray_color(ray, bvh, camera, &seed, lights, num_lights, debug_lighting);
+    }
+    color /= num_samples;
+
+    frame_buffer[pixel_index] = clamp(color.r, 0.0f, 1.0f);
+    frame_buffer[pixel_index + 1] = clamp(color.g, 0.0f, 1.0f);
+    frame_buffer[pixel_index + 2] = clamp(color.b, 0.0f, 1.0f);    
 }

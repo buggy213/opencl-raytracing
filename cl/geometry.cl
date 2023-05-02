@@ -97,9 +97,15 @@ bool ray_triangle_intersect(float3 v0, float3 v1, float3 v2, ray_t ray, float t_
     return true;
 }
 
+float3 ray_at(ray_t r, float t) {
+    return r.origin + t * r.direction;
+}
+
 typedef struct {
     bool hit;
     float3 tuv;
+    float3 point;
+    float3 normal;
     uint tri_idx;
 } hit_info_t;
 

@@ -6,6 +6,7 @@ use accel::{bvh2::BVH2, LinearizedBVHNode};
 use cl3::{ext::CL_DEVICE_TYPE_GPU, memory::CL_MEM_READ_WRITE, types::CL_TRUE};
 use embree4_sys::rtcGetDeviceError;
 use geometry::{Transform, Matrix4x4, Vec3};
+use lights::Light;
 use opencl3::{program::Program, platform::Platform, device::Device, context::Context, memory::Buffer, command_queue::CommandQueue, kernel::{Kernel, ExecuteKernel}};
 use scene::Scene;
 
@@ -139,12 +140,14 @@ fn main() {
     let bvh_device = LinearizedBVHNode::to_cl_buffer(&bvh_device, &context, &command_queue);
     let mesh_device = mesh.to_cl_mesh(&context, &command_queue);
 
+    let lights = Light::to_cl_lights(&scene.lights, &context, &command_queue);
+
     let kernel_event = unsafe {
         ExecuteKernel::new(&kernel)
             .set_arg(&image_buffer)
             .set_arg(&(width as i32))
             .set_arg(&(height as i32))
-            .set_arg(&1)
+            .set_arg(&128)
             .set_arg(&seed_buffer)
             .set_arg(&camera_transform_cl)
             .set_arg(&scene.camera.camera_position[0])
@@ -154,6 +157,8 @@ fn main() {
             .set_arg(&mesh_device.vertices)
             .set_arg(&mesh_device.triangles)
             .set_arg(&bvh_device)
+            .set_arg(&lights)
+            .set_arg(&(scene.lights.len() as i32))
             .set_global_work_sizes(&[width, height])
             .enqueue_nd_range(&command_queue).expect("failed to enqueue kernel")
     };

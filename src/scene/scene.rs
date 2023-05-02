@@ -18,11 +18,11 @@ impl Scene {
     pub fn from_file(filepath: &Path) -> anyhow::Result<Scene> {
         let (scene_gltf, buffers, images) = gltf::import(filepath)?;
         let scene_gltf = scene_gltf.default_scene().unwrap();
-        assert!(scene_gltf.nodes().len() == 2);
         let mut camera: Option<Camera> = None;
         let height: usize = HEIGHT;
         let mut mesh: Option<Mesh> = None;
         let mut mesh_transform: Option<Transform> = None;
+        let mut lights: Vec<Light> = Vec::new();
 
         for node in scene_gltf.nodes() {
             if node.camera().is_some() {
@@ -35,11 +35,14 @@ impl Scene {
                 mesh_transform_matrix.transpose();
                 mesh_transform = Some(Transform::from(mesh_transform_matrix));
             }
+            if node.light().is_some() {
+                let light = Light::from_gltf_light(&node);
+                lights.push(light);
+            }
         }
-
-        
+        println!("{:?}", lights);
         Ok(Scene {
-            lights: vec![],
+            lights,
             camera: camera.unwrap(),
             mesh: (mesh.unwrap(), mesh_transform.unwrap())
         })

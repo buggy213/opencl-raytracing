@@ -17,7 +17,7 @@ typedef struct {
     } value;
 } bsdf_t;
 
-float3 evaluate_bsdf(bsdf_t bsdf, float3 in_dir, float out_dir) {
+float3 evaluate_bsdf(bsdf_t bsdf, float3 in_dir, float3 out_dir) {
     switch (bsdf.tag) {
         case BSDF_LAMBERTIAN:
             return bsdf.value.lambertian.albedo * M_1_PI_F; // multiply by 1 / pi since radiance is conserved

@@ -56,7 +56,8 @@ void traverse_bvh(
     float t_min,
     float t_max,
     hit_info_t* hit_info,
-    bvh_data_t bvh
+    bvh_data_t bvh,
+    bool early_exit // exit on first intersected triangle (useful for visibility testing where you don't care which particular one you hit) 
 ) {
     __global bvh_node_t* bvh_tree = bvh.bvh_tree; 
     __global uint* triangles = bvh.triangles; 
@@ -67,6 +68,7 @@ void traverse_bvh(
     
     node = &bvh_tree[0];
     uint stack_ptr = 0;
+    
     while (true) {
         if (node->triCount > 0) {
             if (get_global_id(0) == 0 && get_global_id(1) == get_global_size(1) - 1) {
@@ -94,6 +96,10 @@ void traverse_bvh(
                     hit_info->hit = true;
                     hit_info->tri_idx = tri_idx;
                     t_max = hit_info->tuv.s0; // update t_max
+                    if (early_exit) {
+                        return;
+                    }
+                    
                     if (get_global_id(0) == 0 && get_global_id(1) == get_global_size(1) - 1) {
                         // printf("intersected with tri %d\n", tri_idx);
                     }
@@ -164,6 +170,16 @@ void traverse_bvh(
                 }
             }
         }
+    }
+
+    if (hit_info->hit) {
+        int tri_idx = hit_info->tri_idx;
+        uint3 tri = (uint3) (triangles[tri_idx * 3], triangles[tri_idx * 3 + 1], triangles[tri_idx * 3 + 2]);
+        float3 p0 = (float3) (vertices[tri.s0 * 3], vertices[tri.s0 * 3 + 1], vertices[tri.s0 * 3 + 2]);
+        float3 p1 = (float3) (vertices[tri.s1 * 3], vertices[tri.s1 * 3 + 1], vertices[tri.s1 * 3 + 2]);
+        float3 p2 = (float3) (vertices[tri.s2 * 3], vertices[tri.s2 * 3 + 1], vertices[tri.s2 * 3 + 2]);
+        hit_info->point = ray_at(ray, t_max);
+        hit_info->normal = normalize(cross(p1 - p0, p2 - p0));
     }
 }
 #endif

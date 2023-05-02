@@ -14,8 +14,8 @@ typedef struct {
 } camera_t;
 
 ray_t generate_ray(uint2 *rng_state, int x, int y, camera_t camera) {
-    float x_disp = 0.0f; // (float) (MWC64X(rng_state) % 1024) / 1024.0f;
-    float y_disp = 0.0f; // (float) (MWC64X(rng_state) % 1024) / 1024.0f;
+    float x_disp = 0.0f; // rand_float(rng_state);
+    float y_disp = 0.0f; // rand_float(rng_state);
     float3 raster_loc = (float3) ((float)x + x_disp, (float)y + y_disp, 0.0f);
     float3 ray_origin;
     float3 ray_dir;
@@ -32,12 +32,14 @@ ray_t generate_ray(uint2 *rng_state, int x, int y, camera_t camera) {
     }
     ray_dir = ray_dir / length(ray_dir);
     
-    /*if (get_global_id(0) == 0 && get_global_id(1) == get_global_size(1) - 1) {
+    #ifdef DEBUG
+    IF_LEADER {
         printf("%v3f\n", raster_loc);
         printf("%v3f\n", camera_position);
         printf("%v3f\n", ray_origin);
         printf("%v3f\n", ray_dir);
-    }*/
+    }
+    #endif
 
     ray_t r = {
         .origin = ray_origin,
