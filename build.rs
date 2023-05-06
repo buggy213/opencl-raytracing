@@ -13,4 +13,15 @@ fn main() {
         panic!("embree not found at $EMBREE_DIR!");
     }
     
+    if let Ok(e) = env::var("POCL_RT_PATH") {
+        if let Ok(f) = env::var("VORTEX_DRV_STUB_PATH") {
+            let mut pocl_runtime = PathBuf::from(e);
+            pocl_runtime.push("lib");
+            println!("cargo:rustc-link-search=native={}", pocl_runtime.display());
+
+            let vortex_driver_stub = PathBuf::from(f);
+            println!("cargo:rustc-link-search=native={}", vortex_driver_stub.display());
+            println!("cargo:rustc-link-lib=vortex");
+        }
+    }
 }

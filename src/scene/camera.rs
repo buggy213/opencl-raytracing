@@ -25,6 +25,7 @@ impl Camera {
             screen_to_ndc.compose(Transform::scale(Vec3(width as f32, height as f32, 1.0)));
         return screen_to_raster;
     }
+    
 
     // Creates transform from camera space to raster space through screen space
     // fov given in degrees

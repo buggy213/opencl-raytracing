@@ -15,10 +15,13 @@ typedef struct {
     __global bvh_node_t* bvh_tree; 
     __global uint* triangles;
     __global float* vertices;
+    __global uint* materials;
+    // __global float* u;
+    // __global float* v;
 } bvh_data_t;
 
 // returns t at which ray intersections an axis-aligned bounding box, or inf if it does not intersect it
-float bvh_intersect(bvh_node_t* node, ray_t ray) {
+float bvh_intersect(__global bvh_node_t* node, ray_t ray) {
     // x slab
     if (get_global_id(0) == 0 && get_global_id(1) == get_global_size(1) - 1) {
         // printf("min=%f %f %f\n", node->min_x, node->min_y, node->min_z);
@@ -63,8 +66,8 @@ void traverse_bvh(
     __global uint* triangles = bvh.triangles; 
     __global float* vertices = bvh.vertices;
 
-    bvh_node_t* node;
-    bvh_node_t* stack[32];
+    __global bvh_node_t* node;
+    __global bvh_node_t* stack[32];
     
     node = &bvh_tree[0];
     uint stack_ptr = 0;
@@ -129,8 +132,8 @@ void traverse_bvh(
                 // printf("inner node\n");
                 // printf("%d %d\n", node->leftFirst, node->leftFirst + 1);
             }
-            bvh_node_t* left_child = &bvh_tree[node->leftFirst];
-            bvh_node_t* right_child = &bvh_tree[node->leftFirst + 1];
+            __global bvh_node_t* left_child = &bvh_tree[node->leftFirst];
+            __global bvh_node_t* right_child = &bvh_tree[node->leftFirst + 1];
             float left = bvh_intersect(left_child, ray);
             float right = bvh_intersect(right_child, ray);
             if (get_global_id(0) == 0 && get_global_id(1) == get_global_size(1) - 1) {
@@ -141,7 +144,7 @@ void traverse_bvh(
                 float tmp = left;
                 left = right;
                 right = tmp;
-                bvh_node_t* tmp_node = left_child;
+                __global bvh_node_t* tmp_node = left_child;
                 left_child = right_child;
                 right_child = tmp_node;
             }
@@ -179,6 +182,7 @@ void traverse_bvh(
         float3 p1 = (float3) (vertices[tri.s1 * 3], vertices[tri.s1 * 3 + 1], vertices[tri.s1 * 3 + 2]);
         float3 p2 = (float3) (vertices[tri.s2 * 3], vertices[tri.s2 * 3 + 1], vertices[tri.s2 * 3 + 2]);
         hit_info->point = ray_at(ray, t_max);
+        // computes normal pointing outwards (front face), GLTF spec states that triangles have CCW winding order
         hit_info->normal = normalize(cross(p1 - p0, p2 - p0));
     }
 }

@@ -29,4 +29,8 @@ float rand_float(uint2* rng_state) {
     union { uint u32; float f; } u = { .u32 = rand_uint >> 9 | 0x3f800000 }; 
     return u.f - 1.0f; // offset by -1.0 to get it in range [0, 1) 
 }
+
+float2 rand_float2(uint2* rng_state) {
+    return (float2) (rand_float(rng_state), rand_float(rng_state));
+}
 #endif

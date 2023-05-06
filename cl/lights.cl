@@ -10,7 +10,7 @@ typedef struct {
 } point_light_t;
 
 
-const int POINT_LIGHT = 0;
+__constant int POINT_LIGHT = 0;
 typedef struct {
     int tag;
     union {

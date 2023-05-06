@@ -82,10 +82,10 @@ void __kernel render(
 ) {
     int i = get_global_id(0);
     int j = get_global_id(1);
+    
     if (i >= frame_width || j >= frame_height) {
         return;
     }
-
     int pixel_index = (j * frame_width + i) * 3;
     float u = (float) i / frame_width;
     float v = (float) j / frame_height;
@@ -131,8 +131,8 @@ void __kernel render(
         color += ray_color(ray, bvh, camera, &seed, lights, num_lights, debug_lighting);
     }
     color /= num_samples;
-
-    frame_buffer[pixel_index] = clamp(color.r, 0.0f, 1.0f);
-    frame_buffer[pixel_index + 1] = clamp(color.g, 0.0f, 1.0f);
-    frame_buffer[pixel_index + 2] = clamp(color.b, 0.0f, 1.0f);    
+    
+    frame_buffer[pixel_index] = clamp(color.s0, 0.0f, 1.0f);
+    frame_buffer[pixel_index + 1] = clamp(color.s1, 0.0f, 1.0f);
+    frame_buffer[pixel_index + 2] = clamp(color.s2, 0.0f, 1.0f);    
 }

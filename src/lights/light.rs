@@ -32,13 +32,16 @@ impl Light {
                 max(1, lights.len()), 
                 null_mut()
             ).expect("failed to create lights buffer");
-            command_queue.enqueue_write_buffer(
-                &mut lights_buffer, 
-                CL_TRUE, 
-                0, 
-                lights, 
-                &[]
-            ).expect("failed to write to lights buffer");
+            if lights.len() > 0 {
+                // vortex driver does not like empty writes
+                command_queue.enqueue_write_buffer(
+                    &mut lights_buffer, 
+                    CL_TRUE, 
+                    0, 
+                    lights, 
+                    &[]
+                ).expect("failed to write to lights buffer");
+            }
             lights_buffer
         }
     }

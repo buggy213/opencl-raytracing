@@ -3,7 +3,7 @@
 use std::{fs::{self, read_to_string}, ptr::{null_mut}, path::Path};
 
 use accel::{bvh2::BVH2, LinearizedBVHNode};
-use cl3::{ext::CL_DEVICE_TYPE_GPU, memory::CL_MEM_READ_WRITE, types::CL_TRUE};
+use cl3::{ext::CL_DEVICE_TYPE_GPU, memory::CL_MEM_READ_WRITE, types::CL_TRUE, platform::CL_PLATFORM_NAME};
 use embree4_sys::rtcGetDeviceError;
 use geometry::{Transform, Matrix4x4, Vec3};
 use lights::Light;
@@ -18,17 +18,7 @@ mod macros;
 mod scene;
 mod lights;
 
-fn initialize_cl() -> (Platform, Device, Context, Program, Kernel, CommandQueue) {
-    let platform_ids = cl3::platform::get_platform_ids().expect("unable to get platform ids");
-    assert!(platform_ids.len() == 1, "require only one platform be present");
-
-    let platform = Platform::new(platform_ids[0]);
-    let device_ids = platform.get_devices(CL_DEVICE_TYPE_GPU).expect("unable to get device ids");
-    assert!(device_ids.len() == 1, "require only one device be present");
-
-    let device = Device::new(device_ids[0]);
-    let context = Context::from_device(&device).expect("unable to create context");
-
+fn compile_kernel(context: &Context) -> Program {
     let source_strings: Vec<String> = fs::read_dir("cl").expect("unable to open directory").filter_map(|p| {
         let p = p.expect("unable to read directory entry");
         if p.file_name() == "kernel.cl" {
@@ -41,10 +31,38 @@ fn initialize_cl() -> (Platform, Device, Context, Program, Kernel, CommandQueue)
 
     let source_strs: Vec<&str> = source_strings.iter().map(|s| s.as_str()).collect();
     let program = Program::create_and_build_from_sources(
-        &context, 
+        context, 
         source_strs.as_slice(), 
         "-cl-std=CL3.0"
-    ).expect("unable to build program");
+    ).expect("unable to build program from source");
+
+    program
+}
+
+fn load_binary_kernel(context: &Context) -> Program {
+    let source_strings: Vec<u8> = fs::read("cl/kernel.pocl").expect("failed to read binary kernel file");
+
+    Program::create_and_build_from_binary(
+        context, 
+        &[&source_strings], 
+        ""    
+    ).expect("unable to build program from binary")
+}
+
+fn initialize_cl(use_binary: bool) -> (Platform, Device, Context, Program, Kernel, CommandQueue) {
+    let platform_ids = cl3::platform::get_platform_ids().expect("unable to get platform ids");
+    let platform_name: cl3::info_type::InfoType = cl3::platform::get_platform_info(platform_ids[0], CL_PLATFORM_NAME).expect("failed to query platform info");
+    assert!(platform_ids.len() == 1, "require only one platform be present");
+    println!("using {} as opencl platform", platform_name);
+
+    let platform = Platform::new(platform_ids[0]);
+    let device_ids = platform.get_devices(CL_DEVICE_TYPE_GPU).expect("unable to get device ids");
+    assert!(device_ids.len() == 1, "require only one device be present");
+
+    let device = Device::new(device_ids[0]);
+    let context = Context::from_device(&device).expect("unable to create context");
+
+    let program = if use_binary { load_binary_kernel(&context) } else { compile_kernel(&context) };
 
     let kernel = Kernel::create(
         &program, 
@@ -124,30 +142,29 @@ fn output_image_buffer(buffer: &Buffer<f32>, command_queue: &CommandQueue, width
 }
 
 fn main() {
-    let (platform, device, context, program, kernel, command_queue) = initialize_cl();
-    let scene = Scene::from_file(Path::new("scenes/sibenik.gltf")).expect("failed to load gltf file");
-    let width = scene.camera.raster_width;
-    let height = scene.camera.raster_height;
-    let seed_buffer = create_seed_buffer(&context, &command_queue, width, height);
-    let image_buffer = create_image_buffer(&context, &command_queue, width, height);
+    let (platform, device, context, program, kernel, command_queue) = initialize_cl(false);
+    let scene: Scene = Scene::from_file(Path::new("scenes/sibenik.gltf")).expect("failed to load gltf file");
+    let width: usize = scene.camera.raster_width;
+    let height: usize = scene.camera.raster_height;
+    let seed_buffer: Buffer<u32> = create_seed_buffer(&context, &command_queue, width, height);
+    let image_buffer: Buffer<f32> = create_image_buffer(&context, &command_queue, width, height);
     let camera_transform: Transform = scene.camera.world_to_raster;
     let camera_transform_cl: Buffer<f32> = camera_transform.to_opencl_buffer(&context, &command_queue);
     let (mut mesh, mesh_to_world_transform) = scene.mesh;
     mesh.apply_transform(mesh_to_world_transform);
-    let embree_device = embree4_sys::Device::new();
-    let mesh_bvh = BVH2::create(&embree_device, &mesh);
-    let bvh_device = LinearizedBVHNode::linearize_bvh_mesh(&mesh_bvh, &mut mesh);
-    let bvh_device = LinearizedBVHNode::to_cl_buffer(&bvh_device, &context, &command_queue);
+    let embree_device: embree4_sys::Device = embree4_sys::Device::new();
+    let mesh_bvh: BVH2 = BVH2::create(&embree_device, &mesh);
+    let bvh_device: Vec<LinearizedBVHNode> = LinearizedBVHNode::linearize_bvh_mesh(&mesh_bvh, &mut mesh);
+    let bvh_device: Buffer<LinearizedBVHNode> = LinearizedBVHNode::to_cl_buffer(&bvh_device, &context, &command_queue);
     let mesh_device = mesh.to_cl_mesh(&context, &command_queue);
-
-    let lights = Light::to_cl_lights(&scene.lights, &context, &command_queue);
-
+    let lights: Buffer<Light> = Light::to_cl_lights(&scene.lights, &context, &command_queue);
+    
     let kernel_event = unsafe {
         ExecuteKernel::new(&kernel)
             .set_arg(&image_buffer)
             .set_arg(&(width as i32))
             .set_arg(&(height as i32))
-            .set_arg(&128)
+            .set_arg(&32)
             .set_arg(&seed_buffer)
             .set_arg(&camera_transform_cl)
             .set_arg(&scene.camera.camera_position[0])
