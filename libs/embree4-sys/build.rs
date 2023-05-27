@@ -4,16 +4,20 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-
-    println!("{:?}", env::var("EMBREE_DIR"));
     if let Ok(e) = env::var("EMBREE_DIR") {
         let mut embree_dir = PathBuf::from(e);
         embree_dir.push("lib");
-        println!("cargo:rustc-link-search=native={}", embree_dir.display());
+        eprintln!("linking to {}", embree_dir.display());
         println!("cargo:rerun-if-env-changed=EMBREE_DIR");
+
+        // pass path which is being linked against to dependencies
+        println!("cargo:lib={}", embree_dir.display());
+
         // Tell cargo to tell rustc to link the embree4
         // shared library.
-
+        println!("cargo:rustc-link-search=native={}", embree_dir.display());
+        println!("cargo:rustc-link-lib=embree4");
+        
         // Tell cargo to invalidate the built crate whenever the wrapper changes
         println!("cargo:rerun-if-changed=wrapper.h");
 
@@ -23,7 +27,7 @@ fn main() {
         embree_dir.pop();
         embree_dir.push("include");
         let include_path = format!("-I{}", embree_dir.display());
-        println!("include path: {}", include_path);
+        eprintln!("include path for bindgen: {}", include_path);
         let bindings = bindgen::Builder::default()
             // The input header we would like to generate
             // bindings for.
@@ -46,6 +50,7 @@ fn main() {
         bindings
             .write_to_file(out_path.join("bindings.rs"))
             .expect("Couldn't write bindings!");
+    } else {
+        panic!("EMBREE_DIR set incorrectly");
     }
-    println!("cargo:rustc-link-lib=embree4");
 }

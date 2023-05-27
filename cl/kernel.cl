@@ -22,7 +22,9 @@ float3 ray_color(
     matte.tag = BSDF_LAMBERTIAN;
     matte.value.lambertian = (lambertian_t) { .albedo = (float3) (1.0f, 1.0f, 1.0f) }; // 100% reflective test material
 
-    // printf("began traversal\n");
+    #ifdef DEBUG
+    printf("began traversal\n");
+    #endif
     hit_info_t hit_info;
     hit_info.hit = false;
     traverse_bvh(
@@ -33,26 +35,43 @@ float3 ray_color(
         bvh,
         false
     );
-
-    // printf("finished traversal\n");
+    #ifdef DEBUG
+    printf("finished traversal\n");
+    #endif
     if (hit_info.hit) {
         if (debug) {
             return hit_info.tuv;
         }
         // calculate direct illumination
-        int light_index = rand_int(rng_state, 0, num_lights);
         float3 direction;
         visibility_check_t visibility;
+
+        #ifdef SAMPLE_ONE_LIGHT
+        int light_index = rand_int(rng_state, 0, num_lights);
         float3 incident_radiance = sample_light(lights[light_index], hit_info.point, &direction, &visibility);
         bool light_occluded = occluded(bvh, visibility);
         if (!light_occluded) {
-            float3 bsdf_value = evaluate_bsdf(matte, direction, -ray.direction);
+            float3 bsdf_value = evaluate_bsdf(matte, light_direction, -ray_dir);
             float cos_theta = fabs(dot(hit_info.normal, direction));
             return bsdf_value * incident_radiance * num_lights * cos_theta;
         }
         else {
             return (float3) (0.0f, 0.0f, 0.0f);
         }
+        #else
+        float3 direct_illumination = (float3) (0.0f, 0.0f, 0.0f);
+        for (int light_index = 0; light_index < num_lights; light_index += 1) {
+            float3 incident_radiance = sample_light(lights[light_index], hit_info.point, &direction, &visibility);
+            bool light_occluded = occluded(bvh, visibility);
+            if (!light_occluded) {
+                float3 bsdf_value = evaluate_bsdf(matte, direction, -ray.direction);
+                float cos_theta = fabs(dot(hit_info.normal, direction));
+                direct_illumination += bsdf_value * incident_radiance * cos_theta;
+            }
+        }
+        return direct_illumination;
+        #endif
+        
     }
     
     float3 normalized_direction = normalize(ray.direction);

@@ -1,10 +1,8 @@
 use std::path::Path;
 
-use gltf::{camera::{Projection, Perspective}, Node};
-
 use crate::{geometry::{Transform, Mesh, Matrix4x4}, lights::Light};
 
-use super::camera::Camera;
+use super::camera::{Camera, RenderTile};
 
 pub struct Scene {
     pub camera: Camera,
@@ -12,11 +10,11 @@ pub struct Scene {
     pub lights: Vec<Light>
 }
 
-const HEIGHT: usize = 512;
+const HEIGHT: usize = 1024;
 
 impl Scene {
-    pub fn from_file(filepath: &Path) -> anyhow::Result<Scene> {
-        let (scene_gltf, buffers, images) = gltf::import(filepath)?;
+    pub fn from_file(filepath: &Path, render_tile: Option<RenderTile>) -> anyhow::Result<Scene> {
+        let (scene_gltf, buffers, _images) = gltf::import(filepath)?;
         let scene_gltf = scene_gltf.default_scene().unwrap();
         let mut camera: Option<Camera> = None;
         let height: usize = HEIGHT;
@@ -26,7 +24,7 @@ impl Scene {
 
         for node in scene_gltf.nodes() {
             if node.camera().is_some() {
-                camera = Some(Camera::from_gltf_camera_node(&node, height));
+                camera = Some(Camera::from_gltf_camera_node(&node, height, render_tile));
             }
             if node.mesh().is_some() {
                 let gltf_mesh = node.mesh().unwrap();

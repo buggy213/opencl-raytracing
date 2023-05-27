@@ -1,7 +1,8 @@
 .vscode
 scenes
 output
-
+*.dump
+*.log
 # Added by cargo
 
 target

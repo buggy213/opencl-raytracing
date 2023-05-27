@@ -67,7 +67,7 @@ void traverse_bvh(
     __global float* vertices = bvh.vertices;
 
     __global bvh_node_t* node;
-    __global bvh_node_t* stack[32];
+    __global bvh_node_t* stack[48];
     
     node = &bvh_tree[0];
     uint stack_ptr = 0;

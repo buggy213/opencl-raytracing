@@ -2,17 +2,16 @@ use std::{env, path::PathBuf};
 
 fn main() {
     println!("{:?}", env::var("EMBREE_DIR"));
-    if let Ok(e) = env::var("EMBREE_DIR") {
-        let mut embree_dir = PathBuf::from(e);
-        embree_dir.push("lib");
-        println!("cargo:rustc-link-search=native={}", embree_dir.display());
-        println!("cargo:rustc-link-lib=embree4");
-        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", embree_dir.display());
+    if let Ok(e) = env::var("DEP_EMBREE4_LIB") {
+        let embree_lib_dir = PathBuf::from(e);
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", embree_lib_dir.display());
     }
     else {
-        panic!("embree not found at $EMBREE_DIR!");
+        panic!("unable to get metadata from embree4 dependency");
     }
-    
+    println!("cargo:rerun-if-env-changed=POCL_RT_PATH");
+    println!("cargo:rerun-if-env-changed=VORTEX_DRV_STUB_PATH");
+    // ugly hack: if environment variables from env.sh are set, then link against them
     if let Ok(e) = env::var("POCL_RT_PATH") {
         if let Ok(f) = env::var("VORTEX_DRV_STUB_PATH") {
             let mut pocl_runtime = PathBuf::from(e);

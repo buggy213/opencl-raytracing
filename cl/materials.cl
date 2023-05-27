@@ -9,44 +9,45 @@ typedef struct {
     float3 albedo; // TODO: add texture sampling later
 } lambertian_t;
 
+typedef struct {
+    float ior;
+} specular_t;
 
-__constant int BSDF_LAMBERTIAN = 0;
+typedef struct {
+    float2 uv;
+    float3 p;
+    // 3 orthonormal vectors define local coordinate system, with normal as 3rd basis vector
+    // world to local is vstack(tangent, bitangent, normal)
+    // local to world is transpose of the above
+    float3 normal;
+    float3 tangent;
+    float3 bitangent;
+} surface_interaction_t;
+
+float3 world_to_local(float3 world_direction, surface_interaction_t interaction) {
+    float x = dot(interaction.tangent, world_direction);
+    float y = dot(interaction.bitangent, world_direction);
+    float z = dot(interaction.normal, world_direction);
+    return (float3) (x, y, z);
+}
+
+float3 local_to_world(float3 local_direction, surface_interaction_t interaction) {
+    return local_direction.x * interaction.tangent + local_direction.y * interaction.bitangent + local_direction.z * interaction.normal;
+}
+
+__constant int BSDF_LAMBERTIAN = 0; // perfectly matte material
+__constant int BSDF_FRESNEL_SPECULAR = 1; // fresnel-modulated specular reflection and transmission
 typedef struct {
     int tag;
     union {
         lambertian_t lambertian;
+        specular_t specular;
     } value;
 } bsdf_t;
 
-
-// convention: both in_dir and out_dir point away from the point of intersection (towards source and destination of radiance, respectively)
-// and normal is pointing towards outside of object
-float3 evaluate_bsdf(bsdf_t bsdf, float3 in_dir, float3 out_dir) {
-    switch (bsdf.tag) {
-        case BSDF_LAMBERTIAN:
-            return bsdf.value.lambertian.albedo * M_1_PI_F; // multiply by 1 / pi since radiance is conserved
-        default:
-            printf("invalid BSDF tag value");
-            return (float3) (0.0f, 0.0f, 0.0f);
-    }
-}
-
-float3 sample_bsdf(bsdf_t bsdf, float3 out_dir, float3* sampled_in_dir, float* pdf, float2 uv) {
-    switch (bsdf.tag) {
-        case BSDF_LAMBERTIAN:
-            // cosine weighted importance sampling: preferentially choose directions not close to glancing angles as they will contribute more to 
-            // indirect lighting
-            // need a transform of some sort...
-            // *sampled_in_dir = sample_cosine_hemisphere(uv, pdf);
-            return bsdf.value.lambertian.albedo * M_1_PI_F;
-        default:
-            printf("invalid BSDF tag value");
-            return (float3) (0.0f, 0.0f, 0.0f);
-    }
-}
-
 // Specular reflection / transmission, describes interaction of light with perfectly flat surfaces
-
+// in the case that index of refraction is real valued (e.g. glass, diamonds, etc.)
+// uncolored reflectance
 float dielectric_reflectance(float cos_theta_incident, float eta_outside, float eta_inside) {
     cos_theta_incident = clamp(cos_theta_incident, -1.0f, 1.0f);
     if (cos_theta_incident > 0.0f) {
@@ -79,5 +80,51 @@ float dielectric_reflectance(float cos_theta_incident, float eta_outside, float 
     return 0.5f * (r_parallel * r_parallel + r_perp * r_perp);
 }
 
+// convention: both in_dir and out_dir point away from the point of intersection (towards source and destination of radiance, respectively)
+// and normal is pointing towards outside of object
+float3 evaluate_bsdf(bsdf_t bsdf, float3 in_dir, float3 out_dir) {
+    switch (bsdf.tag) {
+        case BSDF_LAMBERTIAN:
+            return bsdf.value.lambertian.albedo * M_1_PI_F; // multiply by 1 / pi since radiance is conserved
+        case BSDF_FRESNEL_SPECULAR:
+            return (float3) (0.0f, 0.0f, 0.0f); // 0 since it is a delta distribution
+        default:
+            printf("invalid BSDF tag value");
+            return (float3) (0.0f, 0.0f, 0.0f);
+    }
+}
+// TODO: stratified random sampling for lower variance
+float3 sample_bsdf(
+    bsdf_t bsdf, 
+    float3 out_dir, 
+    float3* sampled_in_dir, 
+    float* pdf, 
+    uint2* rng_state, 
+    surface_interaction_t interaction
+) {
+    switch (bsdf.tag) {
+        case BSDF_LAMBERTIAN:;
+            // cosine weighted importance sampling: preferentially choose directions not close to glancing angles as they will contribute more to 
+            // indirect lighting
+            float2 rand = rand_float2(rng_state);
+            float3 direction = sample_cosine_hemisphere(rand, pdf);
+            *sampled_in_dir = local_to_world(direction, interaction);
+            return bsdf.value.lambertian.albedo * M_1_PI_F;
+        case BSDF_FRESNEL_SPECULAR:;
+            // for now, only reflection
+            float3 in_dir = reflect(-out_dir, interaction.normal);
+            *sampled_in_dir = in_dir;
+            *pdf = 1.0f; // implied delta distribution
+            float cos_theta_incident = dot(in_dir, interaction.normal);
+            // TODO: add support for other media other than vacuum (or approximately air), 
+            // and for colored specular reflection in a physically based manner
+            float ior = bsdf.value.specular.ior;
+            float r = dielectric_reflectance(cos_theta_incident, 1.0f, ior);
+            return (float3) (r, r, r);
+        default:
+            printf("invalid BSDF tag value");
+            return (float3) (0.0f, 0.0f, 0.0f);
+    }
+}
 
 #endif

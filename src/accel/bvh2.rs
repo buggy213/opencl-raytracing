@@ -31,10 +31,11 @@ impl From<RTCBounds> for AABB {
 
 struct BVH2Functions;
 impl BVHCallbacks for BVH2Functions {
+    #[allow(non_snake_case, unused_variables)]
     unsafe extern "C" fn unsafe_create_node(
         allocator: embree4_sys::RTCThreadLocalAllocator,
-        _childCount: std::ffi::c_uint,
-        _userPtr: *mut std::ffi::c_void
+        childCount: std::ffi::c_uint,
+        userPtr: *mut std::ffi::c_void
     ) -> *mut std::ffi::c_void {
         let new_node = rtcThreadLocalAlloc(
             allocator, 
@@ -52,6 +53,7 @@ impl BVHCallbacks for BVH2Functions {
         return new_node as *mut c_void
     }
 
+    #[allow(non_snake_case, unused_variables)]
     unsafe extern "C" fn unsafe_create_leaf(
         allocator: embree4_sys::RTCThreadLocalAllocator,
         primitives: *const embree4_sys::RTCBuildPrimitive,
@@ -78,11 +80,12 @@ impl BVHCallbacks for BVH2Functions {
         return new_leaf as *mut c_void;
     }
 
+    #[allow(non_snake_case, unused_variables)]
     unsafe extern "C" fn unsafe_set_node_bounds(
         nodePtr: *mut std::ffi::c_void,
         bounds: *mut *const embree4_sys::RTCBounds,
         childCount: std::ffi::c_uint,
-        _userPtr: *mut std::ffi::c_void
+        userPtr: *mut std::ffi::c_void
     ) {
         let node = (nodePtr as *mut BVHNode).as_mut().unwrap_unchecked();
         let bounds = from_raw_parts(bounds, childCount as usize);
@@ -92,11 +95,12 @@ impl BVHCallbacks for BVH2Functions {
         }
     }
 
+    #[allow(non_snake_case, unused_variables)]
     unsafe extern "C" fn unsafe_set_node_children(
         nodePtr: *mut std::ffi::c_void,
         children: *mut *mut std::ffi::c_void,
         childCount: std::ffi::c_uint,
-        _userPtr: *mut std::ffi::c_void
+        userPtr: *mut std::ffi::c_void
     ) {
         let node = (nodePtr as *mut BVHNode).as_mut().unwrap_unchecked();
         let children = from_raw_parts(children as *mut *mut BVHNode, childCount as usize);
@@ -115,7 +119,7 @@ impl BVHProgressCallback for BVH2Functions {
 }
 
 pub struct BVH2 {
-    handle: BVH,
+    _handle: BVH, // needed for RAII reasons
     root: *mut BVHNode // drop is handled by dropping handle, which will deallocate things
 }
 
@@ -193,7 +197,7 @@ impl BVH2 {
             .set_primitives(&mut primitives);
         let build_result = bvh.build(bvh_arguments).expect("failed to build bvh") as *mut BVHNode;
         // BVH2::sanity_check(build_result, true);
-        BVH2 { handle: bvh, root: build_result }
+        BVH2 { _handle: bvh, root: build_result }
     }
 }
 

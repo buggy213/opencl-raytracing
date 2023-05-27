@@ -4,19 +4,19 @@ use std::{fs::{self, read_to_string}, ptr::{null_mut}, path::Path};
 
 use accel::{bvh2::BVH2, LinearizedBVHNode};
 use cl3::{ext::CL_DEVICE_TYPE_GPU, memory::CL_MEM_READ_WRITE, types::CL_TRUE, platform::CL_PLATFORM_NAME};
-use embree4_sys::rtcGetDeviceError;
-use geometry::{Transform, Matrix4x4, Vec3};
+use geometry::{Transform, Vec3, CLMesh};
 use lights::Light;
 use opencl3::{program::Program, platform::Platform, device::Device, context::Context, memory::Buffer, command_queue::CommandQueue, kernel::{Kernel, ExecuteKernel}};
-use scene::Scene;
-
-use crate::geometry::Mesh;
+use scene::{Scene, RenderTile};
+use cli::Cli;
+use clap::Parser;
 
 mod geometry;
 mod accel;
 mod macros;
 mod scene;
 mod lights;
+mod cli;
 
 fn compile_kernel(context: &Context) -> Program {
     let source_strings: Vec<String> = fs::read_dir("cl").expect("unable to open directory").filter_map(|p| {
@@ -78,12 +78,8 @@ fn initialize_cl(use_binary: bool) -> (Platform, Device, Context, Program, Kerne
     (platform, device, context, program, kernel, command_queue)
 }
 
-fn create_seed_buffer(context: &Context, command_queue: &CommandQueue, width: usize, height: usize) -> Buffer<u32> {
+fn create_seed_buffer(context: &Context, width: usize, height: usize) -> Buffer<u32> {
     let mut seed_buffer;
-    let mut seed_buffer_host = vec![0; width*height*2];
-    for i in 0..width*height*2 {
-        seed_buffer_host[i] = rand::random();
-    }
     unsafe {
         seed_buffer = Buffer::create(
             context, 
@@ -91,20 +87,28 @@ fn create_seed_buffer(context: &Context, command_queue: &CommandQueue, width: us
             width * height * 2, 
             null_mut()
         ).expect("unable to create seed buffer");
-
-        command_queue.enqueue_write_buffer(
-            &mut seed_buffer, 
-            CL_TRUE, 
-            0, 
-            &seed_buffer_host, 
-            &[]
-        ).expect("failed to write seed buffer");
     }
     seed_buffer
 }
 
-fn create_image_buffer(context: &Context, command_queue: &CommandQueue, width: usize, height: usize) -> Buffer<f32> {
-    let mut image_buffer;
+fn populate_seed_buffer(seed_buffer: &mut Buffer<u32>, command_queue: &CommandQueue, width: usize, height: usize) {
+    let mut seed_buffer_host = vec![0; width*height*2];
+    for i in 0..width*height*2 {
+        seed_buffer_host[i] = rand::random();
+        unsafe {
+            command_queue.enqueue_write_buffer(
+                seed_buffer, 
+                CL_TRUE, 
+                0, 
+                &seed_buffer_host, 
+                &[]
+            ).expect("failed to write seed buffer");
+        }
+    }
+}
+
+fn create_image_buffer(context: &Context, width: usize, height: usize) -> Buffer<f32> {
+    let image_buffer;
     unsafe {
         image_buffer = Buffer::create(
             context, 
@@ -116,7 +120,7 @@ fn create_image_buffer(context: &Context, command_queue: &CommandQueue, width: u
     image_buffer
 }
 
-fn output_image_buffer(buffer: &Buffer<f32>, command_queue: &CommandQueue, width: usize, height: usize) {
+fn output_image_buffer(buffer: &Buffer<f32>, command_queue: &CommandQueue, width: usize, height: usize, filename: Option<&str>) {
     let mut color_data: Vec<f32> = vec![0.0f32; width*height*3];
     unsafe {
         command_queue.enqueue_read_buffer(
@@ -132,7 +136,7 @@ fn output_image_buffer(buffer: &Buffer<f32>, command_queue: &CommandQueue, width
         (x.sqrt().clamp(0.0, 1.0) * 256.0) as u8
     }).collect();
     image::save_buffer_with_format(
-        "output/output.png", 
+        format!("output/{}", filename.unwrap_or("output.png")), 
         buf.as_slice(),
         width as u32, 
         height as u32, 
@@ -142,12 +146,19 @@ fn output_image_buffer(buffer: &Buffer<f32>, command_queue: &CommandQueue, width
 }
 
 fn main() {
-    let (platform, device, context, program, kernel, command_queue) = initialize_cl(false);
-    let scene: Scene = Scene::from_file(Path::new("scenes/sibenik.gltf")).expect("failed to load gltf file");
-    let width: usize = scene.camera.raster_width;
-    let height: usize = scene.camera.raster_height;
-    let seed_buffer: Buffer<u32> = create_seed_buffer(&context, &command_queue, width, height);
-    let image_buffer: Buffer<f32> = create_image_buffer(&context, &command_queue, width, height);
+    let cli: Cli = Cli::parse();
+    let use_tile: bool = cli.tile_x.and(cli.tile_y).and(cli.tile_height).and(cli.tile_width).is_some();
+    let render_tile: Option<RenderTile> = if use_tile { 
+        Some(RenderTile { x0: cli.tile_x.unwrap(), y0: cli.tile_y.unwrap(), x1: cli.tile_x.unwrap() + cli.tile_width.unwrap(), y1: cli.tile_y.unwrap() + cli.tile_height.unwrap() }) } 
+    else { 
+        None 
+    };
+    let (_platform, _device, context, _program, kernel, command_queue) = initialize_cl(false);
+    let scene: Scene = Scene::from_file(Path::new("scenes/sponza.gltf"), render_tile).expect("failed to load gltf file");
+    let width: usize = if !use_tile { scene.camera.raster_width } else { cli.tile_width.unwrap() };
+    let height: usize = if !use_tile { scene.camera.raster_height } else { cli.tile_height.unwrap() };
+    let seed_buffer: Buffer<u32> = create_seed_buffer(&context, width, height);
+    let image_buffer: Buffer<f32> = create_image_buffer(&context, width, height);
     let camera_transform: Transform = scene.camera.world_to_raster;
     let camera_transform_cl: Buffer<f32> = camera_transform.to_opencl_buffer(&context, &command_queue);
     let (mut mesh, mesh_to_world_transform) = scene.mesh;
@@ -164,7 +175,7 @@ fn main() {
             .set_arg(&image_buffer)
             .set_arg(&(width as i32))
             .set_arg(&(height as i32))
-            .set_arg(&32)
+            .set_arg(&1)
             .set_arg(&seed_buffer)
             .set_arg(&camera_transform_cl)
             .set_arg(&scene.camera.camera_position[0])
@@ -182,5 +193,5 @@ fn main() {
 
     kernel_event.wait().expect("failed to run kernel");
 
-    output_image_buffer(&image_buffer, &command_queue, width, height);
+    output_image_buffer(&image_buffer, &command_queue, width, height, cli.output_file.as_deref());
 }

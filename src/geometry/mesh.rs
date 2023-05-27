@@ -36,7 +36,7 @@ pub struct CLMesh {
 }
 
 impl Mesh {
-    pub fn from_file(filepath: &Path) -> Result<Mesh, MeshError> {
+    pub fn from_obj_file(filepath: &Path) -> Result<Mesh, MeshError> {
         let mut obj: Obj = Obj::load(filepath)?;
         let mut vertices: Vec<Vec3> = Vec::new();
         let mut tris: Vec<Vec3u> = Vec::new();
