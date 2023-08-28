@@ -10,19 +10,12 @@ typedef struct {
 } lambertian_t;
 
 typedef struct {
-    float ior;
-} specular_t;
+    float3 color;
+    float ior; 
+} fresnel_specular_t;
 
-typedef struct {
-    float2 uv;
-    float3 p;
-    // 3 orthonormal vectors define local coordinate system, with normal as 3rd basis vector
-    // world to local is vstack(tangent, bitangent, normal)
-    // local to world is transpose of the above
-    float3 normal;
-    float3 tangent;
-    float3 bitangent;
-} surface_interaction_t;
+typedef fresnel_specular_t specular_reflection_t;
+typedef fresnel_specular_t specular_transmission_t;
 
 float3 world_to_local(float3 world_direction, surface_interaction_t interaction) {
     float x = dot(interaction.tangent, world_direction);
@@ -36,12 +29,16 @@ float3 local_to_world(float3 local_direction, surface_interaction_t interaction)
 }
 
 __constant int BSDF_LAMBERTIAN = 0; // perfectly matte material
-__constant int BSDF_FRESNEL_SPECULAR = 1; // fresnel-modulated specular reflection and transmission
+__constant int BSDF_SPECULAR_REFLECTION = 1; // reflection only
+__constant int BSDF_SPECULAR_TRANSMISSION = 2; // transmission only
+__constant int BSDF_FRESNEL_SPECULAR = 3; // fresnel-modulated specular reflection and transmission
 typedef struct {
     int tag;
     union {
         lambertian_t lambertian;
-        specular_t specular;
+        specular_reflection_t specular_reflection;
+        specular_transmission_t specular_transmission;
+        fresnel_specular_t fresnel_specular;
     } value;
 } bsdf_t;
 
@@ -61,6 +58,7 @@ float dielectric_reflectance(float cos_theta_incident, float eta_outside, float 
         eta_inside = tmp;
         cos_theta_incident = fabs(cos_theta_incident);
     }
+    
     // need to calculate angle of transmitted direction using snell's law: (eta_i) sin(theta_i) = (eta_t) sin(theta_t)
     float sin_theta_incident = sqrt(max(0.0f, 1.0f - cos_theta_incident * cos_theta_incident));
     float sin_theta_transmitted = eta_outside * sin_theta_incident / eta_inside;
@@ -68,6 +66,7 @@ float dielectric_reflectance(float cos_theta_incident, float eta_outside, float 
         // total internal reflection
         return 1.0f;
     }
+
     float cos_theta_transmitted = sqrt(max(0.0f, 1.0f - sin_theta_incident * sin_theta_incident));
 
     // assuming light is unpolarized
@@ -80,19 +79,38 @@ float dielectric_reflectance(float cos_theta_incident, float eta_outside, float 
     return 0.5f * (r_parallel * r_parallel + r_perp * r_perp);
 }
 
+// ior_ratio is eta_incident / eta_transmitted
+// derivation in PBR: https://pbr-book.org/3ed-2018/Reflection_Models/Specular_Reflection_and_Transmission#SpecularTransmission
+bool refract(float3 out_dir, surface_interaction_t interaction, float3* refract_dir, float ior_ratio) {
+    // snell's law: (eta_i) sin(theta_i) = (eta_t) sin(theta_t)
+    float cos_theta_incident = dot(out_dir, interaction.normal);
+    float sin2_theta_incident = max(0.0f, 1.0f - cos_theta_incident * cos_theta_incident);
+    float sin2_theta_transmitted = ior_ratio * ior_ratio * sin2_theta_incident;
+    if (sin2_theta_transmitted >= 1.0f) {
+        return false;
+    }
+    float cos_theta_transmitted = sqrt(1.0f - sin2_theta_transmitted);
+
+    *refract_dir = -out_dir * ior_ratio + (ior_ratio * cos_theta_incident - cos_theta_transmitted) * interaction.normal;
+    return true;
+}
+
 // convention: both in_dir and out_dir point away from the point of intersection (towards source and destination of radiance, respectively)
 // and normal is pointing towards outside of object
 float3 evaluate_bsdf(bsdf_t bsdf, float3 in_dir, float3 out_dir) {
     switch (bsdf.tag) {
         case BSDF_LAMBERTIAN:
             return bsdf.value.lambertian.albedo * M_1_PI_F; // multiply by 1 / pi since radiance is conserved
+        case BSDF_SPECULAR_REFLECTION:
+        case BSDF_SPECULAR_TRANSMISSION:
         case BSDF_FRESNEL_SPECULAR:
-            return (float3) (0.0f, 0.0f, 0.0f); // 0 since it is a delta distribution
+            return (float3) (0.0f, 0.0f, 0.0f); // 0 since these BSDF's include a delta distribution term
         default:
             printf("invalid BSDF tag value");
             return (float3) (0.0f, 0.0f, 0.0f);
     }
 }
+
 // TODO: stratified random sampling for lower variance
 float3 sample_bsdf(
     bsdf_t bsdf, 
@@ -110,17 +128,24 @@ float3 sample_bsdf(
             float3 direction = sample_cosine_hemisphere(rand, pdf);
             *sampled_in_dir = local_to_world(direction, interaction);
             return bsdf.value.lambertian.albedo * M_1_PI_F;
-        case BSDF_FRESNEL_SPECULAR:;
-            // for now, only reflection
-            float3 in_dir = reflect(-out_dir, interaction.normal);
+        case BSDF_SPECULAR_REFLECTION:;
+            float3 in_dir = reflect(out_dir, interaction.normal);
             *sampled_in_dir = in_dir;
             *pdf = 1.0f; // implied delta distribution
             float cos_theta_incident = dot(in_dir, interaction.normal);
-            // TODO: add support for other media other than vacuum (or approximately air), 
-            // and for colored specular reflection in a physically based manner
-            float ior = bsdf.value.specular.ior;
+            float ior = bsdf.value.specular_reflection.ior;
             float r = dielectric_reflectance(cos_theta_incident, 1.0f, ior);
-            return (float3) (r, r, r);
+            return bsdf.value.specular_reflection.color * r / fabs(cos_theta_incident);
+        case BSDF_SPECULAR_TRANSMISSION:;
+            float cos_theta_incident = dot(in_dir, interaction.normal);
+            float ior_ratio = (cos_theta_incident > 0.0f) ? bsdf.value.specular_transmission.ior : 1.0f / bsdf.value.specular_transmission.ior;
+            bool valid_transmission = refract(out_dir, interaction, sampled_in_dir, ior_ratio);
+            *pdf = 1.0f;
+            if (!valid_transmission) {
+                return (float3) (0.0f, 0.0f, 0.0f);
+            }
+            float r = 1.0f - dielectric_reflectance(cos_theta_incident, 1.0f, bsdf.value.specular_transmission.ior);
+            return ior_ratio * ior_ratio * r * bsdf.value.specular_transmission.color / fabs(cos_theta_incident);
         default:
             printf("invalid BSDF tag value");
             return (float3) (0.0f, 0.0f, 0.0f);

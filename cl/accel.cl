@@ -183,7 +183,11 @@ void traverse_bvh(
         float3 p2 = (float3) (vertices[tri.s2 * 3], vertices[tri.s2 * 3 + 1], vertices[tri.s2 * 3 + 2]);
         hit_info->point = ray_at(ray, t_max);
         // computes normal pointing outwards (front face), GLTF spec states that triangles have CCW winding order
+        // and any other mesh we process should follow this convention
+        // TODO: add support for interpolating shading normal and shading tangent from (optional) values embedded in mesh data
+        // and UV coordinate info for texture mapping later
         hit_info->normal = normalize(cross(p1 - p0, p2 - p0));
+        hit_info->tangent = normalize(p1 - p0);
     }
 }
 #endif

@@ -105,8 +105,32 @@ typedef struct {
     bool hit;
     float3 tuv;
     float3 point;
+    float3 tangent;
     float3 normal;
     uint tri_idx;
 } hit_info_t;
+
+typedef struct {
+    float2 uv;
+    float3 p;
+    // 3 orthonormal vectors define local coordinate system, with normal as 3rd basis vector
+    // world to local is vstack(tangent, bitangent, normal)
+    // local to world is transpose of the above
+    float3 normal;
+    float3 tangent;
+    float3 bitangent;
+} surface_interaction_t;
+
+surface_interaction_t surface_interaction_from_hit(hit_info_t hit) {
+    surface_interaction_t interaction = {
+        .uv = (float2) (0.0f, 0.0f),
+        .p = hit.point,
+        .normal = hit.normal,
+        .tangent = hit.tangent,
+        .bitangent = cross(normal, tangent)
+    };
+
+    return interaction;
+}
 
 #endif
