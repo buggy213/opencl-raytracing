@@ -1,13 +1,13 @@
 [package]
 name = "embree4-sys"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 links = "embree4"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.70"
+anyhow = "1.0.96"
 
 [build-dependencies]
-bindgen = "0.64.0"
+bindgen = "0.71.1"

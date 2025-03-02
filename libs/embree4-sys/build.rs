@@ -1,32 +1,28 @@
-extern crate bindgen;
-
 use std::env;
 use std::path::PathBuf;
 
 fn main() {
     if let Ok(e) = env::var("EMBREE_DIR") {
-        let mut embree_dir = PathBuf::from(e);
-        embree_dir.push("lib");
-        eprintln!("linking to {}", embree_dir.display());
-        println!("cargo:rerun-if-env-changed=EMBREE_DIR");
+        let embree_dir = PathBuf::from(e);
+        let embree_lib_dir = embree_dir.join("lib");
+        println!("cargo::rerun-if-env-changed=EMBREE_DIR");
 
-        // pass path which is being linked against to dependencies
-        println!("cargo:lib={}", embree_dir.display());
+        // pass lib folder which is being linked against to dependencies
+        println!("cargo::metadata=lib={}", embree_lib_dir.display());
 
         // Tell cargo to tell rustc to link the embree4
         // shared library.
-        println!("cargo:rustc-link-search=native={}", embree_dir.display());
-        println!("cargo:rustc-link-lib=embree4");
+        println!("cargo::rustc-link-search=native={}", embree_lib_dir.display());
+        println!("cargo::rustc-link-lib=embree4");
         
         // Tell cargo to invalidate the built crate whenever the wrapper changes
-        println!("cargo:rerun-if-changed=wrapper.h");
+        println!("cargo::rerun-if-changed=wrapper.h");
 
         // The bindgen::Builder is the main entry point
         // to bindgen, and lets you build up options for
         // the resulting bindings.
-        embree_dir.pop();
-        embree_dir.push("include");
-        let include_path = format!("-I{}", embree_dir.display());
+        let embree_include_dir = embree_dir.join("include");
+        let include_path = format!("-I{}", embree_include_dir.display());
         eprintln!("include path for bindgen: {}", include_path);
         let bindings = bindgen::Builder::default()
             // The input header we would like to generate
@@ -39,7 +35,7 @@ fn main() {
             .constified_enum_module("RTCBuildFlags")
             // Tell cargo to invalidate the built crate whenever any of the
             // included header files changed.
-            .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+            .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
             // Finish the builder and generate the bindings.
             .generate()
             // Unwrap the Result and panic on failure.
