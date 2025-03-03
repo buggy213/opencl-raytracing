@@ -1,0 +1,22 @@
+[package]
+name = "raytracing"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+opencl3 = "0.9.2"
+cl3 = "0.9.1"
+obj = "0.10.2"
+rand = "0.8.5"
+image = "0.24.5"
+anyhow = "1.0.70"
+clap = { version = "4.2.7", features = ["derive"] }
+
+[dependencies.embree4-sys]
+path = "../embree4-sys"
+
+[dependencies.gltf]
+version = "1.1.0"
+features = ["KHR_lights_punctual"]
