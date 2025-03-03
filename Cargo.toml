@@ -3,5 +3,6 @@ resolver = "2"
 
 members = [
     "crates/embree4-sys",
-    "crates/raytracing"
+    "crates/raytracing",
+    "crates/viewer"
 ]
