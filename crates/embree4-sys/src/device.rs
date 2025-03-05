@@ -10,9 +10,9 @@ pub struct Device {
 
 impl Device {
     extern "C" fn print_errors(
-        userPtr: *mut c_void,
-        code: u32,
-        error_str: *const i8
+        userPtr: *mut core::ffi::c_void,
+        code: RTCError,
+        error_str: *const core::ffi::c_char
     ) {
         let error_cstr;
         unsafe {
@@ -32,7 +32,7 @@ impl Device {
         }
     }
 
-    fn error_from_code(error_code: u32) -> &'static str {
+    fn error_from_code(error_code: RTCError) -> &'static str {
         match error_code {
             RTCError_RTC_ERROR_INVALID_OPERATION => "invalid operation",
             RTCError_RTC_ERROR_CANCELLED => "operation canceled",

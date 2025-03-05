@@ -109,7 +109,7 @@ impl Default for BVHBuildArguments {
             maxDepth: 32, 
             sahBlockSize: 1, 
             minLeafSize: 1, 
-            maxLeafSize: RTCBuildConstants_RTC_BUILD_MAX_PRIMITIVES_PER_LEAF, 
+            maxLeafSize: RTCBuildConstants_RTC_BUILD_MAX_PRIMITIVES_PER_LEAF as u32, 
             traversalCost: 1.0, 
             intersectionCost: 1.0, 
             bvh: null_mut(), 
