@@ -1753,15 +1753,25 @@ name = "raytracing"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "cl3",
  "clap",
  "embree4-sys",
  "gltf",
  "image 0.24.9",
  "obj",
+]
+
+[[package]]
+name = "raytracing-cl"
+version = "0.1.0"
+dependencies = [
+ "cl3",
  "opencl3",
  "rand",
 ]
+
+[[package]]
+name = "raytracing-cpu"
+version = "0.1.0"
 
 [[package]]
 name = "redox_syscall"

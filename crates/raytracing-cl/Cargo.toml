@@ -1,0 +1,9 @@
+[package]
+name = "raytracing-cl"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+opencl3 = "0.9.2"
+cl3 = "0.9.1"
+rand = "0.8.5"
