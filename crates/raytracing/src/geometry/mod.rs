@@ -11,5 +11,4 @@ pub use vec3::Vec3;
 pub use vec3::Vec3u;
 pub use vec2::Vec2;
 pub use mesh::Mesh;
-pub use mesh::CLMesh;
 pub use aabb::AABB;

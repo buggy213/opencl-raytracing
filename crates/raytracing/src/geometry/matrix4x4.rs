@@ -1,4 +1,4 @@
-use std::{ops::{Index, IndexMut, Add}, slice::from_raw_parts};
+use std::{ops::{Index, IndexMut}, slice::from_raw_parts};
 
 use super::Vec3;
 

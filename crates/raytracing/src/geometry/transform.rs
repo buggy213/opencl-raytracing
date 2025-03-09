@@ -1,7 +1,5 @@
 use std::{ptr::null_mut, mem::size_of};
 
-use cl3::{memory::CL_MEM_READ_WRITE, types::CL_TRUE};
-use opencl3::{memory::Buffer, context::Context, command_queue::CommandQueue};
 
 use super::{Matrix4x4, Vec3};
 
@@ -50,38 +48,6 @@ impl Transform {
             forward: Matrix4x4::matmul(other.forward, self.forward),
             inverse: Matrix4x4::matmul(self.inverse, other.inverse)
         }
-    }
-
-    pub fn to_opencl_buffer(&self, context: &Context, command_queue: &CommandQueue) -> Buffer<f32> {
-        let mut buffer: Buffer<f32>;
-        unsafe {
-            buffer = Buffer::create(
-                context, 
-                CL_MEM_READ_WRITE, 
-                32, 
-                null_mut()
-            ).expect("failed to create opencl buffer for transform");
-            
-            let flat_slice = (&self.forward).into();
-            command_queue.enqueue_write_buffer(
-                &mut buffer, 
-                CL_TRUE, 
-                0, 
-                flat_slice, 
-                &[]
-            ).expect("failed to write transform buffer");
-
-            let flat_slice = (&self.inverse).into();
-            command_queue.enqueue_write_buffer(
-                &mut buffer, 
-                CL_TRUE, 
-                16 * size_of::<f32>(), 
-                flat_slice, 
-                &[]
-            ).expect("failed to write transform buffer");
-        };
-
-        buffer
     }
 
     pub fn apply_point(&self, point: Vec3) -> Vec3 {

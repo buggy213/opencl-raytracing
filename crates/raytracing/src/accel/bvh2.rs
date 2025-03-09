@@ -1,10 +1,8 @@
-use std::{mem::{size_of, align_of}, ptr::null_mut, ffi::c_void, slice::from_raw_parts, collections::VecDeque};
+use std::{mem::{size_of, align_of}, ptr::null_mut, ffi::c_void, slice::from_raw_parts};
 
-use cl3::{memory::CL_MEM_READ_WRITE, types::CL_TRUE};
 use embree4_sys::{bvh::{BVHCallbacks, BVHProgressCallback}, rtcThreadLocalAlloc, BVH, RTCBounds, Device, bvh::BVHBuildArguments, RTCBuildQuality, RTCBuildPrimitive};
-use opencl3::{memory::Buffer, context::Context, command_queue::CommandQueue};
 
-use crate::{geometry::{Vec3, AABB, Mesh, Vec3u}, macros::{variadic_min_comparator, variadic_max_comparator}};
+use crate::{geometry::{Vec3, AABB, Mesh}, macros::{variadic_min_comparator, variadic_max_comparator}};
 
 #[repr(C)]
 pub enum BVHNode {
@@ -201,91 +199,3 @@ impl BVH2 {
     }
 }
 
-// For sending to GPU, matches definition of `bvh_node_t`
-#[repr(C)]
-pub struct LinearizedBVHNode {
-    min_x: f32,
-    min_y: f32,
-    min_z: f32,
-    left_first: u32,
-    max_x: f32,
-    max_y: f32,
-    max_z: f32,
-    tri_count: u32
-}
-
-impl LinearizedBVHNode {
-    pub fn linearize_bvh_mesh(bvh: &BVH2, mesh: &mut Mesh) -> Vec<LinearizedBVHNode> {
-        // perform BFS over BVH, make triangles pointed to by leaf nodes contiguous
-        let mut queue: VecDeque<(*mut BVHNode, AABB)> = VecDeque::new();
-        let node = unsafe { bvh.root.read() };
-        let root_aabb;
-        if let BVHNode::Inner {left_aabb, right_aabb, .. } = node {
-            root_aabb = AABB::surrounding_box(left_aabb, right_aabb);
-        }
-        else {
-            panic!("root node is leaf node (this might be ok, but code needs to be changed to deal with it)");
-        }
-        let mut bvh_nodes: Vec<LinearizedBVHNode> = Vec::new();
-        let mut contiguous_tris: Vec<Vec3u> = Vec::new();
-        queue.push_back((bvh.root, root_aabb));
-        while !queue.is_empty() {
-            let (node, aabb) = queue.pop_front().unwrap();
-            let node = unsafe { node.read() };
-            match node {
-                BVHNode::Inner { left, right, left_aabb, right_aabb } => {
-                    let left_idx = bvh_nodes.len() + queue.len() + 1;
-                    queue.push_back((left, left_aabb));
-                    queue.push_back((right, right_aabb));
-                    bvh_nodes.push(LinearizedBVHNode { 
-                        min_x: aabb.minimum.0, 
-                        min_y: aabb.minimum.1, 
-                        min_z: aabb.minimum.2, 
-                        left_first: left_idx as u32, 
-                        max_x: aabb.maximum.0, 
-                        max_y: aabb.maximum.1, 
-                        max_z: aabb.maximum.2, 
-                        tri_count: 0
-                    });
-                },
-                BVHNode::Leaf { tri_count, tri_indices } => {
-                    bvh_nodes.push(LinearizedBVHNode { 
-                        min_x: aabb.minimum.0, 
-                        min_y: aabb.minimum.1, 
-                        min_z: aabb.minimum.2, 
-                        left_first: contiguous_tris.len() as u32, 
-                        max_x: aabb.maximum.0, 
-                        max_y: aabb.maximum.1, 
-                        max_z: aabb.maximum.2, 
-                        tri_count
-                    });
-
-                    
-                    for i in 0..tri_count {
-                        contiguous_tris.push(mesh.tris[tri_indices[i as usize] as usize]);
-                    }
-                },
-            }
-        }
-        mesh.tris = contiguous_tris;
-        bvh_nodes
-    }
-
-    pub fn to_cl_buffer(bvh: &[LinearizedBVHNode], context: &Context, command_queue: &CommandQueue) -> Buffer<LinearizedBVHNode> {
-        let mut buffer: Buffer<LinearizedBVHNode> = unsafe {
-            Buffer::create(context, CL_MEM_READ_WRITE, bvh.len(), null_mut()).expect("failed to create buffer")
-        };
-
-        unsafe {
-            command_queue.enqueue_write_buffer(
-                &mut buffer, 
-                CL_TRUE, 
-                0, 
-                bvh, 
-                &[]
-            ).expect("failed to write bvh buffer to gpu");
-        }
-
-        buffer
-    }
-}

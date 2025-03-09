@@ -1,6 +1,4 @@
-use super::{
-    vec3::Vec3
-};
+use super::vec3::Vec3;
 
 /// Axis-aligned bounding box
 /// Defined by 2 points

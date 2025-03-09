@@ -1,8 +1,6 @@
 use std::{path::Path, ptr::null_mut, slice::from_raw_parts};
 
-use cl3::{memory::CL_MEM_READ_WRITE, types::CL_TRUE};
 use obj::{ObjError, MtlLibsLoadError, Obj, ObjData, IndexTuple};
-use opencl3::{memory::Buffer, command_queue::CommandQueue, context::Context};
 
 use super::{Vec3, vec3::Vec3u, Transform};
 
@@ -28,11 +26,6 @@ impl From<MtlLibsLoadError> for MeshError {
 pub struct Mesh {
     pub(crate) vertices: Vec<Vec3>,
     pub(crate) tris: Vec<Vec3u>
-}
-
-pub struct CLMesh {
-    pub vertices: Buffer<f32>,
-    pub triangles: Buffer<u32>
 }
 
 impl Mesh {
@@ -102,43 +95,4 @@ impl Mesh {
         }
     }
 
-    pub fn to_cl_mesh(&self, context: &Context, command_queue: &CommandQueue) -> CLMesh {
-        let mut vertex_buffer: Buffer<f32>;
-        let mut index_buffer: Buffer<u32>;
-        unsafe {
-            vertex_buffer = Buffer::create(
-                context, 
-                CL_MEM_READ_WRITE, 
-                self.vertices.len() * 3, 
-                null_mut()
-            ).expect("failed to create vertex buffer");
-
-            index_buffer = Buffer::create(
-                context, 
-                CL_MEM_READ_WRITE, 
-                self.tris.len() * 3, 
-                null_mut()
-            ).expect("failed to create index buffer");
-            
-            let vertices = from_raw_parts(self.vertices.as_ptr() as *const f32, self.vertices.len() * 3);
-            command_queue.enqueue_write_buffer(
-                &mut vertex_buffer, 
-                CL_TRUE, 
-                0, 
-                vertices, 
-                &[]
-            ).expect("failed to populate vertex buffer");
-            
-            let tris = from_raw_parts(self.tris.as_ptr() as *const u32, self.tris.len() * 3);
-            command_queue.enqueue_write_buffer(
-                &mut index_buffer, 
-                CL_TRUE, 
-                0, 
-                tris, 
-                &[]
-            ).expect("failed to populate index buffer");
-        }
-        
-        CLMesh { vertices: vertex_buffer, triangles: index_buffer }
-    }
 }
