@@ -1,7 +1,7 @@
 use std::{borrow::Cow, rc::Rc, sync::Arc};
 
 use pollster::FutureExt;
-use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, window::Window};
+use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::{ActiveEventLoop, EventLoop}, window::Window};
 
 struct Application {
     window: Option<Arc<Window>>,
@@ -36,16 +36,9 @@ impl Application {
     }
 }
 
-impl ApplicationHandler for Application {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.window.is_none() {
-            let window_attributes = Window::default_attributes()
-                .with_title("Viewer")
-                .with_inner_size(PhysicalSize::new(self.width, self.height));
-            let window = event_loop.create_window(window_attributes).expect("Unable to create window");
-            self.window = Some(Arc::new(window));
-
-            let instance_descriptor = wgpu::InstanceDescriptor::from_env_or_default();
+impl Application {
+    fn init_wgpu(&self) -> WgpuHandles<'static> {
+        let instance_descriptor = wgpu::InstanceDescriptor::from_env_or_default();
             let instance = wgpu::Instance::new(&instance_descriptor);
 
             let window_clone = Arc::clone(self.window.as_ref().unwrap());
@@ -125,7 +118,7 @@ impl ApplicationHandler for Application {
 
             surface.configure(&device, &config);
 
-            self.wgpu_handles = Some(WgpuHandles {
+            WgpuHandles {
                 instance,
                 surface,
                 adapter,
@@ -134,7 +127,20 @@ impl ApplicationHandler for Application {
                 shader,
                 pipeline_layout,
                 pipeline: render_pipeline,
-            })
+            }
+    }
+}
+
+impl ApplicationHandler for Application {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.window.is_none() {
+            let window_attributes = Window::default_attributes()
+                .with_title("Viewer")
+                .with_inner_size(PhysicalSize::new(self.width, self.height));
+            let window = event_loop.create_window(window_attributes).expect("Unable to create window");
+            self.window = Some(Arc::new(window));
+
+            self.wgpu_handles = Some(self.init_wgpu())
         }
     }
 
