@@ -153,12 +153,12 @@ impl BVH2 {
         let bvh = BVH::new(device);
         // println!("{}", device.get_error());
 
-        let mut primitives = BVH2::primitives_from_mesh(mesh);
+        let mut primitives: Vec<BuildPrimitive> = BVH2::primitives_from_mesh(mesh);
         let bvh_arguments = 
         BVHBuildArguments::new()
             .max_leaf_size(8)
             .register_callbacks(&BVH2::BVH2_CALLBACKS)
-            .set_primitives(&mut primitives);
+            .set_primitives(primitives.as_mut_slice());
         let build_result = bvh.build(bvh_arguments);
         // BVH2::sanity_check(build_result, true);
         BVH2 { _handle: build_result }
