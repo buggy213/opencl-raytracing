@@ -1,14 +1,13 @@
-use std::{mem::{size_of, align_of}, ptr::null_mut, ffi::c_void, slice::from_raw_parts};
-
-use embree4_sys::{bvh::{BVHCallbacks, BVHProgressCallback}, rtcThreadLocalAlloc, BVH, RTCBounds, Device, bvh::BVHBuildArguments, RTCBuildQuality, RTCBuildPrimitive};
+use std::{ffi::c_void, mem::{align_of, size_of}, ptr::{null, null_mut}, slice::from_raw_parts};
+use embree4::{bvh::{BVHBuildArguments, BVHCallbacks, BuiltBVH}, Bounds, BuildPrimitive, Device, BVH};
 
 use crate::{geometry::{Vec3, AABB, Mesh}, macros::{variadic_min_comparator, variadic_max_comparator}};
 
-#[repr(C)]
+#[derive(Debug)]
 pub enum BVHNode {
     Inner {
-        left: *mut BVHNode,
-        right: *mut BVHNode,
+        left: *const BVHNode,
+        right: *const BVHNode,
         left_aabb: AABB,
         right_aabb: AABB
     },
@@ -18,8 +17,8 @@ pub enum BVHNode {
     }
 }
 
-impl From<RTCBounds> for AABB {
-    fn from(value: RTCBounds) -> Self {
+impl From<Bounds> for AABB {
+    fn from(value: Bounds) -> Self {
         AABB {
             minimum: Vec3(value.lower_x, value.lower_y, value.lower_z),
             maximum: Vec3(value.upper_x, value.upper_y, value.upper_z)
@@ -27,105 +26,74 @@ impl From<RTCBounds> for AABB {
     }
 }
 
-struct BVH2Functions;
-impl BVHCallbacks for BVH2Functions {
-    #[allow(non_snake_case, unused_variables)]
-    unsafe extern "C" fn unsafe_create_node(
-        allocator: embree4_sys::RTCThreadLocalAllocator,
-        childCount: std::ffi::c_uint,
-        userPtr: *mut std::ffi::c_void
-    ) -> *mut std::ffi::c_void {
-        let new_node = rtcThreadLocalAlloc(
-            allocator, 
-            size_of::<BVHNode>(), 
-        align_of::<BVHNode>()
-        ) as *mut BVHNode;
 
-        new_node.write(BVHNode::Inner { 
-            left: null_mut(), 
-            right: null_mut(), 
-            left_aabb: AABB::default(),
-            right_aabb: AABB::default()
-        });
-
-        return new_node as *mut c_void
-    }
-
-    #[allow(non_snake_case, unused_variables)]
-    unsafe extern "C" fn unsafe_create_leaf(
-        allocator: embree4_sys::RTCThreadLocalAllocator,
-        primitives: *const embree4_sys::RTCBuildPrimitive,
-        primitiveCount: usize,
-        userPtr: *mut std::ffi::c_void
-    ) -> *mut std::ffi::c_void {
-        let new_leaf = rtcThreadLocalAlloc(
-            allocator, 
-            size_of::<BVHNode>(), 
-            align_of::<BVHNode>()
-        ) as *mut BVHNode;
-        
-        let mut tris: [u32; 8] = [0; 8];
-        let primitives = from_raw_parts(primitives, primitiveCount);
-        for (i, primitive) in primitives.iter().enumerate() {
-            tris[i] = primitive.primID;
-        }
-
-        new_leaf.write(BVHNode::Leaf { 
-            tri_count: primitiveCount as u32, 
-            tri_indices: tris
-        });
-
-        return new_leaf as *mut c_void;
-    }
-
-    #[allow(non_snake_case, unused_variables)]
-    unsafe extern "C" fn unsafe_set_node_bounds(
-        nodePtr: *mut std::ffi::c_void,
-        bounds: *mut *const embree4_sys::RTCBounds,
-        childCount: std::ffi::c_uint,
-        userPtr: *mut std::ffi::c_void
-    ) {
-        let node = (nodePtr as *mut BVHNode).as_mut().unwrap_unchecked();
-        let bounds = from_raw_parts(bounds, childCount as usize);
-        if let BVHNode::Inner { left_aabb, right_aabb, .. } = node {
-            *left_aabb = AABB::from(*bounds[0]);
-            *right_aabb = AABB::from(*bounds[1]);
-        }
-    }
-
-    #[allow(non_snake_case, unused_variables)]
-    unsafe extern "C" fn unsafe_set_node_children(
-        nodePtr: *mut std::ffi::c_void,
-        children: *mut *mut std::ffi::c_void,
-        childCount: std::ffi::c_uint,
-        userPtr: *mut std::ffi::c_void
-    ) {
-        let node = (nodePtr as *mut BVHNode).as_mut().unwrap_unchecked();
-        let children = from_raw_parts(children as *mut *mut BVHNode, childCount as usize);
-        if let BVHNode::Inner { left, right, .. } = node {
-            *left = children[0];
-            *right = children[1];
-        }
-    }
-}
-
-impl BVHProgressCallback for BVH2Functions {
-    fn progress(n: f64) -> bool {
-        println!("BVH constructing {:.3}", n);
-        true
+impl Default for BVHNode {
+    fn default() -> Self {
+        BVHNode::Inner { left: null(), right: null(), left_aabb: AABB::default(), right_aabb: AABB::default() }
     }
 }
 
 pub struct BVH2 {
-    _handle: BVH, // needed for RAII reasons
-    root: *mut BVHNode // drop is handled by dropping handle, which will deallocate things
+    _handle: BuiltBVH<BVHNode>, // needed for RAII reasons
 }
 
 impl BVH2 {
-    fn primitive_from_triangle(p0: Vec3, p1: Vec3, p2: Vec3, tri_index: u32) -> RTCBuildPrimitive {
+    fn create_node_bvh2(child_count: u32) -> BVHNode {
+        assert!(child_count == 2);
+        BVHNode::Inner { 
+            left: null(), 
+            right: null(), 
+            left_aabb: AABB::default(),
+            right_aabb: AABB::default()
+        }
+    }
+
+    fn create_leaf_bvh2(primitives: &[BuildPrimitive]) -> BVHNode {
+        let indices = [0, 1, 2, 3, 4, 5, 6, 7].map(|i| 
+            primitives.get(i).map(|p| p.primID).unwrap_or_default()
+        );
+
+        BVHNode::Leaf { 
+            tri_count: primitives.len() as u32, 
+            tri_indices: indices
+        }
+    }
+
+    fn set_node_bounds_bvh2(node: &mut BVHNode, bounds: &[&Bounds]) {
+        assert!(bounds.len() == 2);
+        match node {
+            BVHNode::Inner { left_aabb, right_aabb, .. } => {
+                *left_aabb = (*bounds[0]).into();
+                *right_aabb = (*bounds[1]).into();
+            },
+            _ => unreachable!(),
+        }
+    }
+
+    fn set_node_children_bvh2(node: &mut BVHNode, children: &[&BVHNode]) {
+        assert!(children.len() == 2);
+        match node {
+            BVHNode::Inner { left, right, .. } => {
+                *left = children[0] as *const BVHNode;
+                *right = children[1] as *const BVHNode;
+            },
+            _ => unreachable!()
+        }
+    }
+
+    const BVH2_CALLBACKS: BVHCallbacks<BVHNode> = BVHCallbacks::new(
+        BVH2::create_node_bvh2,
+        BVH2::create_leaf_bvh2,
+        BVH2::set_node_bounds_bvh2,
+        BVH2::set_node_children_bvh2
+    );
+}
+
+impl BVH2 {
+    fn primitive_from_triangle(p0: Vec3, p1: Vec3, p2: Vec3, tri_index: u32) -> BuildPrimitive {
         let min = variadic_min_comparator!(Vec3::elementwise_min, p0, p1, p2);
         let max = variadic_max_comparator!(Vec3::elementwise_max, p0, p1, p2);
-        RTCBuildPrimitive { 
+        BuildPrimitive { 
             lower_x: min.0, 
             lower_y: min.1, 
             lower_z: min.2, 
@@ -137,7 +105,7 @@ impl BVH2 {
         }
     }
 
-    fn primitives_from_mesh(mesh: &Mesh) -> Vec<RTCBuildPrimitive> {
+    fn primitives_from_mesh(mesh: &Mesh) -> Vec<BuildPrimitive> {
         let mut primitives = Vec::new();
         for (i, tri) in mesh.tris.iter().cloned().enumerate() {
             let (t0, t1, t2) = (tri.0, tri.1, tri.2);
@@ -150,7 +118,7 @@ impl BVH2 {
         primitives
     }
 
-    fn sanity_check(root_node: *mut BVHNode, top: bool) -> (i32, i32, i32, i32) {
+    fn sanity_check(root_node: *const BVHNode, top: bool) -> (i32, i32, i32, i32) {
         let node = unsafe { root_node.read() };
         let inner_nodes;
         let leaf_nodes;
@@ -187,15 +155,13 @@ impl BVH2 {
 
         let mut primitives = BVH2::primitives_from_mesh(mesh);
         let bvh_arguments = 
-            BVHBuildArguments::default()
-            .set_max_leaf_size(8)
-            .quality(RTCBuildQuality::RTC_BUILD_QUALITY_MEDIUM)
-            .register_callbacks::<BVH2Functions>()
-            .register_progress_callback::<BVH2Functions>()
+        BVHBuildArguments::new()
+            .max_leaf_size(8)
+            .register_callbacks(&BVH2::BVH2_CALLBACKS)
             .set_primitives(&mut primitives);
-        let build_result = bvh.build(bvh_arguments).expect("failed to build bvh") as *mut BVHNode;
+        let build_result = bvh.build(bvh_arguments);
         // BVH2::sanity_check(build_result, true);
-        BVH2 { _handle: bvh, root: build_result }
+        BVH2 { _handle: build_result }
     }
 }
 

@@ -7,3 +7,6 @@ edition = "2024"
 opencl3 = "0.9.2"
 cl3 = "0.9.1"
 rand = "0.8.5"
+
+[dependencies.raytracing]
+path = "../raytracing"

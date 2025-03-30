@@ -1,5 +1,7 @@
 use std::{ptr::{self, null_mut}, ffi::{c_void, CStr}};
 
+use embree4_sys::{rtcGetDeviceError, rtcNewDevice, rtcReleaseDevice, rtcSetDeviceErrorFunction, RTCDevice, RTCError};
+
 use crate::*;
 
 

@@ -1,8 +1,10 @@
 [workspace]
 resolver = "2"
 
-members = [
+members = [ 
+    "crates/embree4",
     "crates/embree4-sys",
+    
     "crates/raytracing", 
     
     "crates/raytracing-cl", 
