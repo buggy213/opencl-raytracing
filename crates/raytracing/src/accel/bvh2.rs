@@ -1,7 +1,7 @@
-use std::{ffi::c_void, mem::{align_of, size_of}, ptr::{null, null_mut}, slice::from_raw_parts};
+use std::{collections::VecDeque, ffi::c_void, mem::{align_of, size_of}, ptr::{null, null_mut}, slice::from_raw_parts};
 use embree4::{bvh::{BVHBuildArguments, BVHCallbacks, BuiltBVH}, Bounds, BuildPrimitive, Device, BVH};
 
-use crate::{geometry::{Vec3, AABB, Mesh}, macros::{variadic_min_comparator, variadic_max_comparator}};
+use crate::{geometry::{Mesh, Vec3, Vec3u, AABB}, macros::{variadic_max_comparator, variadic_min_comparator}};
 
 #[derive(Debug)]
 pub enum BVHNode {
@@ -34,7 +34,7 @@ impl Default for BVHNode {
 }
 
 pub struct BVH2 {
-    _handle: BuiltBVH<BVHNode>, // needed for RAII reasons
+    handle: BuiltBVH<BVHNode>, // needed for RAII reasons
 }
 
 impl BVH2 {
@@ -66,7 +66,7 @@ impl BVH2 {
                 *left_aabb = (*bounds[0]).into();
                 *right_aabb = (*bounds[1]).into();
             },
-            _ => unreachable!(),
+            _ => unreachable!("Embree should not confuse leaf and inner nodes"),
         }
     }
 
@@ -77,7 +77,7 @@ impl BVH2 {
                 *left = children[0] as *const BVHNode;
                 *right = children[1] as *const BVHNode;
             },
-            _ => unreachable!()
+            _ => unreachable!("Embree should not confuse leaf and inner nodes")
         }
     }
 
@@ -153,15 +153,107 @@ impl BVH2 {
         let bvh = BVH::new(device);
         // println!("{}", device.get_error());
 
-        let mut primitives: Vec<BuildPrimitive> = BVH2::primitives_from_mesh(mesh);
+        let primitives: Vec<BuildPrimitive> = BVH2::primitives_from_mesh(mesh);
         let bvh_arguments = 
         BVHBuildArguments::new()
             .max_leaf_size(8)
             .register_callbacks(&BVH2::BVH2_CALLBACKS)
-            .set_primitives(primitives.as_mut_slice());
+            .set_primitives(primitives.as_slice());
+        
         let build_result = bvh.build(bvh_arguments);
         // BVH2::sanity_check(build_result, true);
-        BVH2 { _handle: build_result }
+        BVH2 { handle: build_result }
     }
 }
 
+// unsafe accessors
+impl BVH2 {
+    pub fn root(&self) -> &BVHNode {
+        self.handle.root()
+    }
+}
+
+impl BVHNode {
+    pub fn left(&self) -> Option<&BVHNode> {
+        match self {
+            BVHNode::Inner { left, .. } => (!left.is_null()).then(|| unsafe { &**left }),
+            BVHNode::Leaf { .. } => None,
+        }
+    }
+
+    pub fn right(&self) -> Option<&BVHNode> {
+        match self {
+            BVHNode::Inner { right, .. } => (!right.is_null()).then(|| unsafe { &**right }),
+            BVHNode::Leaf { .. } => None,
+        }
+    }
+}
+
+#[repr(C)]
+pub struct LinearizedBVHNode {
+    min_x: f32,
+    min_y: f32,
+    min_z: f32,
+    left_first: u32,
+    max_x: f32,
+    max_y: f32,
+    max_z: f32,
+    tri_count: u32
+}
+
+impl LinearizedBVHNode {
+    pub fn linearize_bvh_mesh(bvh: &BVH2, mesh: &mut Mesh) -> Vec<LinearizedBVHNode> {
+        // perform BFS over BVH, make triangles pointed to by leaf nodes contiguous
+        let mut queue: VecDeque<(&BVHNode, AABB)> = VecDeque::with_capacity(mesh.tris.len() / 8);
+        let node = bvh.root();
+        let root_aabb;
+        if let BVHNode::Inner {left_aabb, right_aabb, .. } = node {
+            root_aabb = AABB::surrounding_box(*left_aabb, *right_aabb);
+        }
+        else {
+            panic!("root node is leaf node (this might be ok, but code needs to be changed to deal with it)");
+        }
+        let mut bvh_nodes: Vec<LinearizedBVHNode> = Vec::new();
+        let mut contiguous_tris: Vec<Vec3u> = Vec::new();
+        queue.push_back((node, root_aabb));
+        while !queue.is_empty() {
+            let (node, aabb) = queue.pop_front().unwrap();
+            match node {
+                BVHNode::Inner { left_aabb, right_aabb, .. } => {
+                    let left_idx = bvh_nodes.len() + queue.len() + 1;
+                    queue.push_back((node.left().unwrap(), *left_aabb));
+                    queue.push_back((node.right().unwrap(), *right_aabb));
+                    bvh_nodes.push(LinearizedBVHNode { 
+                        min_x: aabb.minimum.0, 
+                        min_y: aabb.minimum.1, 
+                        min_z: aabb.minimum.2, 
+                        left_first: left_idx as u32, 
+                        max_x: aabb.maximum.0, 
+                        max_y: aabb.maximum.1, 
+                        max_z: aabb.maximum.2, 
+                        tri_count: 0
+                    });
+                },
+                BVHNode::Leaf { tri_count, tri_indices } => {
+                    bvh_nodes.push(LinearizedBVHNode { 
+                        min_x: aabb.minimum.0, 
+                        min_y: aabb.minimum.1, 
+                        min_z: aabb.minimum.2, 
+                        left_first: contiguous_tris.len() as u32, 
+                        max_x: aabb.maximum.0, 
+                        max_y: aabb.maximum.1, 
+                        max_z: aabb.maximum.2, 
+                        tri_count: *tri_count
+                    });
+
+                    
+                    for i in 0..*tri_count {
+                        contiguous_tris.push(mesh.tris[tri_indices[i as usize] as usize]);
+                    }
+                },
+            }
+        }
+        mesh.tris = contiguous_tris;
+        bvh_nodes
+    }
+}

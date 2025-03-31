@@ -21,7 +21,7 @@ type BuildProgressFunction = fn(f64);
 
 // NodeType shouldn't be a reference
 pub struct BVHBuildArguments<NodeType: 'static> {
-    pub primitives: *mut RTCBuildPrimitive,
+    primitives: *mut RTCBuildPrimitive,
     primitive_count: Option<usize>,
     primitive_array_capacity: Option<usize>,
 
@@ -50,7 +50,7 @@ impl<NodeType> BVHCallbacks<NodeType> {
     }
 }
 
-unsafe extern "C" fn unsafe_create_node<NodeType>(
+extern "C" fn unsafe_create_node<NodeType>(
     allocator: RTCThreadLocalAllocator,
     childCount: c_uint,
     userPtr: *mut c_void
@@ -73,7 +73,7 @@ unsafe extern "C" fn unsafe_create_node<NodeType>(
     node as *mut NodeType as *mut c_void
 }
 
-unsafe extern "C" fn unsafe_create_leaf<NodeType>(
+extern "C" fn unsafe_create_leaf<NodeType>(
     allocator: RTCThreadLocalAllocator,
     primitives: *const RTCBuildPrimitive,
     primitiveCount: usize,
@@ -98,7 +98,7 @@ unsafe extern "C" fn unsafe_create_leaf<NodeType>(
     leaf as *mut NodeType as *mut c_void
 }
 
-unsafe extern "C" fn unsafe_set_node_bounds<NodeType>(
+extern "C" fn unsafe_set_node_bounds<NodeType>(
     nodePtr: *mut c_void,
     bounds: *mut *const RTCBounds,
     childCount: c_uint,
@@ -119,7 +119,7 @@ unsafe extern "C" fn unsafe_set_node_bounds<NodeType>(
     (callbacks.set_node_bounds)(node, bounds);
 }
 
-unsafe extern "C" fn unsafe_set_node_children<NodeType>(
+extern "C" fn unsafe_set_node_children<NodeType>(
     nodePtr: *mut c_void,
     children: *mut *mut c_void,
     childCount: c_uint,
@@ -171,8 +171,9 @@ impl<NodeType> BVHBuildArguments<NodeType> {
         self
     }
 
-    pub fn set_primitives(mut self, primitives: &mut [RTCBuildPrimitive]) -> BVHBuildArguments<NodeType> {
-        self.primitives = primitives.as_mut_ptr();
+    pub fn set_primitives(mut self, primitives: &[BuildPrimitive]) -> BVHBuildArguments<NodeType> {
+        // SAFETY: in BUILD_QUALITY_MEDIUM mode, primitives list is not mutated
+        self.primitives = primitives.as_ptr() as *mut BuildPrimitive;
         self.primitive_count = Some(primitives.len());
         self.primitive_array_capacity = Some(primitives.len());
         self
@@ -187,7 +188,7 @@ impl<NodeType> BVHBuildArguments<NodeType> {
                 max_leaf_size, 
                 max_branching_factor, 
                 callbacks: Some(callbacks) 
-            } => {
+            } if !primitives.is_null() => {
                 let rtc_build_args = RTCBuildArguments {
                     byteSize: size_of::<RTCBuildArguments>(),
                     buildQuality: RTC_BUILD_QUALITY_MEDIUM,
@@ -200,7 +201,7 @@ impl<NodeType> BVHBuildArguments<NodeType> {
                     traversalCost: 1.0,
                     intersectionCost: 1.0,
                     bvh: bvh.handle,
-                    primitives: todo!(),
+                    primitives,
                     primitiveCount: primitive_count,
                     primitiveArrayCapacity: primitive_array_capacity,
                     createNode: Some(unsafe_create_node::<NodeType>),
@@ -215,7 +216,7 @@ impl<NodeType> BVHBuildArguments<NodeType> {
                 rtc_build_args
             }
             _ => {
-                todo!()
+                todo!("Internal error: BVH builder missing fields. TODO: return error");
             }
         }
         
