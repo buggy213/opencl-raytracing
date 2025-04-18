@@ -1,8 +1,6 @@
-use std::{
-    ops::{
-        self, 
-        MulAssign
-    }
+use std::ops::{
+    self, 
+    MulAssign
 };
 
 use rand::random;
@@ -72,6 +70,10 @@ impl Vec3 {
 
     pub fn elementwise_max(a: Vec3, b: Vec3) -> Vec3 {
         Vec3(f32::max(a.0, b.0), f32::max(a.1, b.1), f32::max(a.2, b.2))
+    }
+
+    pub fn zero() -> Vec3 {
+        Vec3(0.0, 0.0, 0.0)
     }
 }
 

@@ -9,6 +9,11 @@ edition = "2024"
 winit = "0.30.9"
 wgpu = "24.0.1"
 pollster = "0.4.0"
+
 imgui = "0.12.0"
 imgui-winit-support = "0.13.0"
 imgui-wgpu = { git = "https://github.com/Yatekii/imgui-wgpu-rs.git", rev = "3df0df4a81b2fad87b702fbcb3a7ddb8e482f5de" }
+
+bytemuck = "1.22.0"
+
+raytracing = { path = "../raytracing" }

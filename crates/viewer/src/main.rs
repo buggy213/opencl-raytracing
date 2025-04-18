@@ -4,8 +4,12 @@ use imgui::{Condition, MouseCursor};
 use imgui_wgpu::{Renderer, RendererConfig};
 use imgui_winit_support::WinitPlatform;
 use pollster::FutureExt;
+use render_output_view::RenderOutputView;
 use wgpu::{SurfaceTarget, SurfaceTexture};
 use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{Event, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, window::Window};
+
+
+mod render_output_view;
 
 struct Application {
     window: Option<Arc<Window>>,
@@ -13,7 +17,8 @@ struct Application {
     height: u32,
 
     wgpu_handles: Option<WgpuHandles<'static>>,
-    imgui_state: Option<ImguiState>
+    imgui_state: Option<ImguiState>,
+    render_output_view: Option<RenderOutputView>
 }
 
 struct WgpuHandles<'window> {
@@ -22,6 +27,8 @@ struct WgpuHandles<'window> {
     adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
+
+    swapchain_format: wgpu::TextureFormat,
 
     // specific to current rendering pipeline
     shader: wgpu::ShaderModule,
@@ -46,7 +53,8 @@ impl Application {
             height: 600,
 
             wgpu_handles: None,
-            imgui_state: None
+            imgui_state: None,
+            render_output_view: None,
         }
     }
 }
@@ -72,7 +80,7 @@ impl Application {
 
             let device_descriptor = wgpu::DeviceDescriptor {
                 label: Some("Main Device"),
-                required_features: wgpu::Features::empty(),
+                required_features: wgpu::Features::FLOAT32_FILTERABLE,
                 required_limits: wgpu::Limits::default(),
                 memory_hints: wgpu::MemoryHints::default(),
             };
@@ -139,6 +147,7 @@ impl Application {
                 adapter,
                 device,
                 queue,
+                swapchain_format,
                 shader,
                 pipeline_layout,
                 pipeline: render_pipeline,
@@ -235,7 +244,8 @@ impl Application {
             device, queue, 
             shader, 
             pipeline_layout, 
-            pipeline 
+            pipeline,
+            swapchain_format, 
         } = wgpu_handles;
 
         let mut encoder: wgpu::CommandEncoder = device
@@ -286,7 +296,8 @@ impl Application {
             device, queue, 
             shader, 
             pipeline_layout, 
-            pipeline 
+            pipeline,
+            swapchain_format, 
         } = wgpu_handles;
 
         let frame_view_descriptor = wgpu::TextureViewDescriptor::default();
@@ -314,11 +325,11 @@ impl Application {
             let mut rpass = encoder.begin_render_pass(&rpass_descriptor);
             rpass.set_pipeline(pipeline);
             rpass.draw(0..3, 0..1)
+            
         }
 
         queue.submit(Some(encoder.finish()));
     }
-
 }
 
 impl ApplicationHandler for Application {
@@ -332,6 +343,14 @@ impl ApplicationHandler for Application {
 
             self.wgpu_handles = Some(self.init_wgpu());
             self.imgui_state = Some(self.init_imgui());
+
+            let wgpu_handles = self.wgpu_handles.as_ref().unwrap();
+            let targets: &[Option<wgpu::ColorTargetState>] = &[Some(wgpu_handles.swapchain_format.into())];
+            let size = (self.width, self.height);
+            let render_output_view = RenderOutputView::init(wgpu_handles, targets, size);
+            render_output_view.generate_test_texture(wgpu_handles);
+            self.render_output_view = Some(render_output_view)
+            
         }
     }
 
@@ -358,7 +377,9 @@ impl ApplicationHandler for Application {
                     .expect("Unable to get next swapchain image");
                 let window = self.window.as_ref().unwrap();
                 
-                Self::render(wgpu_handles, &frame);
+                // Self::render(wgpu_handles, &frame);
+                let render_output_view = self.render_output_view.as_ref().unwrap();
+                render_output_view.render(wgpu_handles, &frame);
                 Self::render_imgui(imgui_state, wgpu_handles, &frame, &window);
 
                 frame.present();
