@@ -1,4 +1,7 @@
+# editors
 .vscode
+.idea
+
 *.dump
 *.log
 # Added by cargo

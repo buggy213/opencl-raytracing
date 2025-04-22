@@ -54,6 +54,10 @@ impl Transform {
         self.forward.apply_point(point)
     }
 
+    pub fn apply_inverse_point(&self, point: Vec3) -> Vec3 {
+        self.inverse.apply_point(point)
+    }
+
     pub fn invert_inplace(&mut self) {
         let tmp = self.inverse;
         self.inverse = self.forward;

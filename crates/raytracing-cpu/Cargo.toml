@@ -5,3 +5,6 @@ edition = "2024"
 
 [dependencies.raytracing]
 path = "../raytracing"
+
+[dependencies.embree4]
+path = "../embree4"

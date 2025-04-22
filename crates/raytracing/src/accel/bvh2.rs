@@ -190,15 +190,16 @@ impl BVHNode {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct LinearizedBVHNode {
     min_x: f32,
     min_y: f32,
     min_z: f32,
-    left_first: u32,
+    pub left_first: u32,
     max_x: f32,
     max_y: f32,
     max_z: f32,
-    tri_count: u32
+    pub tri_count: u32
 }
 
 impl LinearizedBVHNode {
@@ -255,5 +256,9 @@ impl LinearizedBVHNode {
         }
         mesh.tris = contiguous_tris;
         bvh_nodes
+    }
+
+    pub fn aabb(&self) -> AABB {
+        AABB { minimum: Vec3(self.min_x, self.min_y, self.min_z), maximum: Vec3(self.max_x, self.max_y, self.max_z) }
     }
 }

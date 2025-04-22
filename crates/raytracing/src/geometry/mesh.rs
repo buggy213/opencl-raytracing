@@ -24,8 +24,8 @@ impl From<MtlLibsLoadError> for MeshError {
 }
 
 pub struct Mesh {
-    pub(crate) vertices: Vec<Vec3>,
-    pub(crate) tris: Vec<Vec3u>
+    pub vertices: Vec<Vec3>,
+    pub tris: Vec<Vec3u>
 }
 
 impl Mesh {
@@ -88,7 +88,7 @@ impl Mesh {
         }
     }
 
-    pub fn apply_transform(&mut self, transform: Transform) {
+    pub fn apply_transform(&mut self, transform: &Transform) {
         for vertex in self.vertices.iter_mut() {
             let transformed = transform.apply_point(*vertex);
             *vertex = transformed;
