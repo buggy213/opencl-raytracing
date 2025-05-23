@@ -8,3 +8,6 @@ path = "../raytracing"
 
 [dependencies.embree4]
 path = "../embree4"
+
+[dev-dependencies]
+png = "0.17.16"

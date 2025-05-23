@@ -40,7 +40,7 @@ pub(crate) struct HitInfo {
 pub(crate) fn traverse_bvh(
     ray: Ray,
     t_min: f32,
-    t_max: f32, 
+    mut t_max: f32, 
     bvh: &[LinearizedBVHNode],
     mesh: &Mesh,
     early_exit: bool
@@ -64,13 +64,21 @@ pub(crate) fn traverse_bvh(
 
                 if let Some(tuv) = result {
                     let (t, u, v) = (tuv.0, tuv.1, tuv.2);
+                    if t < t_min || t > t_max {
+                        continue;
+                    }
+                    
+                    let normal = Vec3::normalized(Vec3::cross(p2 - p0, p1 - p0));
+
                     hit_info = Some(HitInfo { 
                         t, 
                         barycentric: Vec3(u, v, 1.0 - u - v), 
                         point: ray.at(t), 
                         tangent: Vec3::zero(), // TODO: fix
-                        normal: Vec3::zero() 
+                        normal
                     });
+
+                    t_max = t;
 
                     if early_exit {
                         return hit_info;
@@ -97,7 +105,7 @@ pub(crate) fn traverse_bvh(
             let (
                 t_closer, 
                 t_farther, 
-                _closer, 
+                closer, 
                 farther
             ) = if t_left < t_right {
                 (t_left, t_right, left_idx, left_idx + 1)
@@ -114,7 +122,7 @@ pub(crate) fn traverse_bvh(
                 }
             }
             else {
-                node = left;
+                node = &bvh[closer];
                 if f32::is_finite(t_farther) {
                     stack.push(farther);
                 }

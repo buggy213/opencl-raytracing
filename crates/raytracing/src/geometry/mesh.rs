@@ -23,6 +23,7 @@ impl From<MtlLibsLoadError> for MeshError {
     }
 }
 
+#[derive(Debug)]
 pub struct Mesh {
     pub vertices: Vec<Vec3>,
     pub tris: Vec<Vec3u>

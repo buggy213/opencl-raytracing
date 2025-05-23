@@ -48,6 +48,9 @@ fn ray_color(ray: Ray, bvh: &[LinearizedBVHNode], scene: &Scene) -> Vec3 {
             if !occluded {
                 let bsdf_value = Vec3(1.0, 1.0, 1.0); // todo: need material modeling in parent crate
                 let cos_theta = f32::abs(Vec3::dot(hit.normal, ray.direction));
+                // dbg!(light_sample.radiance);
+                // dbg!(cos_theta);
+                // dbg!(bsdf_value);
                 direct_illumination += bsdf_value * light_sample.radiance * cos_theta; 
             }
         }
@@ -76,12 +79,18 @@ pub fn render(scene: &mut Scene, spp: u32) -> Vec<Vec3> {
     let mut radiance_buffer: Vec<Vec3> = Vec::with_capacity(width * height);
 
     // enter main tracing loop
-    for i in 0..width {
-        for j in 0..height {
+    for j in 0..height {
+        for i in 0..width {
             let mut radiance = Vec3(0.0, 0.0, 0.0);
+            if i == width / 2 && j == height / 2 {
+                println!("i={} j={}", i, j);
+            }
 
             for s in 0..spp {
                 let ray = generate_ray(camera, i as u32, j as u32);
+                if i == width / 2 && j == height / 2 {
+                    dbg!(ray);
+                }
                 radiance += ray_color(ray, &linearized_bvh, &scene);
             }
 

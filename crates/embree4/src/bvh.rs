@@ -1,4 +1,4 @@
-use std::{ffi::{c_uint, c_void}, mem::size_of, ptr::{null_mut, slice_from_raw_parts}};
+use std::{ffi::{c_uint, c_void}, fmt::Debug, mem::size_of, ptr::{null_mut, slice_from_raw_parts}};
 
 use embree4_sys::{rtcBuildBVH, rtcNewBVH, rtcReleaseBVH, rtcThreadLocalAlloc, RTCBounds, RTCBuildArguments, RTCBuildConstants_RTC_BUILD_MAX_PRIMITIVES_PER_LEAF, RTCBuildFlags::RTC_BUILD_FLAG_NONE, RTCBuildPrimitive, RTCBuildQuality::RTC_BUILD_QUALITY_MEDIUM, RTCThreadLocalAllocator, RTCBVH};
 
@@ -9,7 +9,7 @@ pub struct BVH {
 }
 
 pub struct BuiltBVH<NodeType> {
-    _handle: RTCBVH, // kept around for RAII
+    _handle: BVH, // kept around for RAII
     root: *const NodeType
 }
 
@@ -50,7 +50,7 @@ impl<NodeType> BVHCallbacks<NodeType> {
     }
 }
 
-extern "C" fn unsafe_create_node<NodeType>(
+extern "C" fn unsafe_create_node<NodeType: Debug>(
     allocator: RTCThreadLocalAllocator,
     childCount: c_uint,
     userPtr: *mut c_void
@@ -73,7 +73,7 @@ extern "C" fn unsafe_create_node<NodeType>(
     node as *mut NodeType as *mut c_void
 }
 
-extern "C" fn unsafe_create_leaf<NodeType>(
+extern "C" fn unsafe_create_leaf<NodeType: Debug>(
     allocator: RTCThreadLocalAllocator,
     primitives: *const RTCBuildPrimitive,
     primitiveCount: usize,
@@ -98,7 +98,7 @@ extern "C" fn unsafe_create_leaf<NodeType>(
     leaf as *mut NodeType as *mut c_void
 }
 
-extern "C" fn unsafe_set_node_bounds<NodeType>(
+extern "C" fn unsafe_set_node_bounds<NodeType: Debug>(
     nodePtr: *mut c_void,
     bounds: *mut *const RTCBounds,
     childCount: c_uint,
@@ -119,7 +119,7 @@ extern "C" fn unsafe_set_node_bounds<NodeType>(
     (callbacks.set_node_bounds)(node, bounds);
 }
 
-extern "C" fn unsafe_set_node_children<NodeType>(
+extern "C" fn unsafe_set_node_children<NodeType: Debug>(
     nodePtr: *mut c_void,
     children: *mut *mut c_void,
     childCount: c_uint,
@@ -138,10 +138,11 @@ extern "C" fn unsafe_set_node_children<NodeType>(
     };
 
     (callbacks.set_node_children)(node, children);
+
 }
 
 
-impl<NodeType> BVHBuildArguments<NodeType> {
+impl<NodeType: Debug> BVHBuildArguments<NodeType> {
     pub fn new() -> Self {
         Self {
             primitives: null_mut(),
@@ -232,14 +233,13 @@ impl BVH {
         }
     }
 
-    pub fn build<NodeType>(self, args: BVHBuildArguments<NodeType>) -> BuiltBVH<NodeType> {
+    pub fn build<NodeType: Debug>(self, args: BVHBuildArguments<NodeType>) -> BuiltBVH<NodeType> {
         let embree_args = args.build(&self);
-
         let build_result = unsafe {
             rtcBuildBVH(&embree_args)
         };
-
-        BuiltBVH { _handle: self.handle, root: build_result as *const NodeType }
+        
+        BuiltBVH { _handle: self, root: build_result as *const NodeType }
     }
 }
 
@@ -251,6 +251,7 @@ impl<NodeType> BuiltBVH<NodeType> {
 
 impl Drop for BVH {
     fn drop(&mut self) {
+        eprintln!("Dropping BVH");
         unsafe { 
             rtcReleaseBVH(self.handle);
         }

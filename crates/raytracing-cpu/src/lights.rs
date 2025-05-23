@@ -17,7 +17,7 @@ pub(crate) fn sample_light(light: &Light, point: Vec3) -> LightSample {
             let d2 = d * d;
             LightSample {
                 radiance: *intensity / d2,
-                shadow_ray: Ray { origin: *position, direction: dir, time: 0.0 },
+                shadow_ray: Ray { origin: *position, direction: dir / d, time: 0.0 },
                 distance: d,
             }
         },
@@ -27,8 +27,8 @@ pub(crate) fn sample_light(light: &Light, point: Vec3) -> LightSample {
 pub(crate) fn occluded(bvh: &[LinearizedBVHNode], scene: &Scene, light_sample: LightSample) -> bool {
     traverse_bvh(
         light_sample.shadow_ray, 
-        f32::EPSILON, 
-        light_sample.distance - f32::EPSILON, 
+        0.001, 
+        light_sample.distance - 0.001, 
         bvh, 
         &scene.mesh.0, 
         true

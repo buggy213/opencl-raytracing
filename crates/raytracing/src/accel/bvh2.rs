@@ -34,7 +34,7 @@ impl Default for BVHNode {
 }
 
 pub struct BVH2 {
-    handle: BuiltBVH<BVHNode>, // needed for RAII reasons
+    handle: BuiltBVH<BVHNode>, 
 }
 
 impl BVH2 {
@@ -162,7 +162,9 @@ impl BVH2 {
         
         let build_result = bvh.build(bvh_arguments);
         // BVH2::sanity_check(build_result, true);
-        BVH2 { handle: build_result }
+        BVH2 { 
+            handle: build_result
+        }
     }
 }
 
@@ -208,12 +210,18 @@ impl LinearizedBVHNode {
         let mut queue: VecDeque<(&BVHNode, AABB)> = VecDeque::with_capacity(mesh.tris.len() / 8);
         let node = bvh.root();
         let root_aabb;
-        if let BVHNode::Inner {left_aabb, right_aabb, .. } = node {
-            root_aabb = AABB::surrounding_box(*left_aabb, *right_aabb);
+
+        match node {
+            BVHNode::Inner { left_aabb, right_aabb, .. } => {
+                root_aabb = AABB::surrounding_box(*left_aabb, *right_aabb);
+            },
+            BVHNode::Leaf { tri_count, tri_indices } => {
+                dbg!(tri_count);
+                dbg!(tri_indices);
+                panic!("BVH root is a leaf node");
+            }
         }
-        else {
-            panic!("root node is leaf node (this might be ok, but code needs to be changed to deal with it)");
-        }
+
         let mut bvh_nodes: Vec<LinearizedBVHNode> = Vec::new();
         let mut contiguous_tris: Vec<Vec3u> = Vec::new();
         queue.push_back((node, root_aabb));

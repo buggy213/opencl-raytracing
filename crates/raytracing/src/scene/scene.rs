@@ -16,7 +16,7 @@ impl Scene {
     pub fn from_file(filepath: &Path, render_tile: Option<RenderTile>) -> anyhow::Result<Scene> {
         let (scene_gltf, buffers, _images) = gltf::import(filepath)?;
         let scene_gltf = scene_gltf.default_scene().unwrap();
-        let mut camera: Option<Camera> = None;
+        let mut camera: Option<Camera> = None;  
         let height: usize = HEIGHT;
         let mut mesh: Option<Mesh> = None;
         let mut mesh_transform: Option<Transform> = None;

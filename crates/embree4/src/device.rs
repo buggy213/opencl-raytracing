@@ -54,6 +54,7 @@ impl Device {
 
 impl Drop for Device {
     fn drop(&mut self) {
+        eprintln!("Dropping Embree device");
         unsafe {
             rtcReleaseDevice(self.handle);
         }
