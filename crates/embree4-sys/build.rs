@@ -4,6 +4,7 @@ use std::path::PathBuf;
 fn main() {
     if let Ok(e) = env::var("EMBREE_DIR") {
         let embree_dir = PathBuf::from(e);
+         
         let embree_lib_dir = embree_dir.join("lib");
         println!("cargo::rerun-if-env-changed=EMBREE_DIR");
 
@@ -14,6 +15,34 @@ fn main() {
         // shared library.
         println!("cargo::rustc-link-search=native={}", embree_lib_dir.display());
         println!("cargo::rustc-link-lib=embree4");
+
+        // Copy DLLs to output directory if on Windows
+        if cfg!(target_os = "windows") {
+            let dll_path = embree_dir.join("bin");
+            let dlls = std::fs::read_dir(dll_path)
+                .expect("Failed to open directory containing DLLs")
+                .filter_map(|res| res.ok())
+                .map(|entry| entry.path())
+                .filter_map(|path| {
+                    eprintln!("file path: {:?}", path);
+                    eprintln!("file ext: {:?}", path.extension().and_then(|s| s.to_str()));
+                    if path.extension().and_then(|s| s.to_str()) == Some("dll") {
+                        Some(path)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+            
+            let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+            for dll_path in dlls {
+                let dest_path = out_path.join(dll_path.file_name().unwrap());
+                std::fs::copy(dll_path, dest_path).expect("Failed to copy DLL");
+            }
+
+            // needed for dynamic linker to link embree4.dll
+            println!("cargo::rustc-link-search=native={}", out_path.display());
+        }
         
         // Tell cargo to invalidate the built crate whenever the wrapper changes
         println!("cargo::rerun-if-changed=wrapper.h");
