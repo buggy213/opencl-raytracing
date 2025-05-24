@@ -1,4 +1,4 @@
-use accel::traverse_bvh;
+use accel::{traverse_bvh, BVHData};
 use lights::{occluded, sample_light, LightSample};
 use ray::Ray;
 use raytracing::{accel::{bvh2::LinearizedBVHNode, BVH2}, geometry::Vec3, lights::Light, scene::{Camera, Scene}};
@@ -26,7 +26,7 @@ fn generate_ray(camera: &Camera, x: u32, y: u32) -> Ray {
     }
 }
 
-fn ray_color(ray: Ray, bvh: &[LinearizedBVHNode], scene: &Scene) -> Vec3 {
+fn ray_color(ray: Ray, bvh: &BVHData<'_>, scene: &Scene) -> Vec3 {
     let camera = &scene.camera;
 
     let hit_info = traverse_bvh(
@@ -34,7 +34,6 @@ fn ray_color(ray: Ray, bvh: &[LinearizedBVHNode], scene: &Scene) -> Vec3 {
         camera.near_clip, 
         camera.far_clip, 
         bvh, 
-        &scene.mesh.0, 
         false
     );
 
@@ -44,14 +43,12 @@ fn ray_color(ray: Ray, bvh: &[LinearizedBVHNode], scene: &Scene) -> Vec3 {
 
         for light in &scene.lights {
             let light_sample = sample_light(light, hit.point);
-            let occluded = occluded(bvh, scene, light_sample);
+            let occluded = occluded(bvh, light_sample);
             if !occluded {
                 let bsdf_value = Vec3(1.0, 1.0, 1.0); // todo: need material modeling in parent crate
-                let cos_theta = f32::abs(Vec3::dot(hit.normal, ray.direction));
-                // dbg!(light_sample.radiance);
-                // dbg!(cos_theta);
-                // dbg!(bsdf_value);
-                direct_illumination += bsdf_value * light_sample.radiance * cos_theta; 
+                let cos_theta = Vec3::dot(hit.normal, -light_sample.shadow_ray.direction);
+                // no backface culling for now - blender gltf export seems to flip sometimes
+                direct_illumination += bsdf_value * light_sample.radiance * f32::abs(cos_theta); 
             }
         }
 
@@ -68,13 +65,16 @@ pub fn render(scene: &mut Scene, spp: u32) -> Vec<Vec3> {
 
     let camera = &scene.camera;
 
-    let (mesh, mesh_to_world_transform) = &mut scene.mesh;
-    mesh.apply_transform(mesh_to_world_transform);
 
     // construct BVH using embree
     let embree_device = Device::new();
-    let mesh_bvh: BVH2 = BVH2::create(&embree_device, &mesh);
-    let linearized_bvh = LinearizedBVHNode::linearize_bvh_mesh(&mesh_bvh, mesh);
+    let mesh_bvh: BVH2 = BVH2::create(&embree_device, &scene.meshes);
+    let (bvh_indices, linearized_bvh) = LinearizedBVHNode::linearize_bvh_mesh(&mesh_bvh, &scene.meshes);
+    let bvh = BVHData {
+        nodes: &linearized_bvh,
+        meshes: &scene.meshes,
+        indices: &bvh_indices,
+    };
 
     let mut radiance_buffer: Vec<Vec3> = Vec::with_capacity(width * height);
 
@@ -82,16 +82,9 @@ pub fn render(scene: &mut Scene, spp: u32) -> Vec<Vec3> {
     for j in 0..height {
         for i in 0..width {
             let mut radiance = Vec3(0.0, 0.0, 0.0);
-            if i == width / 2 && j == height / 2 {
-                println!("i={} j={}", i, j);
-            }
-
             for s in 0..spp {
                 let ray = generate_ray(camera, i as u32, j as u32);
-                if i == width / 2 && j == height / 2 {
-                    dbg!(ray);
-                }
-                radiance += ray_color(ray, &linearized_bvh, &scene);
+                radiance += ray_color(ray, &bvh, &scene);
             }
 
             radiance /= spp as f32;

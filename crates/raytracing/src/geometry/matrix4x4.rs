@@ -212,4 +212,19 @@ impl Matrix4x4 {
         let d = self.data[3][0] * p.0 + self.data[3][1] * p.1 + self.data[3][2] * p.2 + self.data[3][3] * 1.0;
         Vec3(a / d, b / d, c / d)
     }
+
+    pub fn apply_vector(&self, v: Vec3) -> Vec3 {
+        let a = self.data[0][0] * v.0 + self.data[0][1] * v.1 + self.data[0][2] * v.2;
+        let b = self.data[1][0] * v.0 + self.data[1][1] * v.1 + self.data[1][2] * v.2;
+        let c = self.data[2][0] * v.0 + self.data[2][1] * v.1 + self.data[2][2] * v.2;
+        Vec3(a, b, c)
+    }
+
+    // used for calculation of normals
+    pub fn apply_vector_transposed(&self, v: Vec3) -> Vec3 {
+        let a = self.data[0][0] * v.0 + self.data[1][0] * v.1 + self.data[2][0] * v.2;
+        let b = self.data[0][1] * v.0 + self.data[1][1] * v.1 + self.data[2][1] * v.2;
+        let c = self.data[0][2] * v.0 + self.data[1][2] * v.1 + self.data[2][2] * v.2;
+        Vec3(a, b, c)
+    }
 }

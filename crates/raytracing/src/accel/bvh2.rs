@@ -13,7 +13,8 @@ pub enum BVHNode {
     },
     Leaf { // 8 triangles in a leaf at most
         tri_count: u32, 
-        tri_indices: [u32; 8]
+        tri_indices: [u32; 8],
+        geom_indices: [u32; 8]
     }
 }
 
@@ -53,9 +54,14 @@ impl BVH2 {
             primitives.get(i).map(|p| p.primID).unwrap_or_default()
         );
 
+        let geom_indices = [0, 1, 2, 3, 4, 5, 6, 7].map(|i|
+            primitives.get(i).map(|p| p.geomID).unwrap_or_default()
+        );
+
         BVHNode::Leaf { 
             tri_count: primitives.len() as u32, 
-            tri_indices: indices
+            tri_indices: indices,
+            geom_indices
         }
     }
 
@@ -90,14 +96,14 @@ impl BVH2 {
 }
 
 impl BVH2 {
-    fn primitive_from_triangle(p0: Vec3, p1: Vec3, p2: Vec3, tri_index: u32) -> BuildPrimitive {
+    fn primitive_from_triangle(p0: Vec3, p1: Vec3, p2: Vec3, tri_index: u32, geom_index: u32) -> BuildPrimitive {
         let min = variadic_min_comparator!(Vec3::elementwise_min, p0, p1, p2);
         let max = variadic_max_comparator!(Vec3::elementwise_max, p0, p1, p2);
         BuildPrimitive { 
             lower_x: min.0, 
             lower_y: min.1, 
             lower_z: min.2, 
-            geomID: 0, 
+            geomID: geom_index, 
             upper_x: max.0, 
             upper_y: max.1, 
             upper_z: max.2, 
@@ -105,14 +111,16 @@ impl BVH2 {
         }
     }
 
-    fn primitives_from_mesh(mesh: &Mesh) -> Vec<BuildPrimitive> {
+    fn primitives_from_meshes(meshes: &[Mesh]) -> Vec<BuildPrimitive> {
         let mut primitives = Vec::new();
-        for (i, tri) in mesh.tris.iter().cloned().enumerate() {
-            let (t0, t1, t2) = (tri.0, tri.1, tri.2);
-            let p0 = mesh.vertices[t0 as usize];
-            let p1 = mesh.vertices[t1 as usize];
-            let p2 = mesh.vertices[t2 as usize];
-            primitives.push(BVH2::primitive_from_triangle(p0, p1, p2, i as u32));
+        for (i, mesh) in meshes.iter().enumerate() {
+            for (j, tri) in mesh.tris.iter().cloned().enumerate() {
+                let (t0, t1, t2) = (tri.0, tri.1, tri.2);
+                let p0 = mesh.vertices[t0 as usize];
+                let p1 = mesh.vertices[t1 as usize];
+                let p2 = mesh.vertices[t2 as usize];
+                primitives.push(BVH2::primitive_from_triangle(p0, p1, p2, j as u32, i as u32));
+            }
         }
 
         primitives
@@ -134,7 +142,7 @@ impl BVH2 {
                 max_depth = i32::max(left_max_depth, right_max_depth) + 1;
                 eprintln!("height={}, left_aabb={:?}, right_aabb={:?}", max_depth, left_aabb, right_aabb);
             },
-            BVHNode::Leaf { tri_count, tri_indices } => {
+            BVHNode::Leaf { tri_count, .. } => {
                 inner_nodes = 0;
                 leaf_nodes = 1;
                 tris = tri_count as i32;
@@ -149,11 +157,11 @@ impl BVH2 {
         return (inner_nodes, leaf_nodes, tris, max_depth);
     }
 
-    pub fn create(device: &Device, mesh: &Mesh) -> BVH2 {
+    pub fn create(device: &Device, meshes: &[Mesh]) -> BVH2 {
         let bvh = BVH::new(device);
         // println!("{}", device.get_error());
 
-        let primitives: Vec<BuildPrimitive> = BVH2::primitives_from_mesh(mesh);
+        let primitives: Vec<BuildPrimitive> = BVH2::primitives_from_meshes(meshes);
         let bvh_arguments = 
         BVHBuildArguments::new()
             .max_leaf_size(8)
@@ -204,10 +212,17 @@ pub struct LinearizedBVHNode {
     pub tri_count: u32
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct TriPtr {
+    pub geom_id: u32,
+    pub verts: Vec3u
+}
+
 impl LinearizedBVHNode {
-    pub fn linearize_bvh_mesh(bvh: &BVH2, mesh: &mut Mesh) -> Vec<LinearizedBVHNode> {
+    pub fn linearize_bvh_mesh(bvh: &BVH2, meshes: &[Mesh]) -> (Vec<TriPtr>, Vec<LinearizedBVHNode>) {
         // perform BFS over BVH, make triangles pointed to by leaf nodes contiguous
-        let mut queue: VecDeque<(&BVHNode, AABB)> = VecDeque::with_capacity(mesh.tris.len() / 8);
+        let pessimal_capacity = meshes.iter().map(|mesh| mesh.tris.len() / 8).sum();
+        let mut queue: VecDeque<(&BVHNode, AABB)> = VecDeque::with_capacity(pessimal_capacity);
         let node = bvh.root();
         let root_aabb;
 
@@ -215,15 +230,13 @@ impl LinearizedBVHNode {
             BVHNode::Inner { left_aabb, right_aabb, .. } => {
                 root_aabb = AABB::surrounding_box(*left_aabb, *right_aabb);
             },
-            BVHNode::Leaf { tri_count, tri_indices } => {
-                dbg!(tri_count);
-                dbg!(tri_indices);
-                panic!("BVH root is a leaf node");
+            BVHNode::Leaf { tri_count, tri_indices, geom_indices } => {
+                unimplemented!("BVH root is a leaf node");
             }
         }
 
         let mut bvh_nodes: Vec<LinearizedBVHNode> = Vec::new();
-        let mut contiguous_tris: Vec<Vec3u> = Vec::new();
+        let mut contiguous_tris: Vec<TriPtr> = Vec::new();
         queue.push_back((node, root_aabb));
         while !queue.is_empty() {
             let (node, aabb) = queue.pop_front().unwrap();
@@ -243,7 +256,7 @@ impl LinearizedBVHNode {
                         tri_count: 0
                     });
                 },
-                BVHNode::Leaf { tri_count, tri_indices } => {
+                BVHNode::Leaf { tri_count, tri_indices, geom_indices } => {
                     bvh_nodes.push(LinearizedBVHNode { 
                         min_x: aabb.minimum.0, 
                         min_y: aabb.minimum.1, 
@@ -257,13 +270,20 @@ impl LinearizedBVHNode {
 
                     
                     for i in 0..*tri_count {
-                        contiguous_tris.push(mesh.tris[tri_indices[i as usize] as usize]);
+                        let geom_id = geom_indices[i as usize] as usize;
+                        let mesh = &meshes[geom_id];
+                        let mesh_tri = mesh.tris[tri_indices[i as usize] as usize];
+                        let tri_ptr = TriPtr { 
+                            geom_id: geom_id as u32, 
+                            verts: mesh_tri 
+                        };
+                        contiguous_tris.push(tri_ptr);
                     }
                 },
             }
         }
-        mesh.tris = contiguous_tris;
-        bvh_nodes
+        
+        (contiguous_tris, bvh_nodes)
     }
 
     pub fn aabb(&self) -> AABB {

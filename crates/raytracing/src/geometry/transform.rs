@@ -58,6 +58,13 @@ impl Transform {
         self.inverse.apply_point(point)
     }
 
+    pub fn apply_normal(&self, normal: Vec3) -> Vec3 {
+        // inverse transpose times n is the correct approach. see 
+        // https://www.scratchapixel.com/lessons/mathematics-physics-for-computer-graphics/geometry/transforming-normals.html
+        
+        self.inverse.apply_vector_transposed(normal)
+    }
+
     pub fn invert_inplace(&mut self) {
         let tmp = self.inverse;
         self.inverse = self.forward;

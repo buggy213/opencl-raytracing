@@ -17,9 +17,9 @@ fn save_png(radiance: &[Vec3], scene: &Scene, output_path: &Path) {
         .expect("failed to write PNG header");
 
     let image_data: Vec<u8> = radiance.iter().flat_map(|v| {
-        let r = (v.x() * 255.0).clamp(0.0, 255.0) as u8;
-        let g = (v.y() * 255.0).clamp(0.0, 255.0) as u8;
-        let b = (v.z() * 255.0).clamp(0.0, 255.0) as u8;
+        let r = (v.x() / 1000.0 * 255.0).clamp(0.0, 255.0) as u8;
+        let g = (v.y() / 1000.0 * 255.0).clamp(0.0, 255.0) as u8;
+        let b = (v.z() / 1000.0 * 255.0).clamp(0.0, 255.0) as u8;
         [r, g, b]
     }).collect();
 
@@ -27,10 +27,10 @@ fn save_png(radiance: &[Vec3], scene: &Scene, output_path: &Path) {
 }
 
 fn main() {
-    let path = Path::new("scenes/test.glb");
+    let path = Path::new("scenes/cbbunny.glb");
     let mut scene = Scene::from_file(path, None).expect("failed to load scene");
     let output = render(&mut scene, 1);
 
-    let output_path = Path::new("scenes/test.png");
+    let output_path = Path::new("scenes/cbbunny.png");
     save_png(&output, &scene, output_path);
 }

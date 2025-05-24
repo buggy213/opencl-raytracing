@@ -1,6 +1,6 @@
 use raytracing::{accel::bvh2::LinearizedBVHNode, geometry::Vec3, lights::Light, scene::Scene};
 
-use crate::{ray::Ray, traverse_bvh};
+use crate::{ray::Ray, traverse_bvh, BVHData};
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct LightSample {
@@ -24,13 +24,12 @@ pub(crate) fn sample_light(light: &Light, point: Vec3) -> LightSample {
     }
 }
 
-pub(crate) fn occluded(bvh: &[LinearizedBVHNode], scene: &Scene, light_sample: LightSample) -> bool {
+pub(crate) fn occluded(bvh: &BVHData<'_>, light_sample: LightSample) -> bool {
     traverse_bvh(
         light_sample.shadow_ray, 
         0.001, 
         light_sample.distance - 0.001, 
         bvh, 
-        &scene.mesh.0, 
         true
     ).is_some()
 }

@@ -6,7 +6,7 @@ use super::camera::{Camera, RenderTile};
 
 pub struct Scene {
     pub camera: Camera,
-    pub mesh: (Mesh, Transform),
+    pub meshes: Vec<Mesh>,
     pub lights: Vec<Light>
 }
 
@@ -18,8 +18,7 @@ impl Scene {
         let scene_gltf = scene_gltf.default_scene().unwrap();
         let mut camera: Option<Camera> = None;  
         let height: usize = HEIGHT;
-        let mut mesh: Option<Mesh> = None;
-        let mut mesh_transform: Option<Transform> = None;
+        let mut meshes: Vec<Mesh> = Vec::new();
         let mut lights: Vec<Light> = Vec::new();
 
         for node in scene_gltf.nodes() {
@@ -28,10 +27,16 @@ impl Scene {
             }
             if node.mesh().is_some() {
                 let gltf_mesh = node.mesh().unwrap();
-                mesh = Some(Mesh::from_gltf_mesh(&gltf_mesh, &buffers));
+                let mut mesh = Mesh::from_gltf_mesh(&gltf_mesh, &buffers);
+                
                 let mut mesh_transform_matrix = Matrix4x4 { data: node.transform().matrix() };
                 mesh_transform_matrix.transpose();
-                mesh_transform = Some(Transform::from(mesh_transform_matrix));
+                let mesh_transform = Transform::from(mesh_transform_matrix);
+
+                // convert to world space
+                mesh.apply_transform(&mesh_transform);
+
+                meshes.push(mesh);
             }
             if node.light().is_some() {
                 let light = Light::from_gltf_light(&node);
@@ -41,8 +46,8 @@ impl Scene {
         println!("{:?}", lights);
         Ok(Scene {
             lights,
+            meshes,
             camera: camera.unwrap(),
-            mesh: (mesh.unwrap(), mesh_transform.unwrap())
         })
     }
 }
