@@ -16,6 +16,8 @@ pub(crate) struct RenderOutputView {
     triangle_buffer: wgpu::Buffer,
     texture: wgpu::Texture,
     texture_sampler: wgpu::Sampler,
+
+    bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
 
     render_output_size: (u32, u32),
@@ -23,6 +25,7 @@ pub(crate) struct RenderOutputView {
 }
 
 impl RenderOutputView {
+
     pub(crate) fn init(
         wgpu_handles: &WgpuHandles, 
         targets: &[Option<ColorTargetState>],
@@ -92,7 +95,7 @@ impl RenderOutputView {
             multiview: None,
             cache: None,
         };
-
+        
         let render_pipeline = device.create_render_pipeline(&render_pipeline_descriptor);
         let tris = &[2u32, 1u32, 0u32, 2u32, 3u32, 1u32];
 
@@ -154,20 +157,28 @@ impl RenderOutputView {
 
         let bind_group = device.create_bind_group(&bind_group_desc);
 
-        RenderOutputView { 
+        let me = RenderOutputView { 
             shader,
             pipeline_layout,
             pipeline: render_pipeline,
             triangle_buffer,
             texture,
             texture_sampler: sampler,
+
+            bind_group_layout,
             bind_group,
 
             render_output_size: size, 
             render_output: Vec::new(),
-        }
+        };
+
+        // generate test texture
+        me.generate_test_texture(wgpu_handles);
+        
+        me
     }
 
+    // Renders texture onto 2 triangles covering the screen.
     pub(crate) fn render(&self, wgpu_handles: &WgpuHandles, render_target: &SurfaceTexture) {
         let WgpuHandles { instance, surface, adapter, device, queue, shader, pipeline_layout, pipeline, swapchain_format } = wgpu_handles;
 
@@ -205,7 +216,11 @@ impl RenderOutputView {
         queue.submit(Some(encoder.finish()));
     }
 
-    pub(crate) fn generate_test_texture(&self, wgpu_handles: &WgpuHandles) {
+    pub(crate) fn resize(&self, width: u32, height: u32) {
+        // no-op, since texture sampling allows arbitrary size
+    }
+
+    fn generate_test_texture(&self, wgpu_handles: &WgpuHandles) {
         let elts = self.render_output_size.0 * self.render_output_size.1 * 4;
         let mut test_texture: Vec<f32> = Vec::with_capacity(elts as usize);
 

@@ -1782,6 +1782,7 @@ name = "raytracing-cpu"
 version = "0.1.0"
 dependencies = [
  "embree4",
+ "png",
  "raytracing",
 ]
 
@@ -2235,6 +2236,7 @@ dependencies = [
  "imgui-winit-support",
  "pollster",
  "raytracing",
+ "raytracing-cpu",
  "wgpu",
  "winit",
 ]

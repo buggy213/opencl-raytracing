@@ -1,11 +1,11 @@
-use std::{borrow::Cow, rc::Rc, sync::Arc, time::Instant};
+use std::{borrow::Cow, sync::Arc, time::Instant};
 
 use imgui::{Condition, MouseCursor};
 use imgui_wgpu::{Renderer, RendererConfig};
 use imgui_winit_support::WinitPlatform;
 use pollster::FutureExt;
 use render_output_view::RenderOutputView;
-use wgpu::{SurfaceTarget, SurfaceTexture};
+use wgpu::SurfaceTexture;
 use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{Event, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, window::Window};
 
 
@@ -191,6 +191,16 @@ impl Application {
         
     }
 
+    fn resize(&self, height: u32, width: u32) {
+        let wgpu_handles = self.wgpu_handles.as_ref().expect("wgpu not initialized");
+        let config = wgpu_handles.surface.get_default_config(&wgpu_handles.adapter, width, height).expect("surface not supported");
+        
+        // surface width / height must be nonzero
+        if height != 0 && width != 0 {
+            wgpu_handles.surface.configure(&wgpu_handles.device, &config);
+        }
+    }
+
     fn render_imgui(
         imgui_state: &mut ImguiState, 
         wgpu_handles: &WgpuHandles, 
@@ -348,7 +358,6 @@ impl ApplicationHandler for Application {
             let targets: &[Option<wgpu::ColorTargetState>] = &[Some(wgpu_handles.swapchain_format.into())];
             let size = (self.width, self.height);
             let render_output_view = RenderOutputView::init(wgpu_handles, targets, size);
-            render_output_view.generate_test_texture(wgpu_handles);
             self.render_output_view = Some(render_output_view)
             
         }
@@ -364,8 +373,9 @@ impl ApplicationHandler for Application {
             WindowEvent::CloseRequested => {
                 println!("Window close requested");
                 
-                // prevent segfault by tearing down wgpu first
-                std::mem::take(&mut self.wgpu_handles);
+                // prevent segfault by tearing down wgpu first, then closing window
+                let wgpu_handles = std::mem::take(&mut self.wgpu_handles);
+                drop(wgpu_handles);
 
                 event_loop.exit();
             }
@@ -377,9 +387,11 @@ impl ApplicationHandler for Application {
                     .expect("Unable to get next swapchain image");
                 let window = self.window.as_ref().unwrap();
                 
-                // Self::render(wgpu_handles, &frame);
-                let render_output_view = self.render_output_view.as_ref().unwrap();
-                render_output_view.render(wgpu_handles, &frame);
+                Self::render(wgpu_handles, &frame);
+
+                // let render_output_view = self.render_output_view.as_ref().unwrap();
+                // render_output_view.render(wgpu_handles, &frame);
+
                 Self::render_imgui(imgui_state, wgpu_handles, &frame, &window);
 
                 frame.present();
@@ -387,13 +399,19 @@ impl ApplicationHandler for Application {
                 // request redraw for the next frame
                 self.window.as_ref().unwrap().request_redraw();
             }
+            
+            WindowEvent::Resized(new_size) => {
+                self.height = new_size.height;
+                self.width = new_size.width;
+                self.resize(self.height, self.width);
+            }
 
             _ => ()
         }
         
         let imgui_state = self.imgui_state.as_mut().unwrap();
         let window = self.window.as_ref().unwrap();
-
+        
         imgui_state.platform.handle_event::<()>(
             imgui_state.context.io_mut(),
             &window,
