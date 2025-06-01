@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc, time::Instant};
+use std::{borrow::Cow, sync::Arc, time::{Duration, Instant}};
 
 use imgui::{Condition, MouseCursor};
 use imgui_wgpu::{Renderer, RendererConfig};
@@ -17,7 +17,10 @@ struct Application {
     height: u32,
 
     wgpu_handles: Option<WgpuHandles<'static>>,
-    imgui_state: Option<ImguiState>,
+    
+    imgui_state: Option<ImguiInternalState>,
+    demo_state: DemoApplicationState,
+
     render_output_view: Option<RenderOutputView>
 }
 
@@ -36,13 +39,51 @@ struct WgpuHandles<'window> {
     pipeline: wgpu::RenderPipeline,
 }
 
-struct ImguiState {
+struct ImguiInternalState {
     context: imgui::Context,
     platform: WinitPlatform,
     renderer: Renderer,
-    demo_open: bool,
-    last_frame: Instant,
     last_cursor: Option<MouseCursor>,
+    last_frame: Instant,
+}
+
+trait RenderGui {
+    fn render_imgui(&mut self, ui: &mut imgui::Ui);
+}
+
+struct DemoApplicationState {
+    demo_open: bool,
+    delta_s: Duration
+}
+
+impl RenderGui for DemoApplicationState {
+    fn render_imgui(&mut self, ui: &mut imgui::Ui) {
+    
+        let window = ui.window("Hello world");
+        window
+            .size([300.0, 100.0], Condition::FirstUseEver)
+            .build(|| {
+                ui.text("Hello world!");
+                ui.text("This...is...imgui-rs on WGPU!");
+                ui.separator();
+                let mouse_pos = ui.io().mouse_pos;
+                ui.text(format!(
+                    "Mouse Position: ({:.1},{:.1})",
+                    mouse_pos[0], mouse_pos[1]
+                ));
+            });
+
+        let delta_s = self.delta_s;
+        let window = ui.window("Hello too");
+        window
+            .size([400.0, 200.0], Condition::FirstUseEver)
+            .position([400.0, 200.0], Condition::FirstUseEver)
+            .build(|| {
+                ui.text(format!("Frametime: {delta_s:?}"));
+            });
+
+        ui.show_demo_window(&mut self.demo_open);
+    }
 }
 
 impl Application {
@@ -53,7 +94,10 @@ impl Application {
             height: 600,
 
             wgpu_handles: None,
+
             imgui_state: None,
+            demo_state: DemoApplicationState { demo_open: true, delta_s: Duration::ZERO },
+
             render_output_view: None,
         }
     }
@@ -154,7 +198,7 @@ impl Application {
             }
     }
 
-    fn init_imgui(&self) -> ImguiState {
+    fn init_imgui(&self) -> ImguiInternalState {
         let mut context = imgui::Context::create();
         let mut platform = imgui_winit_support::WinitPlatform::new(&mut context);
         let window = self.window.as_ref().expect("window not created yet");
@@ -180,13 +224,12 @@ impl Application {
         let last_frame = Instant::now();
         let last_cursor = None;
         
-        ImguiState { 
+        ImguiInternalState { 
             context, 
             platform, 
-            renderer, 
-            demo_open, 
-            last_frame, 
-            last_cursor 
+            renderer,  
+            last_cursor, 
+            last_frame
         }
         
     }
@@ -202,7 +245,8 @@ impl Application {
     }
 
     fn render_imgui(
-        imgui_state: &mut ImguiState, 
+        imgui_state: &mut ImguiInternalState, 
+        render_gui: &mut dyn RenderGui,
         wgpu_handles: &WgpuHandles, 
         render_target: &SurfaceTexture, 
         window: &Window
@@ -221,31 +265,7 @@ impl Application {
             .expect("Failed to prepare frame");
         
         let ui = imgui_state.context.new_frame();
-        {
-            let window = ui.window("Hello world");
-            window
-                .size([300.0, 100.0], Condition::FirstUseEver)
-                .build(|| {
-                    ui.text("Hello world!");
-                    ui.text("This...is...imgui-rs on WGPU!");
-                    ui.separator();
-                    let mouse_pos = ui.io().mouse_pos;
-                    ui.text(format!(
-                        "Mouse Position: ({:.1},{:.1})",
-                        mouse_pos[0], mouse_pos[1]
-                    ));
-                });
-
-            let window = ui.window("Hello too");
-            window
-                .size([400.0, 200.0], Condition::FirstUseEver)
-                .position([400.0, 200.0], Condition::FirstUseEver)
-                .build(|| {
-                    ui.text(format!("Frametime: {delta_s:?}"));
-                });
-
-            ui.show_demo_window(&mut imgui_state.demo_open);
-        }
+        render_gui.render_imgui(ui);
 
         let WgpuHandles { 
             instance, 
@@ -387,12 +407,23 @@ impl ApplicationHandler for Application {
                     .expect("Unable to get next swapchain image");
                 let window = self.window.as_ref().unwrap();
                 
-                Self::render(wgpu_handles, &frame);
+                // Self::render(wgpu_handles, &frame);
 
-                // let render_output_view = self.render_output_view.as_ref().unwrap();
-                // render_output_view.render(wgpu_handles, &frame);
+                let render_output_view = self.render_output_view.as_mut().unwrap();
+                render_output_view.update(imgui_state.context.io());
+                render_output_view.render(wgpu_handles, &frame);
+                
 
-                Self::render_imgui(imgui_state, wgpu_handles, &frame, &window);
+                let now = Instant::now();
+                self.demo_state.delta_s = now - imgui_state.last_frame;
+
+                Self::render_imgui(
+                    imgui_state, 
+                    render_output_view,
+                    wgpu_handles, 
+                    &frame, 
+                    &window
+                );
 
                 frame.present();
 
@@ -408,14 +439,14 @@ impl ApplicationHandler for Application {
 
             _ => ()
         }
-        
+
         let imgui_state = self.imgui_state.as_mut().unwrap();
         let window = self.window.as_ref().unwrap();
         
         imgui_state.platform.handle_event::<()>(
             imgui_state.context.io_mut(),
             &window,
-            &Event::WindowEvent { window_id, event },
+            &Event::WindowEvent { window_id, event: event.clone() },
         );
     }
 }

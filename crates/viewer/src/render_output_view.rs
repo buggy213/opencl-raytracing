@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use raytracing::geometry::Vec3;
 use wgpu::{util::DeviceExt, ColorTargetState, SurfaceTexture};
 
-use crate::WgpuHandles;
+use crate::{RenderGui, WgpuHandles};
 
 // TODO: is it possible to just blit directly to the render target?
 pub(crate) struct RenderOutputView {
@@ -24,8 +24,18 @@ pub(crate) struct RenderOutputView {
     render_output: Vec<Vec3>
 }
 
-impl RenderOutputView {
+impl RenderGui for RenderOutputView {
+    fn render_imgui(&mut self, ui: &mut imgui::Ui) {
+        let window = ui.window("Viewer")
+            .size([300.0, 300.0], imgui::Condition::Always)
+            .position([0.0, 0.0], imgui::Condition::Always);
+        window.build(|| {
+            ui.text("asdf");
+        });
+    }
+}
 
+impl RenderOutputView {
     pub(crate) fn init(
         wgpu_handles: &WgpuHandles, 
         targets: &[Option<ColorTargetState>],
@@ -178,6 +188,11 @@ impl RenderOutputView {
         me
     }
 
+    // For now just piggybacks off of imgui's IO abstraction
+    pub(crate) fn update(&mut self, io: &imgui::Io) {
+        
+    }
+
     // Renders texture onto 2 triangles covering the screen.
     pub(crate) fn render(&self, wgpu_handles: &WgpuHandles, render_target: &SurfaceTexture) {
         let WgpuHandles { instance, surface, adapter, device, queue, shader, pipeline_layout, pipeline, swapchain_format } = wgpu_handles;
@@ -217,7 +232,7 @@ impl RenderOutputView {
     }
 
     pub(crate) fn resize(&self, width: u32, height: u32) {
-        // no-op, since texture sampling allows arbitrary size
+        // no-op, since texture sampling allows for arbitrary size
     }
 
     fn generate_test_texture(&self, wgpu_handles: &WgpuHandles) {
