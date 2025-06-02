@@ -1,4 +1,4 @@
-// Full-screen textured quad shader
+// Full screen textured quad shader (essentially blit)
 struct VSOut {
     @builtin(position) pos: vec4f,
     @location(0) texcoord: vec2f
