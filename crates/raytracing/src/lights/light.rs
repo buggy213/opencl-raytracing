@@ -1,4 +1,3 @@
-use std::{ptr::null_mut, cmp::max};
 use crate::geometry::Vec3;
 
 #[derive(Debug)]

@@ -1,6 +1,6 @@
-use gltf::camera::{Projection, Perspective};
+use gltf::camera::Projection;
 
-use crate::geometry::{Transform, Matrix4x4, Vec3, Vec2};
+use crate::geometry::{Transform, Matrix4x4, Vec3};
 
 pub struct Camera {
     pub is_perspective: bool,
