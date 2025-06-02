@@ -1,26 +1,10 @@
 use std::path::Path;
 
-use obj::{ObjError, MtlLibsLoadError, Obj, ObjData, IndexTuple};
-
 use super::{Vec3, vec3::Vec3u, Transform};
 
 #[derive(Debug)]
 pub enum MeshError {
-    MeshLoadError(ObjError),
-    MaterialLoadError(MtlLibsLoadError),
     UntriangulatedError,
-}
-
-impl From<ObjError> for MeshError {
-    fn from(x: ObjError) -> Self {
-        MeshError::MeshLoadError(x)
-    }
-}
-
-impl From<MtlLibsLoadError> for MeshError {
-    fn from(x: MtlLibsLoadError) -> Self {
-        MeshError::MaterialLoadError(x)
-    }
 }
 
 #[derive(Debug)]
@@ -31,39 +15,6 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn from_obj_file(filepath: &Path) -> Result<Mesh, MeshError> {
-        let mut obj: Obj = Obj::load(filepath)?;
-        let mut vertices: Vec<Vec3> = Vec::new();
-        let mut tris: Vec<Vec3u> = Vec::new();
-        let obj_data: &ObjData = &obj.data;
-        for chunk in obj_data.position.iter() {
-            vertices.push(Vec3(chunk[0], chunk[1], chunk[2]));
-        }
-
-        let object = &obj_data.objects[0];
-        for group in object.groups.iter() {
-            for poly in group.polys.iter() {
-                let index_tup_vec: &Vec<IndexTuple> = &poly.0;
-                if index_tup_vec.len() != 3 {
-                    return Err(MeshError::UntriangulatedError);
-                }
-
-                let v0 = index_tup_vec[0];
-                let v1 = index_tup_vec[1];
-                let v2 = index_tup_vec[2];
-                tris.push(Vec3u(v0.0 as u32, v1.0 as u32, v2.0 as u32));
-            }
-        }
-
-        Ok(
-            Mesh { 
-                vertices: vertices, 
-                tris: tris,
-                normals: todo!("implement normals for obj loader")
-            }
-        )
-    }
-
     pub fn from_gltf_mesh(mesh: &gltf::Mesh, buffers: &[gltf::buffer::Data]) -> Mesh {
         let mut vertices: Vec<Vec3> = Vec::new();
         let mut tris: Vec<Vec3u> = Vec::new();
