@@ -22,6 +22,10 @@ struct Application {
     render_output_view: Option<RenderOutputView>
 }
 
+struct RequestWindowUpdate {
+    resize: Option<(u32, u32)>
+}
+
 struct WgpuHandles<'window> {
     instance: wgpu::Instance,
     surface: wgpu::Surface<'window>,
@@ -242,7 +246,9 @@ impl Application {
         platform.attach_window(
             context.io_mut(), 
             window, 
-            imgui_winit_support::HiDpiMode::Default
+            // ensure mouse coordinates are in physical pixels
+            // TODO: maybe think about using our own input handling so this doesn't matter
+            imgui_winit_support::HiDpiMode::Locked(1.0)
         );
 
         context.set_ini_filename(None);
@@ -439,13 +445,12 @@ impl ApplicationHandler for Application {
                 // Self::render(wgpu_handles, &frame);
 
                 let render_output_view = self.render_output_view.as_mut().unwrap();
-                render_output_view.update(imgui_state.context.io());
+                render_output_view.update(imgui_state.context.io(), wgpu_handles);
                 render_output_view.render(
                     &imgui_state.renderer.textures,
                     wgpu_handles, 
                     &wgpu_handles.draw_texture
                 );
-                
 
                 let now = Instant::now();
                 self.demo_state.delta_s = now - imgui_state.last_frame;
@@ -479,6 +484,7 @@ impl ApplicationHandler for Application {
             }
             
             WindowEvent::Resized(new_size) => {
+                println!("Window resized to: {new_size:?}");
                 self.height = new_size.height;
                 self.width = new_size.width;
                 self.resize(self.height, self.width);

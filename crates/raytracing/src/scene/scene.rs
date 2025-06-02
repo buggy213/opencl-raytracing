@@ -10,7 +10,7 @@ pub struct Scene {
     pub lights: Vec<Light>
 }
 
-const HEIGHT: usize = 1024;
+const HEIGHT: usize = 600;
 
 impl Scene {
     pub fn from_file(filepath: &Path, render_tile: Option<RenderTile>) -> anyhow::Result<Scene> {

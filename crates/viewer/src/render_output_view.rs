@@ -1,16 +1,16 @@
 // 
 
-use std::{borrow::Cow, collections::HashMap, rc::Rc};
+use std::{borrow::Cow, collections::HashMap, path::PathBuf, rc::Rc};
 
 use bytemuck::NoUninit;
 use raytracing::geometry::Vec3;
 use wgpu::{util::DeviceExt, ColorTargetState};
 
-use crate::{ImguiInternalState, RenderGui, WgpuHandles};
+use crate::{ImguiInternalState, RenderGui, RequestWindowUpdate, WgpuHandles};
 
 // TODO: is it possible to just blit directly to the render target?
 pub(crate) struct RenderOutputView {
-    render: RenderResources,
+    graphics: GraphicsResources,
     compute: ComputeResources,
     
     // opaque handle for imgui to render debug texture
@@ -28,9 +28,13 @@ struct GuiState {
     exposure: f32,
 
     mouse_pos: [u32; 2],
+
+    scenes: Vec<PathBuf>,
+    selected_scene: usize,
+    render_scene_requested: bool
 }
 
-struct RenderResources {
+struct GraphicsResources {
     shader: wgpu::ShaderModule,
 
     pipeline_layout: wgpu::PipelineLayout,
@@ -69,6 +73,21 @@ struct ComputeResources {
     compute_bind_group: wgpu::BindGroup,
 }
 
+
+struct RaytracerResult {
+    radiance: Vec<Vec3>,
+    raster_size: (u32, u32)
+}
+fn raytrace_scene(path: &PathBuf) -> RaytracerResult {
+    let mut scene = raytracing::scene::Scene::from_file(path, None).expect("failed to load scene");
+    let output = raytracing_cpu::render(&mut scene, 1);
+    
+    RaytracerResult { 
+        radiance: output, 
+        raster_size: (scene.camera.raster_width as u32, scene.camera.raster_height as u32) 
+    }
+}
+
 impl RenderGui for RenderOutputView {
     fn render_imgui(&mut self, ui: &mut imgui::Ui) {
         let viewer_window = ui.window("Viewer")
@@ -80,16 +99,61 @@ impl RenderGui for RenderOutputView {
             let tex_id = self.debug_texture_id.expect("imgui texture not initialized");
             imgui::Image::new(tex_id, [200.0, 200.0]).build(&ui);
 
+            let index = self.gui_state.mouse_pos[1] as usize * self.render_output_size.0 as usize 
+                    + self.gui_state.mouse_pos[0] as usize;
+            let radiance_value = self.render_output[index];
+
+            ui.text(format!("Radiance value: {radiance_value:?}"));
+            ui.text(format!("Mouse position: ({}, {})", 
+                self.gui_state.mouse_pos[0], 
+                self.gui_state.mouse_pos[1]));
+
             ui.separator();
             ui.text("Render Output Settings");
             ui.input_float("Exposure", &mut self.gui_state.exposure).build();
             ui.input_float("Gamma", &mut self.gui_state.gamma).build();
             
-            ui.text(format!("Mouse position: ({}, {})", 
-                self.gui_state.mouse_pos[0], 
-                self.gui_state.mouse_pos[1]));
+            ui.separator();
+            ui.text("Render");
+
+            fn path_to_filename(path: &PathBuf) -> &str {
+                path.file_name().expect("should not be ..").to_str().expect("contains invalid utf8")
+            }
+            
+            let selected_filename = path_to_filename(&self.gui_state.scenes[self.gui_state.selected_scene]);
+            let combo = ui.begin_combo(
+                "GLTF", 
+                selected_filename
+            );
+
+            if let Some(combo) = combo {
+                for (i, scene) in self.gui_state.scenes.iter().enumerate() {
+                    if ui.selectable(path_to_filename(scene)) {
+                        self.gui_state.selected_scene = i;
+                    }
+                }
+
+                combo.end();
+            }
+            
+            self.gui_state.render_scene_requested = ui.button("Render");
         });
     }
+}
+
+fn enumerate_scenes() -> Vec<PathBuf> {
+    // kind of a hack, but ok for now
+    let viewer_crate_path = env!("CARGO_MANIFEST_DIR"); 
+    let scenes_path = std::path::Path::new(viewer_crate_path)
+        .parent().unwrap()
+        .parent().unwrap()
+        .join("scenes");
+
+    scenes_path.read_dir()
+        .expect("Failed to read scenes directory")
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .filter(|path| path.extension().is_some_and(|ext| ext == "gltf" || ext == "glb"))
+        .collect()
 }
 
 impl RenderOutputView {
@@ -122,11 +186,11 @@ impl RenderOutputView {
         let texture = device.create_texture(&texture_desc);
         let texture = Rc::new(texture);
 
-        let render_resources = Self::init_render_resources(wgpu_handles, targets, size, Rc::clone(&texture));
+        let render_resources = Self::init_graphics_resources(wgpu_handles, targets, size, Rc::clone(&texture));
         let compute_resources = Self::init_compute_resources(wgpu_handles, size, Rc::clone(&texture));
 
         let me = RenderOutputView {
-            render: render_resources,
+            graphics: render_resources,
             compute: compute_resources,
 
             debug_texture_id: None,
@@ -135,26 +199,29 @@ impl RenderOutputView {
             gui_state: GuiState { 
                 gamma: 2.2, 
                 exposure: 1.0, 
-                mouse_pos: [0, 0] 
+                mouse_pos: [0, 0],
+
+                scenes: enumerate_scenes(),
+                selected_scene: 0,
+                render_scene_requested: false
             },
             
 
             render_output_size: size, 
-            render_output: Vec::new(),
+            render_output: Self::generate_test_pattern(size),
         };
 
-        // generate test texture
-        me.generate_test_pattern(wgpu_handles);
+        me.upload_radiance_buffer(wgpu_handles);
         me
     }
 
-    fn init_render_resources(
+    fn init_graphics_resources(
         wgpu_handles: &WgpuHandles,
         targets: &[Option<ColorTargetState>],
         size: (u32, u32),
 
         texture: Rc<wgpu::Texture>,
-    ) -> RenderResources {
+    ) -> GraphicsResources {
         let WgpuHandles { device, .. } = wgpu_handles;
 
         let shader_module_descriptor = wgpu::ShaderModuleDescriptor {
@@ -270,7 +337,7 @@ impl RenderOutputView {
 
         let bind_group = device.create_bind_group(&bind_group_desc);
 
-        RenderResources {
+        GraphicsResources {
             shader,
             pipeline_layout,
             pipeline: render_pipeline,
@@ -464,12 +531,25 @@ impl RenderOutputView {
     }
 
     // For now just piggybacks off of imgui's IO abstraction
-    pub(crate) fn update(&mut self, io: &imgui::Io) {
+    pub(crate) fn update(&mut self, io: &imgui::Io, wgpu_handles: &WgpuHandles) -> Option<RequestWindowUpdate> {
         if io.mouse_pos != [f32::MAX, f32::MAX] {
             self.gui_state.mouse_pos = [
                 io.mouse_pos[0] as u32,
                 io.mouse_pos[1] as u32,
             ];
+        }
+
+        // If the user requested a render, we need to update the radiance buffer
+        // For now, just blocks the entire viewer until raytracing is done
+        if self.gui_state.render_scene_requested {
+            let RaytracerResult { radiance, .. } = raytrace_scene(&self.gui_state.scenes[self.gui_state.selected_scene]);
+            self.render_output = radiance;
+            self.upload_radiance_buffer(wgpu_handles);
+            self.gui_state.render_scene_requested = false;
+            None // TODO: allow render to change size. need to come up with better abstractions to make this less painful
+        }
+        else {
+            None
         }
     }
 
@@ -546,11 +626,11 @@ impl RenderOutputView {
             occlusion_query_set: None,
         };
         let mut rpass = encoder.begin_render_pass(&rpass_descriptor);
-        rpass.set_pipeline(&self.render.pipeline);
+        rpass.set_pipeline(&self.graphics.pipeline);
 
-        let indices = self.render.triangle_buffer.slice(..);
+        let indices = self.graphics.triangle_buffer.slice(..);
         rpass.set_index_buffer(indices, wgpu::IndexFormat::Uint32);
-        rpass.set_bind_group(0, &self.render.bind_group, &[]);
+        rpass.set_bind_group(0, &self.graphics.bind_group, &[]);
         rpass.draw_indexed(0..6, 0, 0..1);
     }
 
@@ -577,28 +657,40 @@ impl RenderOutputView {
         );
     }
 
-    pub(crate) fn resize(&self, width: u32, height: u32) {
-        // no-op, since texture sampling allows for arbitrary size
+    pub(crate) fn resize(&mut self, width: u32, height: u32, wgpu_handles: &WgpuHandles) {
+        
     }
 
-    fn generate_test_pattern(&self, wgpu_handles: &WgpuHandles) {
-        let elts = self.render_output_size.0 * self.render_output_size.1 * 4;
-        let mut test_texture: Vec<f32> = Vec::with_capacity(elts as usize);
+    fn generate_test_pattern(size: (u32, u32)) -> Vec<Vec3> {
+        let elts = size.0 * size.1;
+        let mut test_pattern: Vec<Vec3> = Vec::with_capacity(elts as usize);
 
-        for j in 0..self.render_output_size.1 {
-            for i in 0..self.render_output_size.0 {
-                let r = (i as f32) / (self.render_output_size.0 as f32);
-                let b = (j as f32) / (self.render_output_size.1 as f32);
-                test_texture.push(r);
-                test_texture.push(0.0);
-                test_texture.push(b);
+        for j in 0..size.1 {
+            for i in 0..size.0 {
+                let r = (i as f32) / (size.0 as f32);
+                let b = (j as f32) / (size.1 as f32);
+                test_pattern.push(Vec3(r, 0.0, b));
             }
         }
 
+        test_pattern
+    }
+
+    fn upload_radiance_buffer(&self, wgpu_handles: &WgpuHandles) {
         let WgpuHandles { queue, .. } = wgpu_handles;
         
-        // Write the test texture to the radiance buffer
-        let data: &[u8] = bytemuck::cast_slice(test_texture.as_slice());
+        // Write radiance buffer to gpu
+        let data: &[u8] = Self::cast_vec3_slice(&self.render_output);
         queue.write_buffer(&self.compute.radiance_buffer, 0, data);
+    }
+
+    fn cast_vec3_slice(slice: &[Vec3]) -> &[u8] {
+        let data = slice.as_ptr() as *const u8;
+        let len = slice.len() * std::mem::size_of::<Vec3>();
+
+        // SAFETY: Vec3 is a POD type, so we can safely cast the slice to a byte slice
+        unsafe {
+            std::slice::from_raw_parts(data, len)
+        }
     }
 }
