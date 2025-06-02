@@ -53,6 +53,31 @@ impl Matrix4x4 {
         }
     }
 
+    pub fn make_w2o(normal: Vec3) -> Self {
+        // avoid degenerate case in gram-schmidt
+        let x = if normal != Vec3(1.0, 0.0, 0.0) {
+            Vec3(1.0, 0.0, 0.0)
+        } else {
+            Vec3(0.0, 1.0, 0.0)
+        };
+
+        let x = x - Vec3::dot(x, normal) * normal;
+        let x = Vec3::normalized(x);
+
+        let z = normal;
+
+        // z cross x = y for right-handed coordinates
+        let y = Vec3::cross(z, x);
+        
+        // transpose of o2w matrix is its inverse (since it's a rotation)
+        Self::create(
+            x.0, x.1, x.2, 0.0,
+            y.0, y.1, y.2, 0.0,
+            z.0, z.1, z.2, 0.0,
+            0.0, 0.0, 0.0, 1.0
+        )
+    }
+
     pub fn invert(&self) -> Option<Self> {
         let mut inv = Matrix4x4::identity();
         inv[0] = self[5]  * self[10] * self[15] - 

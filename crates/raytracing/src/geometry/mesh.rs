@@ -11,7 +11,9 @@ pub enum MeshError {
 pub struct Mesh {
     pub vertices: Vec<Vec3>,
     pub tris: Vec<Vec3u>,
-    pub normals: Vec<Vec3>
+    pub normals: Vec<Vec3>,
+
+    pub material_idx: usize,
 }
 
 impl Mesh {
@@ -47,10 +49,14 @@ impl Mesh {
             }
         } else { todo!("unable to load normals"); }
         
+        // default material should have index 0
+        let material_idx = primitive.material().index().unwrap_or(0);
         Mesh {
             vertices,
             tris,
-            normals
+            normals,
+
+            material_idx
         }
     }
 

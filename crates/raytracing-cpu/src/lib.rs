@@ -1,13 +1,15 @@
 use accel::{traverse_bvh, BVHData};
 use lights::{occluded, sample_light, LightSample};
+use materials::CpuMaterial;
 use ray::Ray;
-use raytracing::{accel::{bvh2::LinearizedBVHNode, BVH2}, geometry::Vec3, lights::Light, scene::{Camera, Scene}};
+use raytracing::{accel::{bvh2::LinearizedBVHNode, BVH2}, geometry::{Matrix4x4, Vec3}, lights::Light, scene::{Camera, Scene}};
 use embree4::Device;
 
 mod ray;
 mod accel;
 mod geometry;
 mod lights;
+mod materials;
 
 fn generate_ray(camera: &Camera, x: u32, y: u32) -> Ray {
     let x_disp = 0.0;
@@ -45,8 +47,15 @@ fn ray_color(ray: Ray, bvh: &BVHData<'_>, scene: &Scene) -> Vec3 {
             let light_sample = sample_light(light, hit.point);
             let occluded = occluded(bvh, light_sample);
             if !occluded {
-                let bsdf_value = Vec3(1.0, 1.0, 1.0); // todo: need material modeling in parent crate
+                let material = &scene.materials[hit.material_idx as usize];
+                
+                let o2w = Matrix4x4::make_w2o(hit.normal);
+                let wo = o2w.apply_vector(-ray.direction);
+                let wi = o2w.apply_vector(-light_sample.shadow_ray.direction); // shadow ray from light to hit point, we want other way
+                let bsdf_value = material.get_bsdf(wo, wi);
+                
                 let cos_theta = Vec3::dot(hit.normal, -light_sample.shadow_ray.direction);
+                
                 // no backface culling for now - blender gltf export seems to flip sometimes
                 direct_illumination += bsdf_value * light_sample.radiance * f32::abs(cos_theta); 
             }

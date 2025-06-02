@@ -163,6 +163,12 @@ impl From<[f32; 3]> for Vec3 {
     }
 }
 
+impl From<&[f32; 3]> for Vec3 {
+    fn from(value: &[f32; 3]) -> Self {
+        Vec3(value[0], value[1], value[2])
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Default, Debug, PartialEq, PartialOrd)]
 pub struct Vec3u(pub u32, pub u32, pub u32);
