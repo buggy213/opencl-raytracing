@@ -29,7 +29,7 @@ fn generate_ray(camera: &Camera, x: u32, y: u32) -> Ray {
     }
 }
 
-fn ray_color(ray: Ray, bvh: &BVHData<'_>, scene: &Scene) -> Vec3 {
+fn ray_color(ray: Ray, bvh: &BVHData<'_>, scene: &Scene, light_samples: u32) -> Vec3 {
     let camera = &scene.camera;
 
     let hit_info = traverse_bvh(
@@ -53,21 +53,25 @@ fn ray_color(ray: Ray, bvh: &BVHData<'_>, scene: &Scene) -> Vec3 {
         let mut direct_illumination = Vec3::zero();
 
         for light in &scene.lights {
-            let light_sample = sample_light(light, scene, hit.point);
-            let occluded = occluded(bvh, light_sample);
-            if !occluded {
-                let material = &scene.materials[hit.material_idx as usize];
-                
-                let o2w = Matrix4x4::make_w2o(hit.normal);
-                let wo = o2w.apply_vector(-ray.direction);
-                let wi = o2w.apply_vector(-light_sample.shadow_ray.direction); // shadow ray from light to hit point, we want other way
-                let bsdf_value = material.get_bsdf(wo, wi);
-                
-                let cos_theta = Vec3::dot(hit.normal, -light_sample.shadow_ray.direction);
+            for _ in 0..light_samples {
+                let light_sample = sample_light(light, scene, hit.point);
+                let occluded = occluded(bvh, light_sample);
+                if !occluded {
+                    let material = &scene.materials[hit.material_idx as usize];
+                    
+                    let o2w = Matrix4x4::make_w2o(hit.normal);
+                    let wo = o2w.apply_vector(-ray.direction);
+                    let wi = o2w.apply_vector(-light_sample.shadow_ray.direction); // shadow ray from light to hit point, we want other way
+                    let bsdf_value = material.get_bsdf(wo, wi);
+                    
+                    let cos_theta = Vec3::dot(hit.normal, -light_sample.shadow_ray.direction);
 
-                // no backface culling for now - blender gltf export seems to flip sometimes
-                direct_illumination += bsdf_value * light_sample.radiance * f32::abs(cos_theta) / light_sample.pdf; 
+                    // no backface culling for now - blender gltf export seems to flip sometimes
+                    direct_illumination += bsdf_value * light_sample.radiance * f32::abs(cos_theta) / light_sample.pdf; 
+                }
             }
+
+            direct_illumination /= light_samples as f32;
         }
 
         zero_bounce + direct_illumination
@@ -77,7 +81,7 @@ fn ray_color(ray: Ray, bvh: &BVHData<'_>, scene: &Scene) -> Vec3 {
     }
 }
 
-pub fn render(scene: &mut Scene, spp: u32) -> Vec<Vec3> {
+pub fn render(scene: &mut Scene, spp: u32, light_samples: u32) -> Vec<Vec3> {
     let width = scene.camera.raster_width;
     let height = scene.camera.raster_height;
 
@@ -102,7 +106,7 @@ pub fn render(scene: &mut Scene, spp: u32) -> Vec<Vec3> {
             let mut radiance = Vec3(0.0, 0.0, 0.0);
             for s in 0..spp {
                 let ray = generate_ray(camera, i as u32, j as u32);
-                radiance += ray_color(ray, &bvh, &scene);
+                radiance += ray_color(ray, &bvh, &scene, light_samples);
             }
 
             radiance /= spp as f32;

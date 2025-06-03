@@ -1,7 +1,18 @@
-use std::{fs::File, path::Path};
+use std::{fs::File, path::{Path, PathBuf}};
 
+use clap::Parser;
 use raytracing::{geometry::Vec3, scene::Scene};
 use raytracing_cpu::render;
+
+#[derive(Debug, Parser)]
+struct CommandLineArguments {
+    #[arg(short, long)]
+    input: Option<PathBuf>,
+    #[arg(short, long, default_value_t = 1)]
+    spp: u32,
+    #[arg(short, long, default_value_t = 1)]
+    light_samples: u32,
+}
 
 fn save_png(radiance: &[Vec3], scene: &Scene, output_path: &Path) {
     let width = scene.camera.raster_width;
@@ -27,9 +38,13 @@ fn save_png(radiance: &[Vec3], scene: &Scene, output_path: &Path) {
 }
 
 fn main() {
-    let path = Path::new("scenes/cbbunny.glb");
-    let mut scene = Scene::from_file(path, None).expect("failed to load scene");
-    let output = render(&mut scene, 1);
+    let cli_args = CommandLineArguments::parse();
+    let default_scene = PathBuf::from("scenes/cbbunny.glb");
+    let path = cli_args.input.unwrap_or(default_scene);
+    let mut scene = Scene::from_file(&path, None)
+        .expect("failed to load scene");
+
+    let output = render(&mut scene, cli_args.spp, cli_args.light_samples);
 
     let output_path = Path::new("scenes/cbbunny.png");
     save_png(&output, &scene, output_path);
