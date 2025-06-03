@@ -35,7 +35,9 @@ pub(crate) struct HitInfo {
     pub(crate) point: Vec3,
     pub(crate) tangent: Vec3,
     pub(crate) normal: Vec3,
+
     pub(crate) material_idx: u32,
+    pub(crate) light_idx: Option<u32>,
 }
 
 pub(crate) struct BVHData<'bvh> {
@@ -84,7 +86,8 @@ pub(crate) fn traverse_bvh(
 
                     let normal = Vec3::normalized(w * n0 + u * n1 + v * n2);
                     
-                    let material_idx = mesh.material_idx as u32;
+                    let material_idx = mesh.material_idx;
+                    let light_idx = mesh.light_idx;
 
                     hit_info = Some(HitInfo { 
                         t, 
@@ -92,7 +95,9 @@ pub(crate) fn traverse_bvh(
                         point: ray.at(t), 
                         tangent: Vec3::zero(), // TODO: fix
                         normal,
-                        material_idx
+
+                        material_idx,
+                        light_idx
                     });
 
                     t_max = t;

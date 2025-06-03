@@ -50,6 +50,10 @@ impl Vec3 {
         u / u.length()
     }
 
+    pub fn unit(self) -> Vec3 {
+        Vec3::normalized(self)
+    }
+
     pub fn random_vec() -> Vec3 {
         Vec3(random(), random(), random())
     }

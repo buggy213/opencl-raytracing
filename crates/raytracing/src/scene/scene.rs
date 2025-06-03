@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::{geometry::{Matrix4x4, Mesh, Transform}, lights::Light, materials::Material};
+use crate::{geometry::{Matrix4x4, Mesh, Transform, Vec3}, lights::Light, materials::Material};
 
 use super::camera::{Camera, RenderTile};
 
@@ -22,6 +22,20 @@ impl Scene {
         let height: usize = HEIGHT;
         let mut meshes: Vec<Mesh> = Vec::new();
         let mut lights: Vec<Light> = Vec::new();
+
+        let mut materials: Vec<Material> = Vec::new();
+        let mut material_emissions: Vec<Vec3> = Vec::new();
+        for material in document.materials() {
+            let diffuse_color = material.pbr_metallic_roughness().base_color_factor();
+            let diffuse = Material::Diffuse { 
+                albedo: [diffuse_color[0], diffuse_color[1], diffuse_color[2]].into()
+            };
+
+            materials.push(diffuse);
+
+            let emission: Vec3 = material.emissive_factor().into();
+            material_emissions.push(emission);
+        }
         
         for node in scene_gltf.nodes() {
             if node.camera().is_some() {
@@ -38,21 +52,22 @@ impl Scene {
                 // convert to world space
                 mesh.apply_transform(&mesh_transform);
 
+                // if it's an emitter, then add an area light
+                let prim_id = meshes.len() as u32;
+                let emission = material_emissions[mesh.material_idx as usize];
+                if emission != Vec3::zero() {
+                    mesh.light_idx = Some(lights.len() as u32);
+
+                    let area_light = Light::from_emissive_geometry(prim_id, emission);
+                    lights.push(area_light);
+                }
+
                 meshes.push(mesh);
             }
             if node.light().is_some() {
-                let light = Light::from_gltf_light(&node);
-                lights.push(light);
+                let punctual_light = Light::from_gltf_punctual_light(&node);
+                lights.push(punctual_light);
             }
-        }
-
-        let mut materials: Vec<Material> = Vec::new();
-        for material in document.materials() {
-            let diffuse_color = material.pbr_metallic_roughness().base_color_factor();
-            let diffuse = Material::Diffuse { 
-                albedo: [diffuse_color[0], diffuse_color[1], diffuse_color[2]] 
-            };
-            materials.push(diffuse);
         }
 
         println!("{:?}", lights);

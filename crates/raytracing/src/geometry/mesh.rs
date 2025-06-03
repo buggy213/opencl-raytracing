@@ -13,7 +13,8 @@ pub struct Mesh {
     pub tris: Vec<Vec3u>,
     pub normals: Vec<Vec3>,
 
-    pub material_idx: usize,
+    pub material_idx: u32,
+    pub light_idx: Option<u32>
 }
 
 impl Mesh {
@@ -56,7 +57,8 @@ impl Mesh {
             tris,
             normals,
 
-            material_idx
+            material_idx: material_idx as u32,
+            light_idx: None
         }
     }
 
@@ -70,6 +72,24 @@ impl Mesh {
             let transformed = transform.apply_normal(*normal);
             *normal = transformed;
         }
+    }
+
+    pub fn area(&self) -> f32 {
+        let mut area = 0.0;
+        for tri in 0..self.tris.len() {
+            area += self.tri_area(tri);
+        }
+
+        area
+    }
+
+    pub fn tri_area(&self, tri_idx: usize) -> f32 {
+        let tri = self.tris[tri_idx];
+        let p0 = self.vertices[tri.0 as usize];
+        let p1 = self.vertices[tri.1 as usize];
+        let p2 = self.vertices[tri.2 as usize];
+
+        Vec3::cross(p1 - p0, p2 - p0).length() / 2.0
     }
 
 }

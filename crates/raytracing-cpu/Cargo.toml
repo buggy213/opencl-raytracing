@@ -9,5 +9,8 @@ path = "../raytracing"
 [dependencies.embree4]
 path = "../embree4"
 
+[dependencies]
+rand = "0.9.1"
+
 [dev-dependencies]
 png = "0.17.16"

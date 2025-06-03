@@ -1,5 +1,5 @@
 use accel::{traverse_bvh, BVHData};
-use lights::{occluded, sample_light, LightSample};
+use lights::{light_radiance, occluded, sample_light, LightSample};
 use materials::CpuMaterial;
 use ray::Ray;
 use raytracing::{accel::{bvh2::LinearizedBVHNode, BVH2}, geometry::{Matrix4x4, Vec3}, lights::Light, scene::{Camera, Scene}};
@@ -10,6 +10,7 @@ mod accel;
 mod geometry;
 mod lights;
 mod materials;
+mod sample;
 
 fn generate_ray(camera: &Camera, x: u32, y: u32) -> Ray {
     let x_disp = 0.0;
@@ -40,11 +41,19 @@ fn ray_color(ray: Ray, bvh: &BVHData<'_>, scene: &Scene) -> Vec3 {
     );
 
     if let Some(hit) = hit_info {
+        // zero bounce illumination
+        let zero_bounce = if let Some(light_idx) = hit.light_idx {
+            let light = &scene.lights[light_idx as usize];
+            light_radiance(light, hit.point)
+        } else {
+            Vec3::zero()
+        };
+
         // direct illumination
         let mut direct_illumination = Vec3::zero();
 
         for light in &scene.lights {
-            let light_sample = sample_light(light, hit.point);
+            let light_sample = sample_light(light, scene, hit.point);
             let occluded = occluded(bvh, light_sample);
             if !occluded {
                 let material = &scene.materials[hit.material_idx as usize];
@@ -55,13 +64,13 @@ fn ray_color(ray: Ray, bvh: &BVHData<'_>, scene: &Scene) -> Vec3 {
                 let bsdf_value = material.get_bsdf(wo, wi);
                 
                 let cos_theta = Vec3::dot(hit.normal, -light_sample.shadow_ray.direction);
-                
+
                 // no backface culling for now - blender gltf export seems to flip sometimes
-                direct_illumination += bsdf_value * light_sample.radiance * f32::abs(cos_theta); 
+                direct_illumination += bsdf_value * light_sample.radiance * f32::abs(cos_theta) / light_sample.pdf; 
             }
         }
 
-        direct_illumination
+        zero_bounce + direct_illumination
     }
     else {
         Vec3::zero()

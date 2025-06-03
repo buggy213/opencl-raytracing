@@ -1,6 +1,8 @@
+use crate::geometry::Vec3;
+
 pub enum Material {
     Diffuse { 
-        albedo: [f32; 3] 
+        albedo: Vec3
     },
     Dielectric { 
         eta: f32 
