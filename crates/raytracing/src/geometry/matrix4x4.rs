@@ -55,11 +55,13 @@ impl Matrix4x4 {
 
     pub fn make_w2o(normal: Vec3) -> Self {
         // avoid degenerate case in gram-schmidt
-        let x = if normal != Vec3(1.0, 0.0, 0.0) {
-            Vec3(1.0, 0.0, 0.0)
-        } else {
-            Vec3(0.0, 1.0, 0.0)
-        };
+        let x; 
+        if (normal - Vec3(1.0, 0.0, 0.0)).near_zero() || (normal - Vec3(-1.0, 0.0, 0.0)).near_zero() {
+            x = Vec3(0.0, 1.0, 0.0);
+        }
+        else {
+            x = Vec3(1.0, 0.0, 0.0);
+        }
 
         let x = x - Vec3::dot(x, normal) * normal;
         let x = Vec3::normalized(x);
@@ -206,6 +208,39 @@ impl Matrix4x4 {
         Some(inv)
     }
 
+    pub fn det(self) -> f32 {
+        let a = self[5]  * self[10] * self[15] - 
+                self[5]  * self[11] * self[14] - 
+                self[9]  * self[6]  * self[15] + 
+                self[9]  * self[7]  * self[14] +
+                self[13] * self[6]  * self[11] - 
+                self[13] * self[7]  * self[10];
+
+        let b = -self[4]  * self[10] * self[15] + 
+                self[4]  * self[11] * self[14] + 
+                self[8]  * self[6]  * self[15] - 
+                self[8]  * self[7]  * self[14] - 
+                self[12] * self[6]  * self[11] + 
+                self[12] * self[7]  * self[10];
+
+        let c = self[4]  * self[9] * self[15] - 
+                self[4]  * self[11] * self[13] - 
+                self[8]  * self[5] * self[15] + 
+                self[8]  * self[7] * self[13] + 
+                self[12] * self[5] * self[11] - 
+                self[12] * self[7] * self[9];
+
+        let d = -self[4]  * self[9] * self[14] + 
+                self[4]  * self[10] * self[13] +
+                self[8]  * self[5] * self[14] - 
+                self[8]  * self[6] * self[13] - 
+                self[12] * self[5] * self[10] + 
+                self[12] * self[6] * self[9];
+
+        let frac_one_det = self[0] * a + self[1] * b + self[2] * c + self[3] * d;
+        1.0 / frac_one_det
+    }
+
     pub fn matmul(a: Matrix4x4, b: Matrix4x4) -> Self {
         let mut m = Matrix4x4::identity();
         for i in 0..4 {
@@ -228,6 +263,12 @@ impl Matrix4x4 {
                 self.data[j][i] = tmp;
             }
         }
+    }
+
+    pub fn transposed(&self) -> Matrix4x4 {
+        let mut me = self.clone();
+        me.transpose();
+        me
     }
 
     pub fn apply_point(&self, p: Vec3) -> Vec3 {

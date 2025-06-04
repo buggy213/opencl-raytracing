@@ -7,8 +7,6 @@ pub(crate) fn ray_triangle_intersect(
     p1: Vec3,
     p2: Vec3,
     ray: Ray,
-    t_min: f32,
-    t_max: f32,
 ) -> Option<Vec3> {
     // Moller-Trumbore algorithm
     let e1 = p1 - p0;
@@ -35,10 +33,6 @@ pub(crate) fn ray_triangle_intersect(
     }
 
     let t = Vec3::dot(Q, e2) / denom;
-    if t < t_min || t > t_max {
-        return None;
-    }
-
     let tuv = Vec3(t, u, v);
     return Some(tuv);
 }

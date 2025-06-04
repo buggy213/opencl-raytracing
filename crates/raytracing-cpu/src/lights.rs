@@ -71,7 +71,7 @@ pub(crate) fn sample_light(light: &Light, scene: &Scene, point: Vec3) -> LightSa
             };
 
             // use pdf to convert to solid angle integral
-            pdf *= (d * d) / Vec3::dot(dir, n);
+            pdf *= (d * d) / f32::abs(Vec3::dot(dir, n));
 
             LightSample {
                 radiance,
@@ -100,6 +100,7 @@ pub(crate) fn occluded(bvh: &BVHData<'_>, light_sample: LightSample) -> bool {
         0.001, 
         light_sample.distance - 0.001, 
         bvh, 
-        true
+        true,
+        false
     ).is_some()
 }

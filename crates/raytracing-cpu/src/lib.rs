@@ -29,20 +29,44 @@ fn generate_ray(camera: &Camera, x: u32, y: u32) -> Ray {
     }
 }
 
-fn ray_color(ray: Ray, bvh: &BVHData<'_>, scene: &Scene, light_samples: u32) -> Vec3 {
-    let camera = &scene.camera;
+const MAX_RAY_DEPTH: u32 = 5;
+
+fn ray_color(
+    ray: Ray, 
+    bvh: &BVHData, 
+    scene: &Scene, 
+    light_samples: u32,
+    depth: u32,
+
+    marked: bool
+) -> Vec3 {
+    if depth >= MAX_RAY_DEPTH {
+        return Vec3::zero();
+    }
+
+    // respect near/far clip settings for primary ray
+    let (t_min, t_max) = if depth == 0 {
+        let camera = &scene.camera;
+        (camera.near_clip, camera.far_clip)
+    } else {
+        (0.0, f32::INFINITY)
+    };
 
     let hit_info = traverse_bvh(
         ray, 
-        camera.near_clip, 
-        camera.far_clip, 
+        t_min,
+        t_max,
         bvh, 
-        false
+        false,
+        marked
     );
 
     if let Some(hit) = hit_info {
         // zero bounce illumination
-        let zero_bounce = if let Some(light_idx) = hit.light_idx {
+        
+        let zero_bounce = if depth != 0 {
+            Vec3::zero() // was already counted by the previous bounce
+        } else if let Some(light_idx) = hit.light_idx {
             let light = &scene.lights[light_idx as usize];
             light_radiance(light, hit.point)
         } else {
@@ -52,16 +76,22 @@ fn ray_color(ray: Ray, bvh: &BVHData<'_>, scene: &Scene, light_samples: u32) -> 
         // direct illumination
         let mut direct_illumination = Vec3::zero();
 
+        let material = &scene.materials[hit.material_idx as usize];
+        let w2o = Matrix4x4::make_w2o(hit.normal);
+        let o2w = w2o.transposed();
+        let wo = w2o.apply_vector(-ray.direction);
+
+        if marked {
+            dbg!(o2w.det());
+            dbg!(hit.normal);
+        }
+
         for light in &scene.lights {
             for _ in 0..light_samples {
                 let light_sample = sample_light(light, scene, hit.point);
                 let occluded = occluded(bvh, light_sample);
                 if !occluded {
-                    let material = &scene.materials[hit.material_idx as usize];
-                    
-                    let o2w = Matrix4x4::make_w2o(hit.normal);
-                    let wo = o2w.apply_vector(-ray.direction);
-                    let wi = o2w.apply_vector(-light_sample.shadow_ray.direction); // shadow ray from light to hit point, we want other way
+                    let wi = w2o.apply_vector(-light_sample.shadow_ray.direction); // shadow ray from light to hit point, we want other way
                     let bsdf_value = material.get_bsdf(wo, wi);
                     
                     let cos_theta = Vec3::dot(hit.normal, -light_sample.shadow_ray.direction);
@@ -74,7 +104,38 @@ fn ray_color(ray: Ray, bvh: &BVHData<'_>, scene: &Scene, light_samples: u32) -> 
             direct_illumination /= light_samples as f32;
         }
 
-        zero_bounce + direct_illumination
+        // indirect illumination
+        let bsdf_sample = material.sample_bsdf(wo);
+        let world_dir = o2w.apply_vector(bsdf_sample.wi);
+        let secondary_ray = Ray {
+            origin: hit.point + world_dir * 0.01,
+            direction: world_dir,
+            time: 0.0,
+        };
+
+        let incident_radiance = ray_color(
+            secondary_ray,
+            bvh,
+            scene,
+            light_samples,
+            depth + 1,
+            marked
+        );
+
+        if marked {
+            dbg!(&bsdf_sample);
+            dbg!(o2w);
+            dbg!(world_dir);
+            dbg!(secondary_ray);
+            dbg!(incident_radiance);
+        }
+
+        let cos_theta = bsdf_sample.wi.z();
+        let indirect_illumination = bsdf_sample.bsdf * incident_radiance * cos_theta / bsdf_sample.pdf;
+        if indirect_illumination != Vec3::zero() {
+            // dbg!(indirect_illumination);
+        }
+        zero_bounce + direct_illumination + indirect_illumination
     }
     else {
         Vec3::zero()
@@ -106,7 +167,16 @@ pub fn render(scene: &mut Scene, spp: u32, light_samples: u32) -> Vec<Vec3> {
             let mut radiance = Vec3(0.0, 0.0, 0.0);
             for s in 0..spp {
                 let ray = generate_ray(camera, i as u32, j as u32);
-                radiance += ray_color(ray, &bvh, &scene, light_samples);
+                let marked = i == 600 && j == 195;
+                let marked = false;
+                radiance += ray_color(
+                    ray, 
+                    &bvh, 
+                    &scene, 
+                    light_samples, 
+                    0,
+                    marked
+                );
             }
 
             radiance /= spp as f32;

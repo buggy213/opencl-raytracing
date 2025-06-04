@@ -1,9 +1,11 @@
+use std::ops::Range;
+
 use raytracing::{accel::bvh2::{LinearizedBVHNode, TriPtr}, geometry::{Mesh, Vec3, AABB}};
 
 use crate::{geometry::ray_triangle_intersect, ray::Ray};
 
-// return t at which ray intersects an AABB, or infinity if no intersection
-fn intersect_aabb(aabb: AABB, ray: Ray) -> f32 {
+// return range of t at which ray intersects an AABB, or infinity if no intersection
+fn intersect_aabb(aabb: AABB, ray: Ray) -> Option<Range<f32>> {
     let a = (aabb.minimum.x() - ray.origin.x()) / ray.direction.x();
     let b = (aabb.maximum.x() - ray.origin.x()) / ray.direction.x();
     let t0_x = f32::min(a, b);
@@ -22,10 +24,10 @@ fn intersect_aabb(aabb: AABB, ray: Ray) -> f32 {
     let t0 = f32::max(f32::max(t0_x, t0_y), t0_z);
     let t1 = f32::min(f32::min(t1_x, t1_y), t1_z);
 
-    if t0 <= t1 && t0 >= 0.0 {
-        t0
+    if t0 <= t1 {
+        Some(t0..t1)
     } else {
-        f32::INFINITY
+        None
     }
 }
 
@@ -46,17 +48,55 @@ pub(crate) struct BVHData<'bvh> {
     pub(crate) indices: &'bvh [TriPtr]
 }
 
+struct BVHTraversalStackEntry {
+    node: usize,
+    t_min: f32,
+    t_max: f32,
+}
+
+
+// Find the closest intersection of ray against bvh data in the range t_min..t_max
+// (or any, if early_exit is true)
 pub(crate) fn traverse_bvh(
     ray: Ray,
     t_min: f32,
-    mut t_max: f32, 
+    t_max: f32, 
     bvh: &BVHData<'_>,
-    early_exit: bool
+    early_exit: bool,
+    marked: bool
 ) -> Option<HitInfo> {
-    let mut node = &bvh.nodes[0];
-    let mut stack: Vec<usize> = Vec::with_capacity(48);
+    let t_min = t_min;
+    let mut closest_t = t_max;
+
+    let mut stack: Vec<BVHTraversalStackEntry> = Vec::with_capacity(48);
+    let root = BVHTraversalStackEntry { 
+        node: 0, // root is node 0 by construction
+        t_min: f32::NEG_INFINITY, // TODO: bvh doesn't contain bounding box of whole scene 
+        t_max: f32::INFINITY 
+    };
+    stack.push(root);
+    
     let mut hit_info: Option<HitInfo> = None;
+
     loop {
+        let mut node_idx = None;
+        while let Some(prev) = stack.pop() {
+            if prev.t_min > closest_t || prev.t_max < t_min {
+                continue;
+            }
+            else {
+                node_idx = Some(prev.node);
+                break;
+            }
+        }
+
+        let node = if let Some(node_idx) = node_idx {
+            &bvh.nodes[node_idx]
+        }
+        else {
+            break
+        };
+
         if node.tri_count > 0 {
             // leaf node
             for i in 0..node.tri_count {
@@ -69,12 +109,12 @@ pub(crate) fn traverse_bvh(
                 let p2 = mesh.vertices[vertex_indices.2 as usize];
 
                 let result = ray_triangle_intersect(
-                    p0, p1, p2, ray, t_min, t_max
+                    p0, p1, p2, ray
                 );
 
                 if let Some(tuv) = result {
                     let (t, u, v) = (tuv.0, tuv.1, tuv.2);
-                    if t < t_min || t > t_max {
+                    if t < t_min || t > closest_t {
                         continue;
                     }
                     
@@ -84,7 +124,18 @@ pub(crate) fn traverse_bvh(
                     let n1 = mesh.normals[vertex_indices.1 as usize];
                     let n2 = mesh.normals[vertex_indices.2 as usize];
 
-                    let normal = Vec3::normalized(w * n0 + u * n1 + v * n2);
+                    let mut normal = Vec3::normalized(w * n0 + u * n1 + v * n2);
+                    let geometric_normal = Vec3::cross(p1 - p0, p2 - p1).unit();
+
+                    if marked {
+                        dbg!(normal);
+                        dbg!(geometric_normal);
+                    }
+
+                    // ???? man why does this happen
+                    if Vec3::dot(geometric_normal, normal) < 0.0 {
+                        normal = -normal;
+                    }
                     
                     let material_idx = mesh.material_idx;
                     let light_idx = mesh.light_idx;
@@ -100,19 +151,12 @@ pub(crate) fn traverse_bvh(
                         light_idx
                     });
 
-                    t_max = t;
+                    closest_t = t;
 
                     if early_exit {
                         return hit_info;
                     }
                 }
-            }
-
-            if let Some(prev) = stack.pop() {
-                node = &bvh.nodes[prev];
-            }
-            else {
-                break;
             }
         }
         else {
@@ -123,33 +167,47 @@ pub(crate) fn traverse_bvh(
 
             let t_left = intersect_aabb(left.aabb(), ray);
             let t_right = intersect_aabb(right.aabb(), ray);
+            
+            match (t_left, t_right) {
+                (None, None) => {
+                    // no intersection with either child, pop stack on next loop iteration
+                },
+                (None, Some(r)) => {
+                    let r = BVHTraversalStackEntry {
+                        node: left_idx + 1,
+                        t_min: r.start,
+                        t_max: r.end,
+                    };
+                    stack.push(r);
+                },
+                (Some(l), None) => {
+                    let l = BVHTraversalStackEntry {
+                        node: left_idx,
+                        t_min: l.start,
+                        t_max: l.end
+                    };
+                    stack.push(l);
+                },
+                (Some(mut l), Some(mut r)) => {
+                    if r.start < l.start {
+                        std::mem::swap(&mut l, &mut r);
+                    }
+                    let l = BVHTraversalStackEntry {
+                        node: left_idx,
+                        t_min: l.start,
+                        t_max: l.end
+                    };
+                    let r = BVHTraversalStackEntry {
+                        node: left_idx + 1,
+                        t_min: r.start,
+                        t_max: r.end,
+                    };
 
-            let (
-                t_closer, 
-                t_farther, 
-                closer, 
-                farther
-            ) = if t_left < t_right {
-                (t_left, t_right, left_idx, left_idx + 1)
-            } else {
-                (t_right, t_left, left_idx + 1, left_idx)
-            };
-
-            if f32::is_infinite(t_closer) {
-                if let Some(prev) = stack.pop() {
-                    node = &bvh.nodes[prev];
-                }
-                else {
-                    break;
-                }
+                    // prefer traversing closer node
+                    stack.push(r);
+                    stack.push(l);
+                },
             }
-            else {
-                node = &bvh.nodes[closer];
-                if f32::is_finite(t_farther) {
-                    stack.push(farther);
-                }
-            }
-
         }
     }
 

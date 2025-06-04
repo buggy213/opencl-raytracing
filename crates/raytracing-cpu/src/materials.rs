@@ -2,9 +2,17 @@ use std::f32;
 
 use raytracing::{geometry::Vec3, materials::Material};
 
+use crate::sample::sample_cosine_hemisphere;
+
+#[derive(Debug)]
+pub(crate) struct BsdfSample {
+    pub(crate) wi: Vec3,
+    pub(crate) bsdf: Vec3,
+    pub(crate) pdf: f32
+}
 pub(crate) trait CpuMaterial {
     fn get_bsdf(&self, wo: Vec3, wi: Vec3) -> Vec3;
-    fn sample_bsdf(&self, wo: Vec3) -> (Vec3, f32); // wi + pdf
+    fn sample_bsdf(&self, wo: Vec3) -> BsdfSample;
 }
 
 impl CpuMaterial for Material {
@@ -19,7 +27,19 @@ impl CpuMaterial for Material {
         }
     }
 
-    fn sample_bsdf(&self, wo: Vec3) -> (Vec3, f32) {
-        todo!()
+    fn sample_bsdf(&self, wo: Vec3) -> BsdfSample {
+        match self {
+            Material::Diffuse { albedo } => {
+                // cosine-weighted hemisphere sampling
+                let (wi, pdf) = sample_cosine_hemisphere();
+                BsdfSample {
+                    wi,
+                    bsdf: *albedo / f32::consts::PI,
+                    pdf,
+                }
+            },
+            Material::Dielectric { eta } => todo!(),
+            Material::Conductor { eta, k } => todo!(),
+        }
     }
 }
