@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, path::PathBuf, rc::Rc};
+use std::{borrow::Cow, collections::HashMap, path::{Path, PathBuf}, rc::Rc};
 
 use bytemuck::NoUninit;
 use raytracing::geometry::Vec3;
@@ -85,7 +85,7 @@ struct RaytracerResult {
     raster_size: (u32, u32)
 }
 
-fn raytrace_scene(path: &PathBuf, params: RaytraceParams) -> RaytracerResult {
+fn raytrace_scene(path: &Path, params: RaytraceParams) -> RaytracerResult {
     let mut scene = raytracing::scene::Scene::from_file(path, None).expect("failed to load scene");
     let output = raytracing_cpu::render(
         &mut scene, 
@@ -108,7 +108,7 @@ impl RenderGui for RenderOutputView {
         viewer_window.build(|| {
             ui.text("Pixel peeper");
             let tex_id = self.debug_texture_id.expect("imgui texture not initialized");
-            imgui::Image::new(tex_id, [200.0, 200.0]).build(&ui);
+            imgui::Image::new(tex_id, [200.0, 200.0]).build(ui);
 
             let index = self.gui_state.mouse_pos[1] as usize * self.render_output_size.0 as usize 
                     + self.gui_state.mouse_pos[0] as usize;
@@ -127,7 +127,7 @@ impl RenderGui for RenderOutputView {
             ui.separator();
             ui.text("Render");
 
-            fn path_to_filename(path: &PathBuf) -> &str {
+            fn path_to_filename(path: &Path) -> &str {
                 path.file_name().expect("should not be ..").to_str().expect("contains invalid utf8")
             }
             
@@ -711,7 +711,7 @@ impl RenderOutputView {
 
     fn cast_vec3_slice(slice: &[Vec3]) -> &[u8] {
         let data = slice.as_ptr() as *const u8;
-        let len = slice.len() * std::mem::size_of::<Vec3>();
+        let len = std::mem::size_of_val(slice);
 
         // SAFETY: Vec3 is a POD type, so we can safely cast the slice to a byte slice
         unsafe {

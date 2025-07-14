@@ -460,7 +460,7 @@ impl ApplicationHandler for Application {
                     render_output_view,
                     wgpu_handles, 
                     &wgpu_handles.draw_texture, 
-                    &window
+                    window
                 );
 
                 // blit the rendered output to the swapchain image
@@ -498,7 +498,7 @@ impl ApplicationHandler for Application {
         
         imgui_state.platform.handle_event::<()>(
             imgui_state.context.io_mut(),
-            &window,
+            window,
             &Event::WindowEvent { window_id, event: event.clone() },
         );
     }
