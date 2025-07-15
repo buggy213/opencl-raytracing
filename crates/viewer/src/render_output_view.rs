@@ -1,10 +1,10 @@
-use std::{borrow::Cow, collections::HashMap, path::{Path, PathBuf}, rc::Rc};
+use std::{borrow::Cow, collections::HashMap, path::{Path, PathBuf}};
 
 use bytemuck::NoUninit;
 use raytracing::geometry::Vec3;
-use wgpu::{util::DeviceExt, ColorTargetState};
+use wgpu::{util::DeviceExt, TextureFormat};
 
-use crate::{ImguiInternalState, RenderGui, RequestWindowUpdate, WgpuHandles};
+use crate::{RenderView, WgpuHandles};
 
 // TODO: is it possible to just blit directly to the render target?
 pub(crate) struct RenderOutputView {
@@ -12,8 +12,8 @@ pub(crate) struct RenderOutputView {
     compute: ComputeResources,
     
     // opaque handle for imgui to render debug texture
-    debug_texture_id: Option<imgui::TextureId>,
-    imgui_blitter: Option<wgpu::util::TextureBlitter>,
+    debug_texture_id: imgui::TextureId,
+    imgui_blitter: wgpu::util::TextureBlitter,
 
     gui_state: GuiState,
 
@@ -36,17 +36,10 @@ struct GuiState {
 }
 
 struct GraphicsResources {
-    shader: wgpu::ShaderModule,
-
-    pipeline_layout: wgpu::PipelineLayout,
     pipeline: wgpu::RenderPipeline,
 
     triangle_buffer: wgpu::Buffer,
-
-    texture: Rc<wgpu::Texture>,
-    texture_sampler: wgpu::Sampler,
-
-    bind_group_layout: wgpu::BindGroupLayout,
+    
     bind_group: wgpu::BindGroup,
 }
 
@@ -59,18 +52,13 @@ struct ComputePushConstants {
     mouse_pos: [u32; 2]
 }
 struct ComputeResources {
-    shader: wgpu::ShaderModule,
-
-    compute_pipeline_layout: wgpu::PipelineLayout,
     main_compute_pipeline: wgpu::ComputePipeline,
     debug_compute_pipeline: wgpu::ComputePipeline,
 
     radiance_buffer: wgpu::Buffer,
 
-    texture: Rc<wgpu::Texture>,
     debug_texture: wgpu::Texture,
-
-    compute_bind_group_layout: wgpu::BindGroupLayout,
+    
     compute_bind_group: wgpu::BindGroup,
 }
 
@@ -99,7 +87,44 @@ fn raytrace_scene(path: &Path, params: RaytraceParams) -> RaytracerResult {
     }
 }
 
-impl RenderGui for RenderOutputView {
+impl RenderView for RenderOutputView {
+    fn init(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    
+        render_target_format: wgpu::TextureFormat,
+    
+        // imgui has its own texture management system, which we need to work with
+        imgui_renderer: &mut imgui_wgpu::Renderer
+    ) -> Self 
+        where Self: Sized {
+        RenderOutputView::init(device, queue, render_target_format, imgui_renderer, (800, 600))
+    }
+    
+    fn update(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    
+        io: &imgui::Io,
+    ) {
+        self.update(io, device, queue);
+    }
+    
+    fn render(
+        &mut self, 
+        command_encoder: &mut wgpu::CommandEncoder, 
+        render_texture: &wgpu::TextureView,
+    
+        imgui_textures: &imgui::Textures<imgui_wgpu::Texture>,
+    
+        // in case view requires creating bind group or writing buffer / texture data
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) {
+        RenderOutputView::render(self, command_encoder, imgui_textures, device, queue, render_texture);
+    }
+    
     fn render_imgui(&mut self, ui: &mut imgui::Ui) {
         let viewer_window = ui.window("Viewer")
             .size([300.0, 300.0], imgui::Condition::Always)
@@ -107,7 +132,7 @@ impl RenderGui for RenderOutputView {
             .resizable(false);
         viewer_window.build(|| {
             ui.text("Pixel peeper");
-            let tex_id = self.debug_texture_id.expect("imgui texture not initialized");
+            let tex_id = self.debug_texture_id;
             imgui::Image::new(tex_id, [200.0, 200.0]).build(ui);
 
             let index = self.gui_state.mouse_pos[1] as usize * self.render_output_size.0 as usize 
@@ -174,12 +199,15 @@ fn enumerate_scenes() -> Vec<PathBuf> {
 }
 
 impl RenderOutputView {
-    pub(crate) fn init(
-        wgpu_handles: &WgpuHandles, 
-        targets: &[Option<ColorTargetState>],
+    fn init(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        
+        target_format: TextureFormat,
+
+        imgui_renderer: &mut imgui_wgpu::Renderer,
         size: (u32, u32),
     ) -> RenderOutputView {
-        let WgpuHandles { device, .. } = wgpu_handles;
         
         let extent = wgpu::Extent3d {
             width: size.0,
@@ -201,17 +229,39 @@ impl RenderOutputView {
         };
 
         let texture = device.create_texture(&texture_desc);
-        let texture = Rc::new(texture);
 
-        let render_resources = Self::init_graphics_resources(wgpu_handles, targets, size, Rc::clone(&texture));
-        let compute_resources = Self::init_compute_resources(wgpu_handles, size, Rc::clone(&texture));
+        let render_resources = Self::init_graphics_resources(device, target_format, size, &texture);
+        let compute_resources = Self::init_compute_resources(device, size, &texture);
+
+        // create debug texture
+        let texture_config = imgui_wgpu::TextureConfig {
+            size: wgpu::Extent3d { width: 200, height: 200, depth_or_array_layers: 1 },
+            label: Some("Render Output Debug Texture"),
+            // RENDER_ATTACHMENT needed for blit
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            ..Default::default()
+        };
+          
+        let imgui_debug_texture = imgui_wgpu::Texture::new(
+            &device,
+            &imgui_renderer,
+            texture_config
+        );
+
+        let dst_format = imgui_debug_texture.texture().format();
+        let debug_texture_id = imgui_renderer.textures.insert(imgui_debug_texture);
+        
+        let imgui_blitter = wgpu::util::TextureBlitter::new(
+            device,
+            dst_format
+        );
 
         let me = RenderOutputView {
             graphics: render_resources,
             compute: compute_resources,
 
-            debug_texture_id: None,
-            imgui_blitter: None,
+            debug_texture_id,
+            imgui_blitter,
 
             gui_state: GuiState { 
                 gamma: 2.2, 
@@ -231,22 +281,20 @@ impl RenderOutputView {
             render_output: Self::generate_test_pattern(size),
         };
 
-        me.upload_radiance_buffer(wgpu_handles);
+        me.upload_radiance_buffer(queue);
         me
     }
 
     fn init_graphics_resources(
-        wgpu_handles: &WgpuHandles,
-        targets: &[Option<ColorTargetState>],
+        device: &wgpu::Device,
+        target_format: TextureFormat,
         size: (u32, u32),
 
-        texture: Rc<wgpu::Texture>,
+        texture: &wgpu::Texture,
     ) -> GraphicsResources {
-        let WgpuHandles { device, .. } = wgpu_handles;
-
         let shader_module_descriptor = wgpu::ShaderModuleDescriptor {
             label: Some("Render Output Shaders"),
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("render_output_render.wgsl"))),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/render_output_render.wgsl"))),
         };
 
         let shader = device.create_shader_module(shader_module_descriptor);
@@ -290,6 +338,8 @@ impl RenderOutputView {
             constants: &pipeline_constants,
             zero_initialize_workgroup_memory: false,
         };
+
+        let targets = &[Some(target_format.into())];
         let render_pipeline_descriptor = wgpu::RenderPipelineDescriptor {
             label: Some("Render Output Render Pipeline"),
             layout: Some(&pipeline_layout),
@@ -358,24 +408,18 @@ impl RenderOutputView {
         let bind_group = device.create_bind_group(&bind_group_desc);
 
         GraphicsResources {
-            shader,
-            pipeline_layout,
             pipeline: render_pipeline,
             triangle_buffer,
-            texture,
-            texture_sampler: sampler,
-            bind_group_layout,
             bind_group,
         }
     }
 
     fn init_compute_resources(
-        wgpu_handles: &WgpuHandles,
+        device: &wgpu::Device,
         size: (u32, u32),
 
-        texture: Rc<wgpu::Texture>,
+        texture: &wgpu::Texture,
     ) -> ComputeResources {
-        let WgpuHandles { device, .. } = wgpu_handles;
 
         let debug_texture_descriptor = wgpu::TextureDescriptor {
             label: Some("Render Output Debug Texture"),
@@ -395,7 +439,7 @@ impl RenderOutputView {
 
         let shader_module_descriptor = wgpu::ShaderModuleDescriptor {
             label: Some("Render Output Compute Shaders"),
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("render_output_compute.wgsl"))),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/render_output_compute.wgsl"))),
         };
 
         let shader = device.create_shader_module(shader_module_descriptor);
@@ -513,45 +557,15 @@ impl RenderOutputView {
         let bind_group = device.create_bind_group(&bind_group_desc);
 
         ComputeResources { 
-            shader, 
-            compute_pipeline_layout: pipeline_layout, 
             main_compute_pipeline, 
             debug_compute_pipeline, 
-            radiance_buffer, 
-            texture, 
+            radiance_buffer,
             debug_texture, 
-            compute_bind_group_layout: bind_group_layout, 
             compute_bind_group: bind_group
         }
     }
 
-    pub(crate) fn init_imgui(&mut self, wgpu_handles: &WgpuHandles, imgui_state: &mut ImguiInternalState) {
-        let texture_config = imgui_wgpu::TextureConfig {
-            size: wgpu::Extent3d { width: 200, height: 200, depth_or_array_layers: 1 },
-            label: Some("Render Output Debug Texture"),
-            // RENDER_ATTACHMENT needed for blit
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
-            ..Default::default()
-        };
-          
-        let imgui_debug_texture = imgui_wgpu::Texture::new(
-            &wgpu_handles.device,
-            &imgui_state.renderer,
-            texture_config
-        );
-        let id = imgui_state.renderer.textures.insert(imgui_debug_texture);
-        self.debug_texture_id = Some(id);
-
-        let dst_format = imgui_state.renderer.textures.get(id).unwrap().texture().format();
-
-        self.imgui_blitter = Some(wgpu::util::TextureBlitter::new(
-            &wgpu_handles.device,
-            dst_format
-        ));
-    }
-
-    // For now just piggybacks off of imgui's IO abstraction
-    pub(crate) fn update(&mut self, io: &imgui::Io, wgpu_handles: &WgpuHandles) -> Option<RequestWindowUpdate> {
+    fn update(&mut self, io: &imgui::Io, _device: &wgpu::Device, queue: &wgpu::Queue) {
         if io.mouse_pos != [f32::MAX, f32::MAX] {
             self.gui_state.mouse_pos = [
                 io.mouse_pos[0] as u32,
@@ -569,37 +583,24 @@ impl RenderOutputView {
             let RaytracerResult { radiance, .. } = 
                 raytrace_scene(&self.gui_state.scenes[self.gui_state.selected_scene], params);
             self.render_output = radiance;
-            self.upload_radiance_buffer(wgpu_handles);
-            self.gui_state.render_scene_requested = false;
-            None // TODO: allow render to change size. need to come up with better abstractions to make this less painful
-        }
-        else {
-            None
+            self.upload_radiance_buffer(queue);
+            self.gui_state.render_scene_requested = false;    
         }
     }
 
     // Renders texture onto 2 triangles covering the screen.
-    pub(crate) fn render(
+    fn render(
         &self, 
+        command_encoder: &mut wgpu::CommandEncoder,
         imgui_textures: &imgui::Textures<imgui_wgpu::Texture>,
 
-        wgpu_handles: &WgpuHandles, 
-        render_target: &wgpu::Texture,
-    ) {
-        let WgpuHandles { device, queue, .. } = wgpu_handles;
-
-        let view_descriptor = wgpu::TextureViewDescriptor::default();
-        let view = render_target.create_view(&view_descriptor);
-
-        let encoder_descriptor = wgpu::CommandEncoderDescriptor {
-            label: Some("Render Output Command Encoder"),
-        };
-        let mut encoder = device.create_command_encoder(&encoder_descriptor);
-        self.do_compute(&mut encoder);
-        self.do_graphics(&mut encoder, view);
-        self.prepare_render_imgui(imgui_textures, device, &mut encoder);
-
-        queue.submit(Some(encoder.finish()));
+        device: &wgpu::Device,
+        _queue: &wgpu::Queue, 
+        render_target: &wgpu::TextureView,
+    ) {       
+        self.do_compute(command_encoder);
+        self.do_graphics(command_encoder, render_target);
+        self.prepare_render_imgui(imgui_textures, device, command_encoder);
     }
 
     fn do_compute(&self, encoder: &mut wgpu::CommandEncoder) {
@@ -635,10 +636,10 @@ impl RenderOutputView {
         );
     }
 
-    fn do_graphics(&self, encoder: &mut wgpu::CommandEncoder, view: wgpu::TextureView) {
+    fn do_graphics(&self, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView) {
         let color_attachments = [
             Some(wgpu::RenderPassColorAttachment { 
-                view: &view, 
+                view, 
                 resolve_target: None, 
                 ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store } 
             })
@@ -659,7 +660,7 @@ impl RenderOutputView {
         rpass.draw_indexed(0..6, 0, 0..1);
     }
 
-    pub(crate) fn prepare_render_imgui(
+    fn prepare_render_imgui(
         &self, 
         imgui_textures: &imgui::Textures<imgui_wgpu::Texture>,
 
@@ -667,13 +668,12 @@ impl RenderOutputView {
         encoder: &mut wgpu::CommandEncoder
     ) {
         let src_view = self.compute.debug_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let dst_view = imgui_textures.get(self.debug_texture_id.expect("imgui texture not put in textures map"))
-            .expect("imgui texture not put in textures map")
+        let dst_view = imgui_textures.get(self.debug_texture_id)
+            .expect("imgui texture not in textures map")
             .texture()
             .create_view(&wgpu::TextureViewDescriptor::default());
         
-        
-        let blitter = self.imgui_blitter.as_ref().expect("imgui blitter not initialized"); 
+        let blitter = &self.imgui_blitter; 
         blitter.copy(
             device, 
             encoder,
@@ -682,8 +682,8 @@ impl RenderOutputView {
         );
     }
 
-    pub(crate) fn resize(&mut self, width: u32, height: u32, wgpu_handles: &WgpuHandles) {
-        
+    fn resize(&mut self, width: u32, height: u32, wgpu_handles: &WgpuHandles) {
+        todo!()    
     }
 
     fn generate_test_pattern(size: (u32, u32)) -> Vec<Vec3> {
@@ -701,9 +701,7 @@ impl RenderOutputView {
         test_pattern
     }
 
-    fn upload_radiance_buffer(&self, wgpu_handles: &WgpuHandles) {
-        let WgpuHandles { queue, .. } = wgpu_handles;
-        
+    fn upload_radiance_buffer(&self, queue: &wgpu::Queue) {
         // Write radiance buffer to gpu
         let data: &[u8] = Self::cast_vec3_slice(&self.render_output);
         queue.write_buffer(&self.compute.radiance_buffer, 0, data);

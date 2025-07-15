@@ -1,45 +1,53 @@
-use std::{borrow::Cow, sync::Arc, time::{Duration, Instant}};
+use std::{borrow::Cow, sync::Arc, time::Instant};
 
-use imgui::{Condition, MouseCursor};
+use imgui::MouseCursor;
 use imgui_wgpu::{Renderer, RendererConfig};
 use imgui_winit_support::WinitPlatform;
 use pollster::FutureExt;
-use render_output_view::RenderOutputView;
+use wgpu::TextureFormat;
 use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{Event, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, window::Window};
 
+use crate::{demo_view::DemoApplicationView, render_output_view::RenderOutputView};
+
+mod demo_view;
+// mod scene_view;
 mod render_output_view;
 
+// Wrapper to handle first `resumed` event and initialize Application with created window
+struct ApplicationWrapper {
+    inner: Option<Application>
+}
+
+impl ApplicationWrapper {
+    fn new() -> Self {
+        Self { 
+            inner: None 
+        }
+    }
+}
+
 struct Application {
-    window: Option<Arc<Window>>,
+    window: Arc<Window>,
     width: u32,
     height: u32,
 
-    wgpu_handles: Option<WgpuHandles<'static>>,
+    wgpu_handles: WgpuHandles<'static>,
     
-    imgui_state: Option<ImguiInternalState>,
-    demo_state: DemoApplicationState,
-
-    render_output_view: Option<RenderOutputView>
-}
-
-struct RequestWindowUpdate {
-    resize: Option<(u32, u32)>
+    imgui_state: ImguiInternalState,
+    
+    current_view: Box<dyn RenderView>,
 }
 
 struct WgpuHandles<'window> {
-    instance: wgpu::Instance,
     surface: wgpu::Surface<'window>,
     adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
 
-    blitter: wgpu::util::TextureBlitter,
+    // intermediate draw texture which gets blitted to swapchain image as final step
+    // in rendering a frame
     draw_texture: wgpu::Texture,
-
-    // specific to current rendering pipeline
-    shader: wgpu::ShaderModule,
-    pipeline_layout: wgpu::PipelineLayout,
-    pipeline: wgpu::RenderPipeline,
+    blitter: wgpu::util::TextureBlitter,
 }
 
 struct ImguiInternalState {
@@ -50,68 +58,116 @@ struct ImguiInternalState {
     last_frame: Instant,
 }
 
-trait RenderGui {
-    fn render_imgui(&mut self, ui: &mut imgui::Ui);
+struct WindowRequests {
+    resize: Option<PhysicalSize<u32>>,
+    rename: Option<Cow<'static, str>>
 }
 
-struct DemoApplicationState {
-    demo_open: bool,
-    delta_s: Duration
-}
-
-impl RenderGui for DemoApplicationState {
-    fn render_imgui(&mut self, ui: &mut imgui::Ui) {
-    
-        let window = ui.window("Hello world");
-        window
-            .size([300.0, 100.0], Condition::FirstUseEver)
-            .build(|| {
-                ui.text("Hello world!");
-                ui.text("This...is...imgui-rs on WGPU!");
-                ui.separator();
-                let mouse_pos = ui.io().mouse_pos;
-                ui.text(format!(
-                    "Mouse Position: ({:.1},{:.1})",
-                    mouse_pos[0], mouse_pos[1]
-                ));
-            });
-
-        let delta_s = self.delta_s;
-        let window = ui.window("Hello too");
-        window
-            .size([400.0, 200.0], Condition::FirstUseEver)
-            .position([400.0, 200.0], Condition::FirstUseEver)
-            .build(|| {
-                ui.text(format!("Frametime: {delta_s:?}"));
-            });
-
-        ui.show_demo_window(&mut self.demo_open);
+impl Default for WindowRequests {
+    fn default() -> Self {
+        Self { resize: None, rename: None }
     }
 }
 
-impl Application {
-    fn new() -> Self {
-        Self {
-            window: None,
-            width: 800,
-            height: 600,
+impl WindowRequests {
+    fn apply(&self, window: &Window) {
+        if let Some(new_size) = self.resize {
+            if new_size != window.inner_size() {
+                _ = window.request_inner_size(new_size);
+            }
+        }
 
-            wgpu_handles: None,
-
-            imgui_state: None,
-            demo_state: DemoApplicationState { demo_open: true, delta_s: Duration::ZERO },
-
-            render_output_view: None,
+        if let Some(ref new_name) = self.rename {
+            if *new_name != window.title() {
+                window.set_title(&new_name);
+            }
         }
     }
 }
 
+trait RenderView {
+    fn init(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+
+        render_target_format: TextureFormat,
+
+        // imgui has its own texture management system, which we need to work with
+        imgui_renderer: &mut imgui_wgpu::Renderer
+    ) -> Self 
+        where Self: Sized;
+
+    // For now just piggybacks off of imgui's IO abstraction
+    fn update(
+        &mut self,
+        _device: &wgpu::Device,
+        _queue: &wgpu::Queue,
+
+        _io: &imgui::Io,
+    ) {}
+
+    fn window_requests(&self) -> WindowRequests {
+        Default::default()
+    }
+
+    fn render(
+        &mut self, 
+        command_encoder: &mut wgpu::CommandEncoder, 
+        render_texture: &wgpu::TextureView,
+
+        imgui_textures: &imgui::Textures<imgui_wgpu::Texture>,
+
+        // in case view requires creating bind group or writing buffer / texture data
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    );
+    
+    fn render_imgui(&mut self, ui: &mut imgui::Ui);
+}
+
+
 impl Application {
-    fn init_wgpu(&self) -> WgpuHandles<'static> {
+    fn new(window: Window) -> Self {
+        let window = Arc::new(window);
+        let wgpu_handles = Self::init_wgpu(Arc::clone(&window));
+        let mut imgui_state = Self::init_imgui(&window, &wgpu_handles);
+        
+        let target_format = wgpu_handles.draw_texture.format();
+        
+        let demo_view = DemoApplicationView::init(
+            &wgpu_handles.device,
+            &wgpu_handles.queue,
+            target_format,
+            &mut imgui_state.renderer
+        );
+
+        let render_output_view = RenderOutputView::init(
+            &wgpu_handles.device,
+            &wgpu_handles.queue,
+            target_format,
+            &mut imgui_state.renderer
+        );
+
+        let PhysicalSize { width, height } = window.inner_size();
+
+        Self {
+            window,
+            width,
+            height,
+
+            wgpu_handles,
+
+            imgui_state,
+            
+            current_view: Box::new(render_output_view)
+        }
+    }
+
+    fn init_wgpu(window: Arc<Window>) -> WgpuHandles<'static> {
         let instance_descriptor = wgpu::InstanceDescriptor::from_env_or_default();
         let instance = wgpu::Instance::new(&instance_descriptor);
 
-        let window_clone = Arc::clone(self.window.as_ref().unwrap());
+        let window_clone = Arc::clone(&window);
         let surface = instance.create_surface(window_clone)
             .expect("Unable to create surface");
 
@@ -145,73 +201,30 @@ impl Application {
             .expect("Unable to get device (logical device)");
 
         
-        let shader_module_descriptor = wgpu::ShaderModuleDescriptor {
-            label: Some("Shaders"),
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
-        };
-
-        let shader = device.create_shader_module(shader_module_descriptor);
-
-        let pipeline_layout_descriptor = wgpu::PipelineLayoutDescriptor {
-            label: Some("Pipeline Layout"),
-            bind_group_layouts: &[],
-            push_constant_ranges: &[],
-        };
-        
-        let pipeline_layout = device.create_pipeline_layout(&pipeline_layout_descriptor);
-        
         // arbitrarily choose 1st "allowed" swapchain format
         let swapchain_capabilities = surface.get_capabilities(&adapter);
         let swapchain_format = swapchain_capabilities.formats[0];
         println!("Using swapchain format {swapchain_format:?}");
         
-        let render_targets = [Some(swapchain_format.into())];
-
-        let render_pipeline_descriptor = wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: Default::default(),
-                targets: &render_targets,
-            }), // what does it mean to have no fragment stage (??)
-            multiview: None, // what is a multiview render pass :skull:
-            cache: None,
-        };
-
-        let render_pipeline = device.create_render_pipeline(&render_pipeline_descriptor);
+        let PhysicalSize { width, height } = window.inner_size();
 
         let config = surface
-            .get_default_config(&adapter, self.width, self.height)
+            .get_default_config(&adapter, width, height)
             .expect("Unable to get surface configuration");
 
         surface.configure(&device, &config);
 
         // don't use swapchain directly, draw to texture then blit to swapchain
         let blitter = wgpu::util::TextureBlitter::new(&device, swapchain_format);
-        let draw_texture = Self::make_draw_texture(self.width, self.height, &device);
+        let draw_texture = Self::make_draw_texture(width, height, &device);
 
         WgpuHandles {
-            instance,
             surface,
             adapter,
             device,
             queue,
             blitter,
             draw_texture,
-            shader,
-            pipeline_layout,
-            pipeline: render_pipeline,
         }
     }
 
@@ -238,11 +251,10 @@ impl Application {
         device.create_texture(&texture_desc)
     }
 
-    fn init_imgui(&self) -> ImguiInternalState {
+    fn init_imgui(window: &Window, wgpu_handles: &WgpuHandles) -> ImguiInternalState {
         let mut context = imgui::Context::create();
         let mut platform = imgui_winit_support::WinitPlatform::new(&mut context);
-        let window = self.window.as_ref().expect("window not created yet");
-        let handles = self.wgpu_handles.as_ref().expect("wgpu not initialized");
+        
         platform.attach_window(
             context.io_mut(), 
             window, 
@@ -253,14 +265,14 @@ impl Application {
 
         context.set_ini_filename(None);
 
-        let texture_format = handles.draw_texture.format();
+        let texture_format = wgpu_handles.draw_texture.format();
 
         let renderer_config = RendererConfig {
             texture_format,
             ..Default::default()
         };
 
-        let renderer = Renderer::new(&mut context, &handles.device, &handles.queue, renderer_config);
+        let renderer = Renderer::new(&mut context, &wgpu_handles.device, &wgpu_handles.queue, renderer_config);
         
         let last_frame = Instant::now();
         let last_cursor = None;
@@ -274,9 +286,11 @@ impl Application {
         }
         
     }
+}
 
+impl Application {
     fn resize(&mut self, height: u32, width: u32) {
-        let wgpu_handles = self.wgpu_handles.as_mut().expect("wgpu not initialized");
+        let wgpu_handles = &mut self.wgpu_handles;
         let config = wgpu_handles.surface.get_default_config(&wgpu_handles.adapter, width, height).expect("surface not supported");
         
         // surface width / height must be nonzero
@@ -290,13 +304,10 @@ impl Application {
     }
 
     fn render_imgui(
-        imgui_state: &mut ImguiInternalState, 
-        render_gui: &mut dyn RenderGui,
-        wgpu_handles: &WgpuHandles, 
-        render_target: &wgpu::Texture, 
-        window: &Window
+        &mut self,
     ) {
         let now = Instant::now();
+        let imgui_state = &mut self.imgui_state;
         imgui_state
             .context
             .io_mut()
@@ -305,26 +316,27 @@ impl Application {
 
         imgui_state
             .platform
-            .prepare_frame(imgui_state.context.io_mut(), window)
+            .prepare_frame(imgui_state.context.io_mut(), &self.window)
             .expect("Failed to prepare frame");
         
         let ui = imgui_state.context.new_frame();
-        render_gui.render_imgui(ui);
+        self.current_view.render_imgui(ui);
 
         let WgpuHandles { 
             device, queue, ..
-        } = wgpu_handles;
+        } = &self.wgpu_handles;
 
         let mut encoder: wgpu::CommandEncoder = device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         if imgui_state.last_cursor != ui.mouse_cursor() {
             imgui_state.last_cursor = ui.mouse_cursor();
-            imgui_state.platform.prepare_render(ui, window);
+            imgui_state.platform.prepare_render(ui, &self.window);
         }
 
-        let view = render_target
+        let view = self.wgpu_handles.draw_texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -354,68 +366,64 @@ impl Application {
         queue.submit(Some(encoder.finish()));
     }
 
-    fn render(wgpu_handles: &WgpuHandles, render_target: &wgpu::Texture) {
-        let WgpuHandles { 
-            device, 
-            queue, 
-            pipeline,
-            ..
-        } = wgpu_handles;
+    fn render(
+        &mut self,
+    ) {
+        let view_descriptor = wgpu::TextureViewDescriptor::default();
+        let view = self.wgpu_handles.draw_texture.create_view(&view_descriptor);
 
-        let frame_view_descriptor = wgpu::TextureViewDescriptor::default();
-        let view = render_target.create_view(&frame_view_descriptor);
+        let WgpuHandles { device, queue, .. } = &self.wgpu_handles;
 
         let encoder_descriptor = wgpu::CommandEncoderDescriptor {
-            label: Some("Command Encoder"),
+            label: Some("Render Output Command Encoder"),
         };
-        let mut encoder = device.create_command_encoder(&encoder_descriptor);
-        {
-            let color_attachments = [
-                Some(wgpu::RenderPassColorAttachment { 
-                    view: &view, 
-                    resolve_target: None, 
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::GREEN), store: wgpu::StoreOp::Store } 
-                })
-            ];
-            let rpass_descriptor = wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &color_attachments,
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            };
-            let mut rpass = encoder.begin_render_pass(&rpass_descriptor);
-            rpass.set_pipeline(pipeline);
-            rpass.draw(0..3, 0..1)
-            
-        }
 
+        let mut encoder = device.create_command_encoder(&encoder_descriptor);
+        
+        self.current_view.render(
+            &mut encoder, 
+            &view, 
+            &mut self.imgui_state.renderer.textures, 
+            device, 
+            queue);
+        
         queue.submit(Some(encoder.finish()));
+    }
+
+    fn update(&mut self) {
+        self.current_view.update(
+            &self.wgpu_handles.device, 
+            &self.wgpu_handles.queue, 
+            self.imgui_state.context.io()
+        );
+    }
+
+    fn window_requests(&self) {
+        let requests = self.current_view.window_requests();
+        requests.apply(&self.window);
     }
 }
 
-impl ApplicationHandler for Application {
+impl ApplicationHandler for ApplicationWrapper {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.window.is_none() {
+        if self.inner.is_none() {
+            let default_height = 600;
+            let default_width = 800;
+
             let window_attributes = Window::default_attributes()
                 .with_title("Viewer")
-                .with_inner_size(PhysicalSize::new(self.width, self.height));
-            let window = event_loop.create_window(window_attributes).expect("Unable to create window");
-            self.window = Some(Arc::new(window));
+                .with_inner_size(PhysicalSize::new(default_width, default_height));
 
-            self.wgpu_handles = Some(self.init_wgpu());
-            self.imgui_state = Some(self.init_imgui());
 
-            let wgpu_handles = self.wgpu_handles.as_ref().unwrap();
-            let targets: &[Option<wgpu::ColorTargetState>] = &[Some(wgpu_handles.draw_texture.format().into())];
-            let size = (self.width, self.height);
+            let window = event_loop.create_window(window_attributes)
+                .expect("failed to create window");
 
-            let mut render_output_view = RenderOutputView::init(wgpu_handles, targets, size);
-            render_output_view.init_imgui(wgpu_handles, self.imgui_state.as_mut().unwrap());
+            let application = Application::new(window);
 
-            self.render_output_view = Some(render_output_view)
-            
+            self.inner = Some(application);
         }
+
+        self.inner.as_mut().unwrap().resumed(event_loop);
     }
 
     fn window_event(
@@ -424,63 +432,56 @@ impl ApplicationHandler for Application {
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
+        self.inner.as_mut().unwrap().window_event(event_loop, window_id, event);
+    }
+}
+
+impl ApplicationHandler for Application {
+    fn resumed(&mut self, _event_loop: &ActiveEventLoop) {
+        
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: winit::window::WindowId,
+        event: WindowEvent,
+    ) {
         match event {
             WindowEvent::CloseRequested => {
                 println!("Window close requested");
                 
-                // prevent segfault by tearing down wgpu first, then closing window
-                let wgpu_handles = std::mem::take(&mut self.wgpu_handles);
-                drop(wgpu_handles);
-
                 event_loop.exit();
             }
             
             WindowEvent::RedrawRequested if !event_loop.exiting() => {
-                let wgpu_handles = self.wgpu_handles.as_ref().unwrap();
-                let imgui_state = self.imgui_state.as_mut().unwrap();
-                let frame = wgpu_handles.surface.get_current_texture()
+                let frame = self.wgpu_handles.surface.get_current_texture()
                     .expect("Unable to get next swapchain image");
-                let window = self.window.as_ref().unwrap();
                 
-                // Self::render(wgpu_handles, &frame);
-
-                let render_output_view = self.render_output_view.as_mut().unwrap();
-                render_output_view.update(imgui_state.context.io(), wgpu_handles);
-                render_output_view.render(
-                    &imgui_state.renderer.textures,
-                    wgpu_handles, 
-                    &wgpu_handles.draw_texture
-                );
-
-                let now = Instant::now();
-                self.demo_state.delta_s = now - imgui_state.last_frame;
-
-                Self::render_imgui(
-                    imgui_state, 
-                    render_output_view,
-                    wgpu_handles, 
-                    &wgpu_handles.draw_texture, 
-                    window
-                );
+                self.update();
+                self.window_requests();
+                self.render();
+                self.render_imgui();
 
                 // blit the rendered output to the swapchain image
-                let mut blit_encoder = wgpu_handles.device.create_command_encoder(
+                let mut blit_encoder = self.wgpu_handles.device.create_command_encoder(
                     &wgpu::CommandEncoderDescriptor { label: Some("Blit Encoder") }
                 );
-                let source_view = wgpu_handles.draw_texture.create_view(&wgpu::TextureViewDescriptor::default());
+                let source_view = self.wgpu_handles.draw_texture.create_view(&wgpu::TextureViewDescriptor::default());
                 let dest_view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-                wgpu_handles.blitter.copy(
-                    &wgpu_handles.device, 
+
+                self.wgpu_handles.blitter.copy(
+                    &self.wgpu_handles.device, 
                     &mut blit_encoder, 
                     &source_view, 
                     &dest_view
                 );
-                wgpu_handles.queue.submit(Some(blit_encoder.finish()));
+                self.wgpu_handles.queue.submit(Some(blit_encoder.finish()));
 
                 frame.present();
 
                 // request redraw for the next frame
-                self.window.as_ref().unwrap().request_redraw();
+                self.window.request_redraw();
             }
             
             WindowEvent::Resized(new_size) => {
@@ -493,12 +494,11 @@ impl ApplicationHandler for Application {
             _ => ()
         }
 
-        let imgui_state = self.imgui_state.as_mut().unwrap();
-        let window = self.window.as_ref().unwrap();
+        let imgui_state = &mut self.imgui_state;
         
         imgui_state.platform.handle_event::<()>(
             imgui_state.context.io_mut(),
-            window,
+            &self.window,
             &Event::WindowEvent { window_id, event: event.clone() },
         );
     }
@@ -506,7 +506,7 @@ impl ApplicationHandler for Application {
 
 fn main() {
     let event_loop = EventLoop::new().expect("Unable to create event loop");
-    let mut app = Application::new();
+    let mut app = ApplicationWrapper::new();
     
     event_loop.run_app(&mut app).expect("Unable to run application");
 }
