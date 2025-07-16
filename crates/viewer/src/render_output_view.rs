@@ -246,16 +246,16 @@ impl RenderOutputView {
     ) -> wgpu::BindGroup {
         let bind_group_desc = wgpu::BindGroupDescriptor {
             label: Some("Render Output Bind Group"),
-            layout: &bind_group_layout,
+            layout: bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&texture_view),
+                    resource: wgpu::BindingResource::TextureView(texture_view),
                 },
 
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
+                    resource: wgpu::BindingResource::Sampler(sampler),
                 }
             ],
         };
@@ -266,23 +266,23 @@ impl RenderOutputView {
     fn make_compute_bind_group(device: &wgpu::Device, bind_group_layout: &wgpu::BindGroupLayout, radiance_buffer: &wgpu::Buffer, texture_view: &wgpu::TextureView, debug_texture_view: &wgpu::TextureView) -> wgpu::BindGroup {
         let bind_group_desc = wgpu::BindGroupDescriptor {
             label: Some("Render Output Compute Bind Group"),
-            layout: &bind_group_layout,
+            layout: bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &radiance_buffer,
+                        buffer: radiance_buffer,
                         offset: 0,
                         size: None,
                     }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&texture_view),
+                    resource: wgpu::BindingResource::TextureView(texture_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&debug_texture_view),
+                    resource: wgpu::BindingResource::TextureView(debug_texture_view),
                 }
             ],
         };
@@ -315,8 +315,8 @@ impl RenderOutputView {
         };
           
         let imgui_debug_texture = imgui_wgpu::Texture::new(
-            &device,
-            &imgui_renderer,
+            device,
+            imgui_renderer,
             texture_config
         );
 
@@ -359,7 +359,7 @@ impl RenderOutputView {
             resizable: Some(false),
             ..Default::default()
         };
-        
+
         (me, not_resizable)
     }
 

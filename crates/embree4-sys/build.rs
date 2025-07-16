@@ -24,7 +24,7 @@ fn main() {
                 .filter_map(|res| res.ok())
                 .map(|entry| entry.path())
                 .filter_map(|path| {
-                    eprintln!("file path: {:?}", path);
+                    eprintln!("file path: {path:?}");
                     eprintln!("file ext: {:?}", path.extension().and_then(|s| s.to_str()));
                     if path.extension().and_then(|s| s.to_str()) == Some("dll") {
                         Some(path)
@@ -52,7 +52,7 @@ fn main() {
         // the resulting bindings.
         let embree_include_dir = embree_dir.join("include");
         let include_path = format!("-I{}", embree_include_dir.display());
-        eprintln!("include path for bindgen: {}", include_path);
+        eprintln!("include path for bindgen: {include_path}");
         let bindings = bindgen::Builder::default()
             // The input header we would like to generate
             // bindings for.

@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use super::{Vec3, vec3::Vec3u, Transform};
 
 #[derive(Debug)]

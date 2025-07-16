@@ -9,10 +9,10 @@ pub struct Matrix4x4 {
 }
 
 // idk if this is sound at all lmao
-impl <'a> Into<&'a [f32]> for &'a Matrix4x4 {
-    fn into(self) -> &'a [f32] {
+impl <'a> From<&'a Matrix4x4> for &'a [f32] {
+    fn from(val: &'a Matrix4x4) -> Self {
         unsafe {
-            from_raw_parts(self.data.as_ptr() as *const f32, 16)
+            from_raw_parts(val.data.as_ptr() as *const f32, 16)
         }
     }
 }
@@ -21,13 +21,13 @@ impl Index<usize> for Matrix4x4 {
     type Output = f32;
 
     fn index(&self, index: usize) -> &Self::Output {
-        return &self.data[index / 4][index % 4];
+        &self.data[index / 4][index % 4]
     }
 }
 
 impl IndexMut<usize> for Matrix4x4 {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        return &mut self.data[index / 4][index % 4];
+        &mut self.data[index / 4][index % 4]
     }
 }
 

@@ -63,9 +63,7 @@ impl Transform {
     }
 
     pub fn invert_inplace(&mut self) {
-        let tmp = self.inverse;
-        self.inverse = self.forward;
-        self.forward = tmp;
+        std::mem::swap(&mut self.forward, &mut self.inverse);
     }
 
     pub fn invert(&self) -> Transform {

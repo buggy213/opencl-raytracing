@@ -82,7 +82,7 @@ impl RenderView for DemoApplicationView {
     ) {
         let color_attachments = [
             Some(wgpu::RenderPassColorAttachment { 
-                view: &render_texture, 
+                view: render_texture, 
                 resolve_target: None, 
                 ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::GREEN), store: wgpu::StoreOp::Store } 
             })

@@ -74,7 +74,7 @@ impl WindowRequests {
 
         if let Some(ref new_name) = self.rename {
             if *new_name != window.title() {
-                window.set_title(&new_name);
+                window.set_title(new_name);
             }
         }
 
@@ -378,7 +378,7 @@ impl Application {
         self.current_view.render(
             &mut encoder, 
             &view, 
-            &mut self.imgui_state.renderer.textures, 
+            &self.imgui_state.renderer.textures, 
             device, 
             queue);
         

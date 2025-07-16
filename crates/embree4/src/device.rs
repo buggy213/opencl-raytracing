@@ -1,8 +1,7 @@
-use std::{ptr::{self, null_mut}, ffi::{c_void, CStr}};
+use std::{ptr::{self, null_mut}, ffi::CStr};
 
 use embree4_sys::{rtcGetDeviceError, rtcNewDevice, rtcReleaseDevice, rtcSetDeviceErrorFunction, RTCDevice, RTCError};
 
-use crate::*;
 
 
 
@@ -12,16 +11,17 @@ pub struct Device {
 
 impl Device {
     extern "C" fn print_errors(
-        userPtr: *mut core::ffi::c_void,
+        #[allow(non_snake_case, reason = "ffi")]
+        _userPtr: *mut core::ffi::c_void,
         code: RTCError,
-        error_str: *const core::ffi::c_char
+        str: *const core::ffi::c_char
     ) {
         let error_cstr;
         unsafe {
-            error_cstr = CStr::from_ptr(error_str);
+            error_cstr = CStr::from_ptr(str);
         }
         eprintln!("{}", Device::error_from_code(code));
-        eprintln!("{:?}", error_cstr);
+        eprintln!("{error_cstr:?}", );
     }
 
     pub fn new() -> Device {
@@ -36,12 +36,12 @@ impl Device {
 
     fn error_from_code(error_code: RTCError) -> &'static str {
         match error_code {
-            RTCError_RTC_ERROR_INVALID_OPERATION => "invalid operation",
-            RTCError_RTC_ERROR_CANCELLED => "operation canceled",
-            RTCError_RTC_ERROR_INVALID_ARGUMENT => "invalid argument",
-            RTCError_RTC_ERROR_OUT_OF_MEMORY => "out of memory",
-            RTCError_RTC_ERROR_UNSUPPORTED_CPU => "unsupported cpu",
-            RTCError_RTC_ERROR_UNKNOWN => "unknown error",
+            embree4_sys::RTCError_RTC_ERROR_INVALID_OPERATION => "invalid operation",
+            embree4_sys::RTCError_RTC_ERROR_CANCELLED => "operation canceled",
+            embree4_sys::RTCError_RTC_ERROR_INVALID_ARGUMENT => "invalid argument",
+            embree4_sys::RTCError_RTC_ERROR_OUT_OF_MEMORY => "out of memory",
+            embree4_sys::RTCError_RTC_ERROR_UNSUPPORTED_CPU => "unsupported cpu",
+            embree4_sys::RTCError_RTC_ERROR_UNKNOWN => "unknown error",
             _ => "unknown error"
         }
     }

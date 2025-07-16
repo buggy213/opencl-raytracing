@@ -17,7 +17,6 @@ type CreateNodeFunction<NodeType> = fn(u32) -> NodeType;
 type CreateLeafFunction<NodeType> = fn(&[RTCBuildPrimitive]) -> NodeType;
 type SetNodeBoundsFunction<NodeType> = fn(&mut NodeType, &[&RTCBounds]);
 type SetNodeChildrenFunction<NodeType> = fn(&mut NodeType, &[&NodeType]);
-type BuildProgressFunction = fn(f64);
 
 // NodeType shouldn't be a reference
 pub struct BVHBuildArguments<NodeType: 'static> {
@@ -50,6 +49,7 @@ impl<NodeType> BVHCallbacks<NodeType> {
     }
 }
 
+#[allow(non_snake_case, reason = "ffi")]
 extern "C" fn unsafe_create_node<NodeType: Debug>(
     allocator: RTCThreadLocalAllocator,
     childCount: c_uint,
@@ -70,9 +70,10 @@ extern "C" fn unsafe_create_node<NodeType: Debug>(
         node.write(new_node);
     }
 
-    node as *mut NodeType as *mut c_void
+    node as *mut c_void
 }
 
+#[allow(non_snake_case, reason = "ffi")]
 extern "C" fn unsafe_create_leaf<NodeType: Debug>(
     allocator: RTCThreadLocalAllocator,
     primitives: *const RTCBuildPrimitive,
@@ -95,9 +96,10 @@ extern "C" fn unsafe_create_leaf<NodeType: Debug>(
         leaf.write(new_leaf);
     }
 
-    leaf as *mut NodeType as *mut c_void
+    leaf as *mut c_void
 }
 
+#[allow(non_snake_case, reason = "ffi")]
 extern "C" fn unsafe_set_node_bounds<NodeType: Debug>(
     nodePtr: *mut c_void,
     bounds: *mut *const RTCBounds,
@@ -119,6 +121,7 @@ extern "C" fn unsafe_set_node_bounds<NodeType: Debug>(
     (callbacks.set_node_bounds)(node, bounds);
 }
 
+#[allow(non_snake_case, reason = "ffi")]
 extern "C" fn unsafe_set_node_children<NodeType: Debug>(
     nodePtr: *mut c_void,
     children: *mut *mut c_void,
@@ -190,15 +193,15 @@ impl<NodeType: Debug> BVHBuildArguments<NodeType> {
                 max_branching_factor, 
                 callbacks: Some(callbacks) 
             } if !primitives.is_null() => {
-                let rtc_build_args = RTCBuildArguments {
+                RTCBuildArguments {
                     byteSize: size_of::<RTCBuildArguments>(),
                     buildQuality: RTC_BUILD_QUALITY_MEDIUM,
                     buildFlags: RTC_BUILD_FLAG_NONE,
-                    maxBranchingFactor: max_branching_factor.unwrap_or_else(|| 2),
+                    maxBranchingFactor: max_branching_factor.unwrap_or(2),
                     maxDepth: 32,
                     sahBlockSize: 1,
                     minLeafSize: 1,
-                    maxLeafSize: max_leaf_size.unwrap_or_else(|| RTCBuildConstants_RTC_BUILD_MAX_PRIMITIVES_PER_LEAF as u32),
+                    maxLeafSize: max_leaf_size.unwrap_or(RTCBuildConstants_RTC_BUILD_MAX_PRIMITIVES_PER_LEAF),
                     traversalCost: 1.0,
                     intersectionCost: 1.0,
                     bvh: bvh.handle,
@@ -212,9 +215,7 @@ impl<NodeType: Debug> BVHBuildArguments<NodeType> {
                     splitPrimitive: None,
                     buildProgress: None,
                     userPtr: callbacks as *const BVHCallbacks<NodeType> as *mut c_void
-                };
-
-                rtc_build_args
+                }
             }
             _ => {
                 todo!("Internal error: BVH builder missing fields. TODO: return error");

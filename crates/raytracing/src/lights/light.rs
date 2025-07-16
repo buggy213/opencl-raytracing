@@ -1,4 +1,4 @@
-use crate::geometry::{Mesh, Vec3};
+use crate::geometry::Vec3;
 
 #[derive(Debug)]
 #[repr(C)]
