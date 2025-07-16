@@ -57,15 +57,11 @@ struct ImguiInternalState {
     last_frame: Instant,
 }
 
+#[derive(Default)]
 struct WindowRequests {
     resize: Option<LogicalSize<f64>>,
-    rename: Option<Cow<'static, str>>
-}
-
-impl Default for WindowRequests {
-    fn default() -> Self {
-        Self { resize: None, rename: None }
-    }
+    rename: Option<Cow<'static, str>>,
+    resizable: Option<bool>,
 }
 
 impl WindowRequests {
@@ -81,6 +77,12 @@ impl WindowRequests {
                 window.set_title(&new_name);
             }
         }
+
+        if let Some(resizable) = self.resizable {
+            if resizable != window.is_resizable() {
+                window.set_resizable(resizable);
+            }
+        }
     }
 }
 
@@ -93,7 +95,7 @@ trait RenderView {
 
         // imgui has its own texture management system, which we need to work with
         imgui_renderer: &mut imgui_wgpu::Renderer
-    ) -> Self 
+    ) -> (Self, WindowRequests) 
         where Self: Sized;
 
     // For now just piggybacks off of imgui's IO abstraction
@@ -103,9 +105,7 @@ trait RenderView {
         _queue: &wgpu::Queue,
 
         _io: &imgui::Io,
-    ) {}
-
-    fn window_requests(&self) -> WindowRequests {
+    ) -> WindowRequests {
         Default::default()
     }
 
@@ -140,7 +140,7 @@ impl Application {
             &mut imgui_state.renderer
         );
 
-        let render_output_view = RenderOutputView::init(
+        let (render_output_view, initial_requests) = RenderOutputView::init(
             &wgpu_handles.device,
             &wgpu_handles.queue,
             target_format,
@@ -148,7 +148,8 @@ impl Application {
         );
         
         let logical_size = window.inner_size().to_logical(window.scale_factor());
-        
+        initial_requests.apply(&window);
+
         Self {
             window,
             logical_size,
@@ -384,25 +385,24 @@ impl Application {
         queue.submit(Some(encoder.finish()));
     }
 
-    fn update(&mut self) {
+    fn update(&mut self) -> WindowRequests {
         self.current_view.update(
             &self.wgpu_handles.device, 
             &self.wgpu_handles.queue, 
             self.imgui_state.context.io()
-        );
+        )
     }
 
-    fn window_requests(&self) {
-        let requests = self.current_view.window_requests();
-        requests.apply(&self.window);
+    fn handle_window_requests(&self, window_requests: &WindowRequests) {
+        window_requests.apply(&self.window);
     }
 }
 
 impl ApplicationHandler for ApplicationWrapper {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.inner.is_none() {
-            let default_height = 600;
-            let default_width = 800;
+            let default_height = 1000;
+            let default_width = 1000;
 
             let window_attributes = Window::default_attributes()
                 .with_title("Viewer")
@@ -452,8 +452,8 @@ impl ApplicationHandler for Application {
                 let frame = self.wgpu_handles.surface.get_current_texture()
                     .expect("Unable to get next swapchain image");
                 
-                self.update();
-                self.window_requests();
+                let window_requests = self.update();
+                self.handle_window_requests(&window_requests);
                 self.render();
                 self.render_imgui();
                 

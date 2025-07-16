@@ -1,6 +1,6 @@
 use std::{borrow::Cow, time::{Duration, Instant}};
 
-use crate::RenderView;
+use crate::{RenderView, WindowRequests};
 
 pub(crate) struct DemoApplicationView {
     pipeline: wgpu::RenderPipeline,
@@ -18,7 +18,7 @@ impl RenderView for DemoApplicationView {
 
         render_target_format: wgpu::TextureFormat,
         _imgui_textures: &mut imgui_wgpu::Renderer,
-    ) -> Self 
+    ) -> (Self, WindowRequests)
         where Self: Sized {
         let shader_module_descriptor = wgpu::ShaderModuleDescriptor {
             label: Some("Shaders"),
@@ -60,12 +60,14 @@ impl RenderView for DemoApplicationView {
 
         let render_pipeline = device.create_render_pipeline(&render_pipeline_descriptor);
 
-        Self {
+        let me = Self {
             pipeline: render_pipeline,
             demo_open: true,
             delta_s: Duration::new(0, 0),
             last_update: Instant::now(),
-        }
+        };
+
+        (me, WindowRequests::default())
     }
     
     fn render(

@@ -1,13 +1,16 @@
-use std::{borrow::Cow, collections::HashMap, path::{Path, PathBuf}};
+use std::{borrow::Cow, path::{Path, PathBuf}};
 
 use bytemuck::NoUninit;
 use raytracing::geometry::Vec3;
 use wgpu::{util::DeviceExt, TextureFormat};
+use winit::dpi::LogicalSize;
 
-use crate::RenderView;
+use crate::{RenderView, WindowRequests};
 
 // TODO: is it possible to just blit directly to the render target?
 pub(crate) struct RenderOutputView {
+    // shared texture
+    texture: wgpu::Texture,
     graphics: GraphicsResources,
     compute: ComputeResources,
     
@@ -17,7 +20,7 @@ pub(crate) struct RenderOutputView {
 
     gui_state: GuiState,
 
-    render_output_size: (u32, u32),
+    render_output_size: LogicalSize<u32>,
     render_output: Vec<Vec3>
 }
 
@@ -39,7 +42,9 @@ struct GraphicsResources {
     pipeline: wgpu::RenderPipeline,
 
     triangle_buffer: wgpu::Buffer,
-    
+    sampler: wgpu::Sampler,
+
+    bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
 }
 
@@ -56,10 +61,10 @@ struct ComputeResources {
     debug_compute_pipeline: wgpu::ComputePipeline,
 
     radiance_buffer: wgpu::Buffer,
-
     debug_texture: wgpu::Texture,
     
-    compute_bind_group: wgpu::BindGroup,
+    bind_group_layout: wgpu::BindGroupLayout,
+    bind_group: wgpu::BindGroup,
 }
 
 #[derive(Clone, Copy)]
@@ -96,7 +101,7 @@ impl RenderView for RenderOutputView {
     
         // imgui has its own texture management system, which we need to work with
         imgui_renderer: &mut imgui_wgpu::Renderer
-    ) -> Self 
+    ) -> (Self, WindowRequests)
         where Self: Sized {
         RenderOutputView::init(device, queue, render_target_format, imgui_renderer, (800, 600))
     }
@@ -107,8 +112,8 @@ impl RenderView for RenderOutputView {
         queue: &wgpu::Queue,
     
         io: &imgui::Io,
-    ) {
-        self.update(io, device, queue);
+    ) -> WindowRequests {
+        self.update(io, device, queue)
     }
     
     fn render(
@@ -135,7 +140,7 @@ impl RenderView for RenderOutputView {
             let tex_id = self.debug_texture_id;
             imgui::Image::new(tex_id, [200.0, 200.0]).build(ui);
 
-            let index = self.gui_state.mouse_pos[1] as usize * self.render_output_size.0 as usize 
+            let index = self.gui_state.mouse_pos[1] as usize * self.render_output_size.width as usize 
                     + self.gui_state.mouse_pos[0] as usize;
             let radiance_value = self.render_output[index];
 
@@ -199,16 +204,7 @@ fn enumerate_scenes() -> Vec<PathBuf> {
 }
 
 impl RenderOutputView {
-    fn init(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        
-        target_format: TextureFormat,
-
-        imgui_renderer: &mut imgui_wgpu::Renderer,
-        size: (u32, u32),
-    ) -> RenderOutputView {
-        
+    fn make_render_output_texture(device: &wgpu::Device, size: (u32, u32)) -> wgpu::Texture {
         let extent = wgpu::Extent3d {
             width: size.0,
             height: size.1,
@@ -228,9 +224,85 @@ impl RenderOutputView {
             view_formats: &[wgpu::TextureFormat::Rgba32Float] 
         };
 
-        let texture = device.create_texture(&texture_desc);
+        device.create_texture(&texture_desc)
+    }
 
-        let render_resources = Self::init_graphics_resources(device, target_format, size, &texture);
+    fn make_radiance_buffer(device: &wgpu::Device, size: (u32, u32)) -> wgpu::Buffer {
+        let radiance_buffer_desc = wgpu::BufferDescriptor {
+            label: Some("Render Output Radiance Buffer"),
+            size: size.0 as u64 * size.1 as u64 * size_of::<Vec3>() as u64, // 3 channels, float32
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        };
+
+        device.create_buffer(&radiance_buffer_desc)
+    }
+
+    fn make_graphics_bind_group(
+        device: &wgpu::Device, 
+        bind_group_layout: &wgpu::BindGroupLayout, 
+        texture_view: &wgpu::TextureView, 
+        sampler: &wgpu::Sampler
+    ) -> wgpu::BindGroup {
+        let bind_group_desc = wgpu::BindGroupDescriptor {
+            label: Some("Render Output Bind Group"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&texture_view),
+                },
+
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                }
+            ],
+        };
+
+        device.create_bind_group(&bind_group_desc)
+    }
+
+    fn make_compute_bind_group(device: &wgpu::Device, bind_group_layout: &wgpu::BindGroupLayout, radiance_buffer: &wgpu::Buffer, texture_view: &wgpu::TextureView, debug_texture_view: &wgpu::TextureView) -> wgpu::BindGroup {
+        let bind_group_desc = wgpu::BindGroupDescriptor {
+            label: Some("Render Output Compute Bind Group"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                        buffer: &radiance_buffer,
+                        offset: 0,
+                        size: None,
+                    }),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&debug_texture_view),
+                }
+            ],
+        };
+        
+        device.create_bind_group(&bind_group_desc)
+    }
+
+    fn init(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        
+        target_format: TextureFormat,
+
+        imgui_renderer: &mut imgui_wgpu::Renderer,
+        size: (u32, u32),
+    ) -> (RenderOutputView, WindowRequests) {
+        
+        let texture = Self::make_render_output_texture(device, size);
+
+        let render_resources = Self::init_graphics_resources(device, target_format, &texture);
         let compute_resources = Self::init_compute_resources(device, size, &texture);
 
         // create debug texture
@@ -257,6 +329,7 @@ impl RenderOutputView {
         );
 
         let me = RenderOutputView {
+            texture,
             graphics: render_resources,
             compute: compute_resources,
 
@@ -277,18 +350,22 @@ impl RenderOutputView {
             },
             
 
-            render_output_size: size, 
+            render_output_size: size.into(), 
             render_output: Self::generate_test_pattern(size),
         };
 
         me.upload_radiance_buffer(queue);
-        me
+        let not_resizable = WindowRequests {
+            resizable: Some(false),
+            ..Default::default()
+        };
+        
+        (me, not_resizable)
     }
 
     fn init_graphics_resources(
         device: &wgpu::Device,
         target_format: TextureFormat,
-        size: (u32, u32),
 
         texture: &wgpu::Texture,
     ) -> GraphicsResources {
@@ -385,27 +462,14 @@ impl RenderOutputView {
         };
         let sampler = device.create_sampler(&sampler_desc);
 
-        let bind_group_desc = wgpu::BindGroupDescriptor {
-            label: Some("Render Output Bind Group"),
-            layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&texture_view),
-                },
-
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                }
-            ],
-        };
-
-        let bind_group = device.create_bind_group(&bind_group_desc);
+        let bind_group = Self::make_graphics_bind_group(device, &bind_group_layout, &texture_view, &sampler);
 
         GraphicsResources {
             pipeline: render_pipeline,
             triangle_buffer,
+            sampler,
+
+            bind_group_layout,
             bind_group,
         }
     }
@@ -512,53 +576,25 @@ impl RenderOutputView {
         let main_compute_pipeline = device.create_compute_pipeline(&main_compute_pipeline_descriptor);
         let debug_compute_pipeline = device.create_compute_pipeline(&debug_compute_pipeline_descriptor);
 
-        let radiance_buffer_desc = wgpu::BufferDescriptor {
-            label: Some("Render Output Radiance Buffer"),
-            size: size.0 as u64 * size.1 as u64 * size_of::<Vec3>() as u64, // 3 channels, float32
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        };
-
-        let radiance_buffer = device.create_buffer(&radiance_buffer_desc);
+        let radiance_buffer = Self::make_radiance_buffer(device, size);
 
         let texture_view_desc = wgpu::TextureViewDescriptor::default();
         let texture_view = texture.create_view(&texture_view_desc);
         let debug_texture_view = debug_texture.create_view(&texture_view_desc);
 
-        let bind_group_desc = wgpu::BindGroupDescriptor {
-            label: Some("Render Output Compute Bind Group"),
-            layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &radiance_buffer,
-                        offset: 0,
-                        size: None,
-                    }),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&debug_texture_view),
-                }
-            ],
-        };
-        let bind_group = device.create_bind_group(&bind_group_desc);
+        let bind_group = Self::make_compute_bind_group(device, &bind_group_layout, &radiance_buffer, &texture_view, &debug_texture_view);
 
         ComputeResources { 
             main_compute_pipeline, 
             debug_compute_pipeline, 
             radiance_buffer,
             debug_texture, 
-            compute_bind_group: bind_group
+            bind_group_layout,
+            bind_group
         }
     }
 
-    fn update(&mut self, io: &imgui::Io, _device: &wgpu::Device, queue: &wgpu::Queue) {
+    fn update(&mut self, io: &imgui::Io, device: &wgpu::Device, queue: &wgpu::Queue) -> WindowRequests {
         if io.mouse_pos != [f32::MAX, f32::MAX] {
             self.gui_state.mouse_pos = [
                 io.mouse_pos[0] as u32,
@@ -573,12 +609,38 @@ impl RenderOutputView {
                 spp: self.gui_state.spp,
                 light_samples: self.gui_state.light_samples,
             };
-            let RaytracerResult { radiance, .. } = 
+            let RaytracerResult { radiance, raster_size } = 
                 raytrace_scene(&self.gui_state.scenes[self.gui_state.selected_scene], params);
             self.render_output = radiance;
+
+            self.resize(raster_size.into(), device);
             self.upload_radiance_buffer(queue);
+            
             self.gui_state.render_scene_requested = false;
+            
+            let raster_size: LogicalSize<u32> = raster_size.into();
+            return WindowRequests {
+                resize: Some(raster_size.cast()),
+                rename: None,
+                resizable: Some(false),
+            }
         }
+        
+        WindowRequests::default()
+    }
+
+    fn resize(&mut self, new_size: LogicalSize<u32>, device: &wgpu::Device) {
+        self.render_output_size = new_size;
+        
+        self.compute.radiance_buffer = Self::make_radiance_buffer(device, new_size.into());
+        self.texture = Self::make_render_output_texture(device, new_size.into());
+        
+        // make new bind groups pointing to resized buffer / texture
+        let texture_view = self.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let debug_texture_view = self.compute.debug_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        self.graphics.bind_group = Self::make_graphics_bind_group(device, &self.graphics.bind_group_layout, &texture_view, &self.graphics.sampler);
+        self.compute.bind_group = Self::make_compute_bind_group(device, &self.compute.bind_group_layout, &self.compute.radiance_buffer, &texture_view, &debug_texture_view);
     }
 
     // Renders texture onto 2 triangles covering the screen.
@@ -612,10 +674,10 @@ impl RenderOutputView {
         cpass.set_pipeline(&self.compute.main_compute_pipeline);
         cpass.set_push_constants(0, bytemuck::bytes_of(&push_constants));
         
-        cpass.set_bind_group(0, &self.compute.compute_bind_group, &[]);
+        cpass.set_bind_group(0, &self.compute.bind_group, &[]);
         cpass.dispatch_workgroups(
-            u32::div_ceil(self.render_output_size.0, 8), 
-            u32::div_ceil(self.render_output_size.1, 8), 
+            u32::div_ceil(self.render_output_size.width, 8), 
+            u32::div_ceil(self.render_output_size.height, 8), 
             1
         );
 
