@@ -4,7 +4,7 @@ use bytemuck::NoUninit;
 use raytracing::geometry::Vec3;
 use wgpu::{util::DeviceExt, TextureFormat};
 
-use crate::{RenderView, WgpuHandles};
+use crate::RenderView;
 
 // TODO: is it possible to just blit directly to the render target?
 pub(crate) struct RenderOutputView {
@@ -330,13 +330,9 @@ impl RenderOutputView {
 
         let pipeline_layout = device.create_pipeline_layout(&pipeline_layout_descriptor);
 
-        let pipeline_constants = HashMap::from([
-            ("SIZE_X".to_string(), size.0 as f64),
-            ("SIZE_Y".to_string(), size.1 as f64)
-        ]);
         let pipeline_compilation_options = wgpu::PipelineCompilationOptions {
-            constants: &pipeline_constants,
             zero_initialize_workgroup_memory: false,
+            ..Default::default()
         };
 
         let targets = &[Some(target_format.into())];
@@ -491,14 +487,11 @@ impl RenderOutputView {
         };
 
         let pipeline_layout = device.create_pipeline_layout(&pipeline_layout_descriptor);
-        let pipeline_constants = HashMap::from([
-            ("SIZE_X".to_string(), size.0 as f64),
-            ("SIZE_Y".to_string(), size.1 as f64)
-        ]);
         let pipeline_compilation_options = wgpu::PipelineCompilationOptions {
-            constants: &pipeline_constants,
             zero_initialize_workgroup_memory: false,
+            ..Default::default()
         };
+
         let main_compute_pipeline_descriptor = wgpu::ComputePipelineDescriptor {
             label: Some("Render Output Compute Pipeline (main texture)"),
             layout: Some(&pipeline_layout),
@@ -521,7 +514,7 @@ impl RenderOutputView {
 
         let radiance_buffer_desc = wgpu::BufferDescriptor {
             label: Some("Render Output Radiance Buffer"),
-            size: size.0 as u64 * size.1 as u64 * 3 * 4, // 3 channels, float32
+            size: size.0 as u64 * size.1 as u64 * size_of::<Vec3>() as u64, // 3 channels, float32
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         };
@@ -584,7 +577,7 @@ impl RenderOutputView {
                 raytrace_scene(&self.gui_state.scenes[self.gui_state.selected_scene], params);
             self.render_output = radiance;
             self.upload_radiance_buffer(queue);
-            self.gui_state.render_scene_requested = false;    
+            self.gui_state.render_scene_requested = false;
         }
     }
 
@@ -680,10 +673,6 @@ impl RenderOutputView {
             &src_view,
             &dst_view,
         );
-    }
-
-    fn resize(&mut self, width: u32, height: u32, wgpu_handles: &WgpuHandles) {
-        todo!()    
     }
 
     fn generate_test_pattern(size: (u32, u32)) -> Vec<Vec3> {

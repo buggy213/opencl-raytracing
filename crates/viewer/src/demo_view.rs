@@ -59,7 +59,6 @@ impl RenderView for DemoApplicationView {
         };
 
         let render_pipeline = device.create_render_pipeline(&render_pipeline_descriptor);
-        
 
         Self {
             pipeline: render_pipeline,
@@ -79,24 +78,23 @@ impl RenderView for DemoApplicationView {
         _device: &wgpu::Device,
         _queue: &wgpu::Queue,
     ) {
-        
         let color_attachments = [
-                Some(wgpu::RenderPassColorAttachment { 
-                    view: &render_texture, 
-                    resolve_target: None, 
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::GREEN), store: wgpu::StoreOp::Store } 
-                })
-            ];
-            let rpass_descriptor = wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &color_attachments,
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            };
-            let mut rpass = command_encoder.begin_render_pass(&rpass_descriptor);
-            rpass.set_pipeline(&self.pipeline);
-            rpass.draw(0..3, 0..1);
+            Some(wgpu::RenderPassColorAttachment { 
+                view: &render_texture, 
+                resolve_target: None, 
+                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::GREEN), store: wgpu::StoreOp::Store } 
+            })
+        ];
+        let rpass_descriptor = wgpu::RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &color_attachments,
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        };
+        let mut rpass = command_encoder.begin_render_pass(&rpass_descriptor);
+        rpass.set_pipeline(&self.pipeline);
+        rpass.draw(0..3, 0..1);
     }
 
     fn render_imgui(&mut self, ui: &mut imgui::Ui) {

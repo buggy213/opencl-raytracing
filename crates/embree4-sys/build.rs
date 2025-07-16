@@ -40,7 +40,7 @@ fn main() {
                 std::fs::copy(dll_path, dest_path).expect("Failed to copy DLL");
             }
 
-            // needed for dynamic linker to link embree4.dll
+            // this makes cargo add OUT_DIR to PATH so that dynamic linker can find it there
             println!("cargo::rustc-link-search=native={}", out_path.display());
         }
         

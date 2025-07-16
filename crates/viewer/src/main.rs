@@ -5,7 +5,7 @@ use imgui_wgpu::{Renderer, RendererConfig};
 use imgui_winit_support::WinitPlatform;
 use pollster::FutureExt;
 use wgpu::TextureFormat;
-use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{Event, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, window::Window};
+use winit::{application::ApplicationHandler, dpi::{LogicalSize, PhysicalSize}, event::{Event, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, window::Window};
 
 use crate::{demo_view::DemoApplicationView, render_output_view::RenderOutputView};
 
@@ -28,8 +28,7 @@ impl ApplicationWrapper {
 
 struct Application {
     window: Arc<Window>,
-    width: u32,
-    height: u32,
+    logical_size: LogicalSize<f64>,
 
     wgpu_handles: WgpuHandles<'static>,
     
@@ -59,7 +58,7 @@ struct ImguiInternalState {
 }
 
 struct WindowRequests {
-    resize: Option<PhysicalSize<u32>>,
+    resize: Option<LogicalSize<f64>>,
     rename: Option<Cow<'static, str>>
 }
 
@@ -72,7 +71,7 @@ impl Default for WindowRequests {
 impl WindowRequests {
     fn apply(&self, window: &Window) {
         if let Some(new_size) = self.resize {
-            if new_size != window.inner_size() {
+            if new_size != window.inner_size().to_logical(window.scale_factor()) {
                 _ = window.request_inner_size(new_size);
             }
         }
@@ -147,13 +146,12 @@ impl Application {
             target_format,
             &mut imgui_state.renderer
         );
-
-        let PhysicalSize { width, height } = window.inner_size();
-
+        
+        let logical_size = window.inner_size().to_logical(window.scale_factor());
+        
         Self {
             window,
-            width,
-            height,
+            logical_size,
 
             wgpu_handles,
 
@@ -206,17 +204,16 @@ impl Application {
         let swapchain_format = swapchain_capabilities.formats[0];
         println!("Using swapchain format {swapchain_format:?}");
         
-        let PhysicalSize { width, height } = window.inner_size();
-
+        let physical_size = window.inner_size();
         let config = surface
-            .get_default_config(&adapter, width, height)
+            .get_default_config(&adapter, physical_size.width, physical_size.height)
             .expect("Unable to get surface configuration");
 
         surface.configure(&device, &config);
 
         // don't use swapchain directly, draw to texture then blit to swapchain
         let blitter = wgpu::util::TextureBlitter::new(&device, swapchain_format);
-        let draw_texture = Self::make_draw_texture(width, height, &device);
+        let draw_texture = Self::make_draw_texture(physical_size, &device);
 
         WgpuHandles {
             surface,
@@ -229,15 +226,14 @@ impl Application {
     }
 
     fn make_draw_texture(
-        width: u32,
-        height: u32,
+        physical_size: PhysicalSize<u32>,
         device: &wgpu::Device,
     ) -> wgpu::Texture {
         let texture_desc = wgpu::TextureDescriptor {
             label: Some("Draw Texture"),
             size: wgpu::Extent3d {
-                width,
-                height,
+                width: physical_size.width,
+                height: physical_size.height,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -258,9 +254,7 @@ impl Application {
         platform.attach_window(
             context.io_mut(), 
             window, 
-            // ensure mouse coordinates are in physical pixels
-            // TODO: maybe think about using our own input handling so this doesn't matter
-            imgui_winit_support::HiDpiMode::Locked(1.0)
+            imgui_winit_support::HiDpiMode::Default
         );
 
         context.set_ini_filename(None);
@@ -289,17 +283,17 @@ impl Application {
 }
 
 impl Application {
-    fn resize(&mut self, height: u32, width: u32) {
+    fn resize(&mut self, physical_size: PhysicalSize<u32>) {
         let wgpu_handles = &mut self.wgpu_handles;
-        let config = wgpu_handles.surface.get_default_config(&wgpu_handles.adapter, width, height).expect("surface not supported");
+        let config = wgpu_handles.surface.get_default_config(&wgpu_handles.adapter, physical_size.width, physical_size.height).expect("surface not supported");
         
         // surface width / height must be nonzero
-        if height != 0 && width != 0 {
+        if physical_size.width != 0 && physical_size.height != 0 {
             wgpu_handles.surface.configure(&wgpu_handles.device, &config);
         }
 
         // recreate the draw texture
-        let new_draw_texture = Self::make_draw_texture(width, height, &wgpu_handles.device);
+        let new_draw_texture = Self::make_draw_texture(physical_size, &wgpu_handles.device);
         wgpu_handles.draw_texture = new_draw_texture;
     }
 
@@ -412,7 +406,7 @@ impl ApplicationHandler for ApplicationWrapper {
 
             let window_attributes = Window::default_attributes()
                 .with_title("Viewer")
-                .with_inner_size(PhysicalSize::new(default_width, default_height));
+                .with_inner_size(LogicalSize::new(default_width, default_height));
 
 
             let window = event_loop.create_window(window_attributes)
@@ -462,7 +456,7 @@ impl ApplicationHandler for Application {
                 self.window_requests();
                 self.render();
                 self.render_imgui();
-
+                
                 // blit the rendered output to the swapchain image
                 let mut blit_encoder = self.wgpu_handles.device.create_command_encoder(
                     &wgpu::CommandEncoderDescriptor { label: Some("Blit Encoder") }
@@ -485,10 +479,10 @@ impl ApplicationHandler for Application {
             }
             
             WindowEvent::Resized(new_size) => {
-                println!("Window resized to: {new_size:?}");
-                self.height = new_size.height;
-                self.width = new_size.width;
-                self.resize(self.height, self.width);
+                let logical_size: LogicalSize<f64> = new_size.to_logical(self.window.scale_factor());
+                println!("Window resized to: {logical_size:?}, (physical: {new_size:?})");
+                self.logical_size = logical_size;
+                self.resize(new_size);
             }
 
             _ => ()

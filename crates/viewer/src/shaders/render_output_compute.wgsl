@@ -1,12 +1,6 @@
 // Compute shader `main_texture` converts raw buffer of radiance values into texture data (and sets alpha of 1)
 // Compute shader `debug_texture` populates debug texture window
-
-// 5×5 window by default
-override DEBUG_WINDOW_SIZE: u32 = 200u;
 override DEBUG_PIXEL_SIZE: u32 = 8u;
-
-override SIZE_X: u32;
-override SIZE_Y: u32;
 
 struct PushConstants {
     gamma: f32,
@@ -39,12 +33,14 @@ fn main_texture(
     @builtin(global_invocation_id) id: vec3<u32>,
 ) {
     // bounds check
-    if (id.x >= SIZE_X || id.y >= SIZE_Y) {
+    let main_tex_size: vec2<u32> = textureDimensions(main_tex);
+
+    if (any(id.xy >= main_tex_size)) {
         return;
     }
 
     let pos = vec2u(id.x, id.y);
-    let idx = (pos.y * SIZE_X + pos.x) * 3;
+    let idx = (pos.y * main_tex_size.x + pos.x) * 3;
 
     let radiance = vec3f(radiance_buffer[idx], radiance_buffer[idx+1], radiance_buffer[idx+2]);
     let rgba = radiance_to_rgba(radiance);
@@ -56,26 +52,30 @@ fn main_texture(
 fn debug_texture(
     @builtin(global_invocation_id) id: vec3<u32>,
 ) {
-    if (id.x >= DEBUG_WINDOW_SIZE || id.y >= DEBUG_WINDOW_SIZE) {
+    // bounds check
+    let main_tex_size: vec2<u32> = textureDimensions(main_tex);
+    let debug_tex_size: vec2<u32> = textureDimensions(debug_tex);
+
+    if (any(id.xy >= debug_tex_size)) {
         return;
     }
 
     let pos = vec2u(id.x, id.y);
     
-    let offset = i32(DEBUG_WINDOW_SIZE / DEBUG_PIXEL_SIZE) / 2;
+    let offset = debug_tex_size / DEBUG_PIXEL_SIZE / 2;
     let debug_pixel_pos_local = vec2i(
-        i32(pos.x / DEBUG_PIXEL_SIZE) - offset, 
-        i32(pos.y / DEBUG_PIXEL_SIZE) - offset
+        i32(pos.x / DEBUG_PIXEL_SIZE) - i32(offset.x), 
+        i32(pos.y / DEBUG_PIXEL_SIZE) - i32(offset.y)
     );
     
     let debug_pixel_pos = debug_pixel_pos_local + vec2i(push_constants.mouse_pos);
 
     var radiance: vec3<f32>;
-    if (any(debug_pixel_pos < vec2i(0)) || any(debug_pixel_pos >= vec2i(i32(SIZE_X), i32(SIZE_Y)))) {
+    if (any(debug_pixel_pos < vec2i(0)) || any(debug_pixel_pos >= vec2i(main_tex_size))) {
         radiance = vec3(0.0);
     } 
     else {
-        let idx = (u32(debug_pixel_pos.y) * SIZE_X + u32(debug_pixel_pos.x)) * 3;
+        let idx = (u32(debug_pixel_pos.y) * main_tex_size.x + u32(debug_pixel_pos.x)) * 3;
         radiance = vec3f(radiance_buffer[idx], radiance_buffer[idx+1], radiance_buffer[idx+2]);
     }
 
