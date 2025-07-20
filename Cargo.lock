@@ -472,6 +472,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "const_panic"
+version = "0.2.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b98d1483e98c9d67f341ab4b3915cfdc54740bd6f5cccc9226ee0535d86aa8fb"
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -613,6 +619,37 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bindgen",
+]
+
+[[package]]
+name = "encase"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6257b506d94265d4ec55a02fc6fe8a7311c1718e99cd5d2fc63c76674a94c801"
+dependencies = [
+ "const_panic",
+ "encase_derive",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "encase_derive"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71a9aa6b6a1caf2d2e04e4adcee9c8466e86cd84129bd8e9d15bad2b003396af"
+dependencies = [
+ "encase_derive_impl",
+]
+
+[[package]]
+name = "encase_derive_impl"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0a79c61182bf68a5dff807c3feb93d5348310afdb3fbe4c907db0e1696f500f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -2345,6 +2382,7 @@ name = "viewer"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "encase",
  "imgui",
  "imgui-wgpu",
  "imgui-winit-support",

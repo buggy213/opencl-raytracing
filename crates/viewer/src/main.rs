@@ -7,10 +7,10 @@ use pollster::FutureExt;
 use wgpu::TextureFormat;
 use winit::{application::ApplicationHandler, dpi::{LogicalSize, PhysicalSize}, event::{Event, WindowEvent}, event_loop::{ActiveEventLoop, EventLoop}, window::Window};
 
-use crate::{demo_view::DemoApplicationView, render_output_view::RenderOutputView};
+use crate::{demo_view::DemoApplicationView, render_output_view::RenderOutputView, scene_view::SceneView};
 
 mod demo_view;
-// mod scene_view;
+mod scene_view;
 mod render_output_view;
 
 // Wrapper to handle first `resumed` event and initialize Application with created window
@@ -133,7 +133,7 @@ impl Application {
         
         let target_format = wgpu_handles.draw_texture.format();
         
-        let demo_view = DemoApplicationView::init(
+        let (demo_view, initial_requests) = DemoApplicationView::init(
             &wgpu_handles.device,
             &wgpu_handles.queue,
             target_format,
@@ -142,6 +142,12 @@ impl Application {
 
         let (render_output_view, initial_requests) = RenderOutputView::init(
             &wgpu_handles.device,
+            &wgpu_handles.queue,
+            target_format,
+            &mut imgui_state.renderer
+        );
+
+        let (scene_view, initial_requests) = SceneView::init(&wgpu_handles.device,
             &wgpu_handles.queue,
             target_format,
             &mut imgui_state.renderer
@@ -346,7 +352,7 @@ impl Application {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
-
+        
         imgui_state.renderer
             .render(
                 imgui_state.context.render(),
@@ -401,8 +407,8 @@ impl Application {
 impl ApplicationHandler for ApplicationWrapper {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.inner.is_none() {
-            let default_height = 1000;
-            let default_width = 1000;
+            let default_height = 500;
+            let default_width = 500;
 
             let window_attributes = Window::default_attributes()
                 .with_title("Viewer")
