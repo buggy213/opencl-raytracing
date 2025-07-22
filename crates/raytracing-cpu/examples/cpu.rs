@@ -2,7 +2,7 @@ use std::{fs::File, path::{Path, PathBuf}};
 
 use clap::Parser;
 use raytracing::{geometry::Vec3, scene::Scene};
-use raytracing_cpu::render;
+use raytracing_cpu::{render, RaytracerSettings};
 
 #[derive(Debug, Parser)]
 struct CommandLineArguments {
@@ -44,7 +44,16 @@ fn main() {
     let mut scene = Scene::from_file(&path, None)
         .expect("failed to load scene");
 
-    let output = render(&mut scene, cli_args.spp, cli_args.light_samples);
+    let raytracer_settings = RaytracerSettings {
+        max_ray_depth: 1,
+        light_sample_count: cli_args.light_samples,
+        samples_per_pixel: cli_args.spp,
+        accumulate_bounces: true,
+
+        debug_normals: false,
+    };
+
+    let output = render(&mut scene, raytracer_settings);
 
     let output_path = Path::new("scenes/cbbunny.png");
     save_png(&output, &scene, output_path);

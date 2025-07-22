@@ -1,8 +1,8 @@
 use accel::{traverse_bvh, BVHData};
-use lights::{light_radiance, occluded, sample_light, LightSample};
+use lights::{light_radiance, occluded, sample_light};
 use materials::CpuMaterial;
 use ray::Ray;
-use raytracing::{accel::{bvh2::LinearizedBVHNode, BVH2}, geometry::{Matrix4x4, Vec3}, lights::Light, scene::{Camera, Scene}};
+use raytracing::{accel::{bvh2::LinearizedBVHNode, BVH2}, geometry::{Matrix4x4, Vec3}, scene::{Camera, Scene}};
 use embree4::Device;
 
 mod ray;
@@ -25,22 +25,20 @@ fn generate_ray(camera: &Camera, x: u32, y: u32) -> Ray {
     Ray {
         origin: ray_o,
         direction: ray_d,
-        time: 0.0,
+        debug: false
     }
 }
-
-const MAX_RAY_DEPTH: u32 = 5;
 
 fn ray_color(
     ray: Ray, 
     bvh: &BVHData, 
     scene: &Scene, 
-    light_samples: u32,
+    
     depth: u32,
 
-    marked: bool
+    raytracer_settings: &RaytracerSettings
 ) -> Vec3 {
-    if depth >= MAX_RAY_DEPTH {
+    if depth >= raytracer_settings.max_ray_depth && depth != 0 {
         return Vec3::zero();
     }
 
@@ -58,12 +56,10 @@ fn ray_color(
         t_max,
         bvh, 
         false,
-        marked
     );
 
     if let Some(hit) = hit_info {
         // zero bounce illumination
-        
         let zero_bounce = if depth != 0 {
             Vec3::zero() // was already counted by the previous bounce
         } else if let Some(light_idx) = hit.light_idx {
@@ -81,13 +77,8 @@ fn ray_color(
         let o2w = w2o.transposed();
         let wo = w2o.apply_vector(-ray.direction);
 
-        if marked {
-            dbg!(o2w.det());
-            dbg!(hit.normal);
-        }
-
         for light in &scene.lights {
-            for _ in 0..light_samples {
+            for _ in 0..raytracer_settings.light_sample_count {
                 let light_sample = sample_light(light, scene, hit.point);
                 let occluded = occluded(bvh, light_sample);
                 if !occluded {
@@ -96,12 +87,11 @@ fn ray_color(
                     
                     let cos_theta = Vec3::dot(hit.normal, -light_sample.shadow_ray.direction);
 
-                    // no backface culling for now - blender gltf export seems to flip sometimes
-                    direct_illumination += bsdf_value * light_sample.radiance * f32::abs(cos_theta) / light_sample.pdf; 
+                    direct_illumination += bsdf_value * light_sample.radiance * f32::max(0.0, cos_theta) / light_sample.pdf; 
                 }
             }
 
-            direct_illumination /= light_samples as f32;
+            direct_illumination /= raytracer_settings.light_sample_count as f32;
         }
 
         // indirect illumination
@@ -110,39 +100,78 @@ fn ray_color(
         let secondary_ray = Ray {
             origin: hit.point + world_dir * 0.01,
             direction: world_dir,
-            time: 0.0,
+            debug: ray.debug
         };
 
         let incident_radiance = ray_color(
             secondary_ray,
             bvh,
             scene,
-            light_samples,
             depth + 1,
-            marked
+            
+            raytracer_settings
         );
-
-        if marked {
-            dbg!(&bsdf_sample);
-            dbg!(o2w);
-            dbg!(world_dir);
-            dbg!(secondary_ray);
-            dbg!(incident_radiance);
-        }
 
         let cos_theta = bsdf_sample.wi.z();
         let indirect_illumination = bsdf_sample.bsdf * incident_radiance * cos_theta / bsdf_sample.pdf;
-        if indirect_illumination != Vec3::zero() {
-            // dbg!(indirect_illumination);
+        
+        if raytracer_settings.accumulate_bounces {
+            if raytracer_settings.max_ray_depth == 0 {
+                zero_bounce
+            }
+            else {
+                zero_bounce + direct_illumination + indirect_illumination
+            }
         }
-        zero_bounce + direct_illumination + indirect_illumination
+        else {
+            if depth == raytracer_settings.max_ray_depth {
+                zero_bounce
+            }
+            else if depth + 1 == raytracer_settings.max_ray_depth {
+                direct_illumination
+            }
+            else {
+                indirect_illumination
+            }
+        }
     }
     else {
         Vec3::zero()
     }
 }
 
-pub fn render(scene: &mut Scene, spp: u32, light_samples: u32) -> Vec<Vec3> {
+fn first_hit_normals(
+    ray: Ray, 
+    bvh: &BVHData, 
+    scene: &Scene
+) -> Vec3 {
+    let hit_info = traverse_bvh(
+        ray, 
+        0.0,
+        f32::INFINITY,
+        bvh, 
+        false,
+    );
+
+    if let Some(hit_info) = hit_info {
+        hit_info.normal
+    }
+    else {
+        Vec3::zero()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RaytracerSettings {
+    pub max_ray_depth: u32,
+    pub light_sample_count: u32,
+    pub samples_per_pixel: u32,
+    pub accumulate_bounces: bool,
+
+    pub debug_normals: bool,
+}
+
+pub fn render(scene: &mut Scene, raytracer_settings: RaytracerSettings) -> Vec<Vec3> {
     let width = scene.camera.raster_width;
     let height = scene.camera.raster_height;
 
@@ -165,21 +194,26 @@ pub fn render(scene: &mut Scene, spp: u32, light_samples: u32) -> Vec<Vec3> {
     for j in 0..height {
         for i in 0..width {
             let mut radiance = Vec3(0.0, 0.0, 0.0);
-            for s in 0..spp {
+            
+            if raytracer_settings.debug_normals {
                 let ray = generate_ray(camera, i as u32, j as u32);
-                let marked = i == 600 && j == 195;
-                let marked = false;
-                radiance += ray_color(
-                    ray, 
-                    &bvh, 
-                    &scene, 
-                    light_samples, 
-                    0,
-                    marked
-                );
+                radiance = first_hit_normals(ray, &bvh, scene);
             }
-
-            radiance /= spp as f32;
+            else {
+                for s in 0..raytracer_settings.samples_per_pixel {
+                    let ray = generate_ray(camera, i as u32, j as u32);
+                    radiance += ray_color(
+                        ray, 
+                        &bvh, 
+                        &scene,  
+                        0,
+                        &raytracer_settings
+                    );
+                }
+                
+                radiance /= raytracer_settings.samples_per_pixel as f32; 
+            }
+            
             radiance_buffer.push(radiance);
         }
     }

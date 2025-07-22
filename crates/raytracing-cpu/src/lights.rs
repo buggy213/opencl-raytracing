@@ -17,7 +17,7 @@ pub(crate) fn sample_light(light: &Light, scene: &Scene, point: Vec3) -> LightSa
             let d2 = d * d;
             LightSample {
                 radiance: *intensity / d2,
-                shadow_ray: Ray { origin: *position, direction: dir / d, time: 0.0 },
+                shadow_ray: Ray { origin: *position, direction: dir / d, debug: false },
                 distance: d,
                 pdf: 1.0 // technically delta
             }
@@ -59,10 +59,15 @@ pub(crate) fn sample_light(light: &Light, scene: &Scene, point: Vec3) -> LightSa
             let p = bary.0 * p0 + bary.1 * p1 + bary.2 * p2;
             let dir = point - p;
             let d = dir.length();
-            let shadow_ray = Ray { origin: p, direction: dir / d, time: 0.0 };
+            let shadow_ray = Ray { origin: p, direction: dir / d, debug: false };
             
             // no backface emission
-            let n = Vec3::cross(p1 - p0, p2 - p0).unit();
+            let n0 = emitter.normals[tri.0 as usize];
+            let n1 = emitter.normals[tri.1 as usize];
+            let n2 = emitter.normals[tri.2 as usize];
+
+            let n = bary.0 * n0 + bary.1 * n1 + bary.2 * n2;
+            let n = n.unit();
             let radiance = if Vec3::dot(dir, n) < 0.0 {
                 Vec3::zero()
             }
@@ -101,6 +106,5 @@ pub(crate) fn occluded(bvh: &BVHData<'_>, light_sample: LightSample) -> bool {
         light_sample.distance - 0.001, 
         bvh, 
         true,
-        false
     ).is_some()
 }

@@ -2,6 +2,7 @@ use std::{borrow::Cow, path::{Path, PathBuf}};
 
 use bytemuck::NoUninit;
 use raytracing::geometry::Vec3;
+use raytracing_cpu::RaytracerSettings;
 use wgpu::{util::DeviceExt, TextureFormat};
 use winit::dpi::LogicalSize;
 
@@ -34,8 +35,12 @@ struct GuiState {
     selected_scene: usize,
     render_scene_requested: bool,
 
+    max_ray_depth: u32,
     spp: u32,
-    light_samples: u32
+    light_samples: u32,
+    accumulate_bounces: bool,
+
+    debug_normals: bool,
 }
 
 struct GraphicsResources {
@@ -67,23 +72,17 @@ struct ComputeResources {
     bind_group: wgpu::BindGroup,
 }
 
-#[derive(Clone, Copy)]
-struct RaytraceParams {
-    spp: u32,
-    light_samples: u32,
-}
 
 struct RaytracerResult {
     radiance: Vec<Vec3>,
     raster_size: (u32, u32)
 }
 
-fn raytrace_scene(path: &Path, params: RaytraceParams) -> RaytracerResult {
+fn raytrace_scene(path: &Path, settings: RaytracerSettings) -> RaytracerResult {
     let mut scene = raytracing::scene::Scene::from_file(path, None).expect("failed to load scene");
     let output = raytracing_cpu::render(
         &mut scene, 
-        params.spp,
-        params.light_samples
+        settings
     );
     
     RaytracerResult { 
@@ -176,12 +175,18 @@ impl RenderView for RenderOutputView {
 
                 combo.end();
             }
-            
+
+            ui.input_scalar("max ray depth", &mut self.gui_state.max_ray_depth).build();
+
             ui.input_scalar("spp", &mut self.gui_state.spp).build();
             self.gui_state.spp = u32::max(self.gui_state.spp, 1);
 
             ui.input_scalar("light samples", &mut self.gui_state.light_samples).build();
             self.gui_state.light_samples = u32::max(self.gui_state.light_samples, 1);
+
+            ui.checkbox("accumulate bounces", &mut self.gui_state.accumulate_bounces);
+
+            ui.checkbox("debug normals", &mut self.gui_state.debug_normals);
 
             self.gui_state.render_scene_requested = ui.button("Render");
         });
@@ -345,8 +350,12 @@ impl RenderOutputView {
                 selected_scene: 0,
                 render_scene_requested: false,
 
+                max_ray_depth: 0,
                 spp: 1,
                 light_samples: 1,
+                accumulate_bounces: true,
+
+                debug_normals: false
             },
             
 
@@ -605,9 +614,13 @@ impl RenderOutputView {
         // If the user requested a render, we need to update the radiance buffer
         // For now, just blocks the entire viewer until raytracing is done
         if self.gui_state.render_scene_requested {
-            let params = RaytraceParams {
-                spp: self.gui_state.spp,
-                light_samples: self.gui_state.light_samples,
+            let params = RaytracerSettings { 
+                max_ray_depth: self.gui_state.max_ray_depth,
+                samples_per_pixel: self.gui_state.spp,
+                light_sample_count: self.gui_state.light_samples,
+                accumulate_bounces: self.gui_state.accumulate_bounces,
+
+                debug_normals: self.gui_state.debug_normals,
             };
             let RaytracerResult { radiance, raster_size } = 
                 raytrace_scene(&self.gui_state.scenes[self.gui_state.selected_scene], params);

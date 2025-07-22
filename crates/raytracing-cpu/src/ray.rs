@@ -4,7 +4,7 @@ use raytracing::geometry::Vec3;
 pub struct Ray {
     pub origin: Vec3,
     pub direction: Vec3,
-    pub time: f32
+    pub debug: bool,
 }
 
 impl Ray {

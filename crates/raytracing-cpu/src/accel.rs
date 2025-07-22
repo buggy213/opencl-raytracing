@@ -63,7 +63,6 @@ pub(crate) fn traverse_bvh(
     t_max: f32, 
     bvh: &BVHData<'_>,
     early_exit: bool,
-    marked: bool
 ) -> Option<HitInfo> {
     let t_min = t_min;
     let mut closest_t = t_max;
@@ -124,18 +123,7 @@ pub(crate) fn traverse_bvh(
                     let n1 = mesh.normals[vertex_indices.1 as usize];
                     let n2 = mesh.normals[vertex_indices.2 as usize];
 
-                    let mut normal = Vec3::normalized(w * n0 + u * n1 + v * n2);
-                    let geometric_normal = Vec3::cross(p1 - p0, p2 - p1).unit();
-
-                    if marked {
-                        dbg!(normal);
-                        dbg!(geometric_normal);
-                    }
-
-                    // ???? man why does this happen
-                    if Vec3::dot(geometric_normal, normal) < 0.0 {
-                        normal = -normal;
-                    }
+                    let normal = Vec3::normalized(w * n0 + u * n1 + v * n2);
                     
                     let material_idx = mesh.material_idx;
                     let light_idx = mesh.light_idx;

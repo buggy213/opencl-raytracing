@@ -44,7 +44,7 @@ impl Mesh {
 
         if let Some(iter) = reader.read_normals() {
             for normal in iter {
-                normals.push(Vec3(normal[0], normal[1], normal[2]));
+                normals.push(normal.into());
             }
         } else { todo!("unable to load normals"); }
         
