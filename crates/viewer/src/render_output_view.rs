@@ -342,7 +342,7 @@ impl RenderOutputView {
             imgui_blitter,
 
             gui_state: GuiState { 
-                gamma: 2.2, 
+                gamma: 1.0, 
                 exposure: 1.0, 
                 mouse_pos: [0, 0],
 

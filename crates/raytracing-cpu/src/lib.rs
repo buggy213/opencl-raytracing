@@ -85,7 +85,7 @@ fn ray_color(
                     let wi = w2o.apply_vector(-light_sample.shadow_ray.direction); // shadow ray from light to hit point, we want other way
                     let bsdf_value = material.get_bsdf(wo, wi);
                     
-                    let cos_theta = Vec3::dot(hit.normal, -light_sample.shadow_ray.direction);
+                    let cos_theta = wi.z();
 
                     direct_illumination += bsdf_value * light_sample.radiance * f32::max(0.0, cos_theta) / light_sample.pdf; 
                 }
