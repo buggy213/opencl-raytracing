@@ -29,115 +29,103 @@ fn generate_ray(camera: &Camera, x: u32, y: u32) -> Ray {
     }
 }
 
-fn ray_color(
+fn ray_radiance(
     ray: Ray, 
     bvh: &BVHData, 
     scene: &Scene, 
-    
-    depth: u32,
 
     raytracer_settings: &RaytracerSettings
 ) -> Vec3 {
-    if depth >= raytracer_settings.max_ray_depth && depth != 0 {
-        return Vec3::zero();
-    }
+    let mut ray = ray;
+    let mut depth = 0;
 
-    // respect near/far clip settings for primary ray
-    let (t_min, t_max) = if depth == 0 {
-        let camera = &scene.camera;
-        (camera.near_clip, camera.far_clip)
-    } else {
-        (0.0, f32::INFINITY)
-    };
+    // initial bounce is "specular" (i.e. it needs to sample zero bounce radiance)
+    let mut specular_bounce = true;
+    let mut radiance = Vec3::zero();
+    let mut path_weight = Vec3(1.0, 1.0, 1.0);
 
-    let hit_info = traverse_bvh(
-        ray, 
-        t_min,
-        t_max,
-        bvh, 
-        false,
-    );
-
-    if let Some(hit) = hit_info {
-        // zero bounce illumination
-        let zero_bounce = if depth != 0 {
-            Vec3::zero() // was already counted by the previous bounce
-        } else if let Some(light_idx) = hit.light_idx {
-            let light = &scene.lights[light_idx as usize];
-            light_radiance(light, hit.point)
+    loop {
+        // respect near/far clip settings for primary ray
+        let (t_min, t_max) = if depth == 0 {
+            let camera = &scene.camera;
+            (camera.near_clip, camera.far_clip)
         } else {
-            Vec3::zero()
+            (0.0, f32::INFINITY)
         };
 
-        // direct illumination
-        let mut direct_illumination = Vec3::zero();
+        let hit_info = traverse_bvh(
+            ray, 
+            t_min,
+            t_max,
+            bvh, 
+            false,
+        );
+
+        let hit = match hit_info {
+            Some(hit) => hit,
+            None => break
+        };
+
+        let add_zero_bounce = raytracer_settings.accumulate_bounces || raytracer_settings.max_ray_depth == depth;
+        if specular_bounce && add_zero_bounce {
+            if let Some(light_idx) = hit.light_idx {
+                let light = &scene.lights[light_idx as usize];
+                radiance += path_weight * light_radiance(light, hit.point);
+            }
+        }
 
         let material = &scene.materials[hit.material_idx as usize];
         let w2o = Matrix4x4::make_w2o(hit.normal);
         let o2w = w2o.transposed();
         let wo = w2o.apply_vector(-ray.direction);
 
-        for light in &scene.lights {
-            for _ in 0..raytracer_settings.light_sample_count {
-                let light_sample = sample_light(light, scene, hit.point);
-                let occluded = occluded(bvh, light_sample);
-                if !occluded {
-                    let wi = w2o.apply_vector(-light_sample.shadow_ray.direction); // shadow ray from light to hit point, we want other way
-                    let bsdf_value = material.get_bsdf(wo, wi);
-                    
-                    let cos_theta = wi.z();
+        depth += 1;
+        specular_bounce = material.is_delta_bsdf();
+        if depth > raytracer_settings.max_ray_depth {
+            break;
+        }
+        
+        // direct illumination
+        let add_direct_illumination = raytracer_settings.accumulate_bounces || raytracer_settings.max_ray_depth == depth;
+        if !specular_bounce && add_direct_illumination {     
+            let mut direct_illumination = Vec3::zero();
 
-                    direct_illumination += bsdf_value * light_sample.radiance * f32::max(0.0, cos_theta) / light_sample.pdf; 
+            for light in &scene.lights {
+                for _ in 0..raytracer_settings.light_sample_count {
+                    let light_sample = sample_light(light, scene, hit.point);
+                    let occluded = occluded(bvh, light_sample);
+                    if !occluded {
+                        let wi = w2o.apply_vector(-light_sample.shadow_ray.direction); // shadow ray from light to hit point, we want other way
+                        let bsdf_value = material.get_bsdf(wo, wi);
+                        
+                        let cos_theta = wi.z();
+
+                        direct_illumination += bsdf_value * light_sample.radiance * f32::max(0.0, cos_theta) / light_sample.pdf; 
+                    }
                 }
+
+                direct_illumination /= raytracer_settings.light_sample_count as f32;
             }
 
-            direct_illumination /= raytracer_settings.light_sample_count as f32;
+            radiance += path_weight * direct_illumination;
         }
 
         // indirect illumination
         let bsdf_sample = material.sample_bsdf(wo);
+        let cos_theta = bsdf_sample.wi.z();
+        path_weight *= bsdf_sample.bsdf * cos_theta / bsdf_sample.pdf;
+
         let world_dir = o2w.apply_vector(bsdf_sample.wi);
-        let secondary_ray = Ray {
-            origin: hit.point + world_dir * 0.01,
+        let new_ray = Ray {
+            origin: hit.point + world_dir * 0.0001,
             direction: world_dir,
             debug: ray.debug
         };
 
-        let incident_radiance = ray_color(
-            secondary_ray,
-            bvh,
-            scene,
-            depth + 1,
-            
-            raytracer_settings
-        );
+        ray = new_ray;
+    }
 
-        let cos_theta = bsdf_sample.wi.z();
-        let indirect_illumination = bsdf_sample.bsdf * incident_radiance * cos_theta / bsdf_sample.pdf;
-        
-        if raytracer_settings.accumulate_bounces {
-            if raytracer_settings.max_ray_depth == 0 {
-                zero_bounce
-            }
-            else {
-                zero_bounce + direct_illumination + indirect_illumination
-            }
-        }
-        else {
-            if depth == raytracer_settings.max_ray_depth {
-                zero_bounce
-            }
-            else if depth + 1 == raytracer_settings.max_ray_depth {
-                direct_illumination
-            }
-            else {
-                indirect_illumination
-            }
-        }
-    }
-    else {
-        Vec3::zero()
-    }
+    radiance
 }
 
 fn first_hit_normals(
@@ -202,11 +190,10 @@ pub fn render(scene: &mut Scene, raytracer_settings: RaytracerSettings) -> Vec<V
             else {
                 for s in 0..raytracer_settings.samples_per_pixel {
                     let ray = generate_ray(camera, i as u32, j as u32);
-                    radiance += ray_color(
+                    radiance += ray_radiance(
                         ray, 
                         &bvh, 
                         &scene,  
-                        0,
                         &raytracer_settings
                     );
                 }

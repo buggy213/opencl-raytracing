@@ -89,6 +89,14 @@ impl ops::AddAssign for Vec3 {
     }
 }
 
+impl ops::MulAssign for Vec3 {
+    fn mul_assign(&mut self, rhs: Self) {
+        self.0 *= rhs.0;
+        self.1 *= rhs.1;
+        self.2 *= rhs.2;
+    }
+}
+
 impl ops::MulAssign<f32> for Vec3 {
     fn mul_assign(&mut self, rhs: f32) {
         self.0 *= rhs;

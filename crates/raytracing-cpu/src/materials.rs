@@ -13,6 +13,7 @@ pub(crate) struct BsdfSample {
 pub(crate) trait CpuMaterial {
     fn get_bsdf(&self, wo: Vec3, wi: Vec3) -> Vec3;
     fn sample_bsdf(&self, wo: Vec3) -> BsdfSample;
+    fn is_delta_bsdf(&self) -> bool;
 }
 
 impl CpuMaterial for Material {
@@ -38,8 +39,19 @@ impl CpuMaterial for Material {
                     pdf,
                 }
             },
-            Material::Dielectric { eta } => todo!(),
+            Material::Dielectric { eta } => {
+                todo!()
+            },
             Material::Conductor { eta, k } => todo!(),
+        }
+    }
+
+    // if bsdf only has deltas, then doing light sampling is not worthwhile
+    fn is_delta_bsdf(&self) -> bool {
+        match self {
+            Material::Diffuse { .. } => false,
+            Material::Dielectric { .. } => true,
+            Material::Conductor { .. } => true,
         }
     }
 }
