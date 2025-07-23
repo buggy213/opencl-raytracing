@@ -79,6 +79,11 @@ impl Vec3 {
     pub fn zero() -> Vec3 {
         Vec3(0.0, 0.0, 0.0)
     }
+
+    // reflects v across n
+    pub fn reflect(v: Vec3, n: Vec3) -> Vec3 {
+        -v + 2.0 * Vec3::dot(v, n) * n
+    }
 }
 
 impl ops::AddAssign for Vec3 {

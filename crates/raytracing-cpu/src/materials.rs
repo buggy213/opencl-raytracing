@@ -10,6 +10,7 @@ pub(crate) struct BsdfSample {
     pub(crate) bsdf: Vec3,
     pub(crate) pdf: f32
 }
+
 pub(crate) trait CpuMaterial {
     fn get_bsdf(&self, wo: Vec3, wi: Vec3) -> Vec3;
     fn sample_bsdf(&self, wo: Vec3) -> BsdfSample;
@@ -23,8 +24,9 @@ impl CpuMaterial for Material {
             Material::Diffuse { albedo } => {
                 *albedo / f32::consts::PI
             },
-            Material::Dielectric { eta } => todo!(),
-            Material::Conductor { eta, k } => todo!()
+            // specular materials
+            Material::Dielectric { .. } => Vec3::zero(),
+            Material::Conductor { .. } => Vec3::zero()
         }
     }
 
