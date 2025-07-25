@@ -6,7 +6,7 @@ use super::camera::{Camera, RenderTile};
 
 pub struct Scene {
     pub camera: Camera,
-    pub meshes: Vec<Mesh>,
+    pub primitives: Vec<Primitive>,
     pub lights: Vec<Light>,
 
     pub materials: Vec<Material>
@@ -15,7 +15,7 @@ pub struct Scene {
 const HEIGHT: usize = 600;
 
 impl Scene {
-    pub fn from_file(filepath: &Path, render_tile: Option<RenderTile>) -> anyhow::Result<Scene> {
+    pub fn from_gltf_file(filepath: &Path, render_tile: Option<RenderTile>) -> anyhow::Result<Scene> {
         let (document, buffers, _images) = gltf::import(filepath)?;
         let scene_gltf = document.default_scene().unwrap();
         let mut camera: Option<Camera> = None;  

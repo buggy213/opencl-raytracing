@@ -1,4 +1,4 @@
-use super::{Vec3, vec3::Vec3u, Transform};
+use crate::geometry::{Vec3, vec3::Vec3u, Transform};
 
 #[derive(Debug)]
 pub enum MeshError {
@@ -10,9 +10,6 @@ pub struct Mesh {
     pub vertices: Vec<Vec3>,
     pub tris: Vec<Vec3u>,
     pub normals: Vec<Vec3>,
-
-    pub material_idx: u32,
-    pub light_idx: Option<u32>
 }
 
 impl Mesh {
@@ -48,15 +45,10 @@ impl Mesh {
             }
         } else { todo!("unable to load normals"); }
         
-        // default material should have index 0
-        let material_idx = primitive.material().index().unwrap_or(0);
         Mesh {
             vertices,
             tris,
             normals,
-
-            material_idx: material_idx as u32,
-            light_idx: None
         }
     }
 

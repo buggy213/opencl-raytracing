@@ -111,6 +111,19 @@ impl BVH2 {
         }
     }
 
+    fn primitive_from_sphere(center: Vec3, radius: f32, geom_index: u32) -> BuildPrimitive {
+        BuildPrimitive {
+            lower_x: center.x() - radius,
+            lower_y: center.y() - radius,
+            lower_z: center.z() - radius,
+            geomID: geom_index,
+            upper_x: center.x() + radius,
+            upper_y: center.y() + radius,
+            upper_z: center.z() + radius,
+            primID: 0,
+        }
+    }
+
     fn primitives_from_meshes(meshes: &[Mesh]) -> Vec<BuildPrimitive> {
         let mut primitives = Vec::new();
         for (i, mesh) in meshes.iter().enumerate() {

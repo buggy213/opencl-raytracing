@@ -41,7 +41,7 @@ fn main() {
     let cli_args = CommandLineArguments::parse();
     let default_scene = PathBuf::from("scenes/cbbunny.glb");
     let path = cli_args.input.unwrap_or(default_scene);
-    let mut scene = Scene::from_file(&path, None)
+    let mut scene = Scene::from_gltf_file(&path, None)
         .expect("failed to load scene");
 
     let raytracer_settings = RaytracerSettings {
