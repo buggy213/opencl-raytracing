@@ -1,7 +1,7 @@
 use super::{Matrix4x4, Vec3};
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Transform {
     forward: Matrix4x4,
     inverse: Matrix4x4

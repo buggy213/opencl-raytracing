@@ -5,7 +5,10 @@ pub enum MeshError {
     UntriangulatedError,
 }
 
-#[derive(Debug)]
+// Note that a single "logical" mesh could be split into multiple Mesh structs
+// if it contains >1 material. Each Mesh struct actually maps more closely to 
+// "primitive" concept in GLTF. 
+#[derive(Debug, Clone)]
 pub struct Mesh {
     pub vertices: Vec<Vec3>,
     pub tris: Vec<Vec3u>,
@@ -13,14 +16,11 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn from_gltf_mesh(mesh: &gltf::Mesh, buffers: &[gltf::buffer::Data]) -> Mesh {
+    pub fn from_gltf_primitive(primitive: gltf::Primitive, buffers: &[gltf::buffer::Data]) -> Mesh {
         let mut vertices: Vec<Vec3> = Vec::new();
         let mut tris: Vec<Vec3u> = Vec::new();
         let mut normals: Vec<Vec3> = Vec::new();
 
-        assert!(mesh.primitives().len() == 1, "Multiple materials not supported yet");
-
-        let primitive = mesh.primitives().next().unwrap();
         let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
         
         if let Some(iter) = reader.read_positions() {
@@ -49,18 +49,6 @@ impl Mesh {
             vertices,
             tris,
             normals,
-        }
-    }
-
-    pub fn apply_transform(&mut self, transform: &Transform) {
-        for vertex in self.vertices.iter_mut() {
-            let transformed = transform.apply_point(*vertex);
-            *vertex = transformed;
-        }
-
-        for normal in self.normals.iter_mut() {
-            let transformed = transform.apply_normal(*normal);
-            *normal = transformed;
         }
     }
 
