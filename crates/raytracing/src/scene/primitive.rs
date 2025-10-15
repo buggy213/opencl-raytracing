@@ -39,7 +39,39 @@ use crate::lights::Light;
 
 /// Index into the owning Scene's arrays
 pub type MaterialIndex = u32;
-pub type PrimitiveIndex = u32;
+
+#[derive(Debug, Clone, Copy)]
+pub struct BasicPrimitiveIndex(pub u32);
+#[derive(Debug, Clone, Copy)]
+pub struct TransformPrimitiveIndex(pub u32);
+#[derive(Debug, Clone, Copy)]
+pub struct AggregatePrimitiveIndex(pub u32);
+
+#[derive(Debug, Clone, Copy)]
+pub enum PrimitiveIndex {
+    BasicPrimitiveIndex(BasicPrimitiveIndex),
+    TransformPrimitiveIndex(TransformPrimitiveIndex),
+    AggregatePrimitiveIndex(AggregatePrimitiveIndex)
+}
+
+impl From<BasicPrimitiveIndex> for PrimitiveIndex {
+    fn from(value: BasicPrimitiveIndex) -> Self {
+        Self::BasicPrimitiveIndex(value)
+    }
+}
+
+impl From<TransformPrimitiveIndex> for PrimitiveIndex {
+    fn from(value: TransformPrimitiveIndex) -> Self {
+        Self::TransformPrimitiveIndex(value)
+    }
+}
+
+impl From<AggregatePrimitiveIndex> for PrimitiveIndex {
+    fn from(value: AggregatePrimitiveIndex) -> Self {
+        Self::AggregatePrimitiveIndex(value)
+    }
+}
+
 pub type AreaLightIndex = u32;
 pub type TransformIndex = u32;
 

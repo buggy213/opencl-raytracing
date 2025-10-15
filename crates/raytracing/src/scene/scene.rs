@@ -1,16 +1,14 @@
 use std::{collections::HashMap, ops::Range, path::Path};
 
-use crate::{geometry::{Matrix4x4, Mesh, Shape, Transform, Vec3}, lights::Light, materials::Material, scene::primitive::{AggregatePrimitive, BasicPrimitive, Primitive, PrimitiveIndex, TransformIndex, TransformPrimitive}};
+use crate::{geometry::{Matrix4x4, Mesh, Shape, Transform, Vec3}, lights::Light, materials::Material, scene::primitive::{AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex, Primitive, PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex}};
 
 use super::camera::{Camera, RenderTile};
 
 pub struct Scene {
     pub camera: Camera,
-    
-    transforms: Vec<Transform>,
 
     primitives: Vec<Primitive>,
-    root_primitive: PrimitiveIndex,
+    root_primitive: AggregatePrimitiveIndex,
 
     lights: Vec<Light>,
 
@@ -18,6 +16,133 @@ pub struct Scene {
 }
 
 const HEIGHT: usize = 600;
+
+// Accessors for primitives
+impl From<PrimitiveIndex> for usize {
+    fn from(value: PrimitiveIndex) -> Self {
+        match value {
+            PrimitiveIndex::BasicPrimitiveIndex(BasicPrimitiveIndex(i))
+            | PrimitiveIndex::TransformPrimitiveIndex(TransformPrimitiveIndex(i))
+            | PrimitiveIndex::AggregatePrimitiveIndex(AggregatePrimitiveIndex(i)) => i as usize
+        }
+    }
+}
+
+impl Scene {
+    fn primitive_index_from_usize(&self, raw_index: usize) -> PrimitiveIndex {
+        match &self.primitives[raw_index] {
+            Primitive::Basic(_) => BasicPrimitiveIndex(raw_index as u32).into(),
+            Primitive::Transform(_) => TransformPrimitiveIndex(raw_index as u32).into(),
+            Primitive::Aggregate(_) => AggregatePrimitiveIndex(raw_index as u32).into(),
+        }
+    }
+
+    fn get_primitive(&self, primitive_index: PrimitiveIndex) -> &Primitive {
+        let raw_index: usize = primitive_index.into();
+        &self.primitives[raw_index]
+    }
+
+    fn get_basic_primitive(&self, basic_primitive_index: BasicPrimitiveIndex) -> &BasicPrimitive {
+        let raw_index: usize = basic_primitive_index.0 as usize;
+        match &self.primitives[raw_index] {
+            Primitive::Basic(basic_primitive) => basic_primitive,
+            _ => unreachable!("corrupted BasicPrimitiveIndex")
+        }
+    }
+
+    fn get_transform_primitive(&self, transform_primitive_index: TransformPrimitiveIndex) -> &TransformPrimitive {
+        let raw_index: usize = transform_primitive_index.0 as usize;
+        match &self.primitives[raw_index] {
+            Primitive::Transform(transform_primitive) => transform_primitive,
+            _ => unreachable!("corrupted TransformPrimitiveIndex")
+        }
+    }
+
+    fn get_aggregate_primitive(&self, aggregate_primitive_index: AggregatePrimitiveIndex) -> &AggregatePrimitive {
+        let raw_index: usize = aggregate_primitive_index.0 as usize;
+        match &self.primitives[raw_index] {
+            Primitive::Aggregate(aggregate_primitive) => aggregate_primitive,
+            _ => unreachable!("corrupted AggregatePrimitiveIndex")
+        }
+    }
+}
+
+// Helpers for traversing primitive graph
+
+// Iterator over direct descendants of an AggregatePrimitive
+struct DirectDescendantsIter<'scene> {
+    scene: &'scene Scene,
+    aggregate_primitive: &'scene AggregatePrimitive,
+    index: usize,
+}
+
+// Iterator over leaf descendants of an AggregatePrimitive
+struct DescendantsIter<'scene> {
+    scene: &'scene Scene,
+    aggregate_primitive: &'scene AggregatePrimitive,
+    index: usize,
+}
+
+impl<'scene> Iterator for DirectDescendantsIter<'scene> {
+    type Item = (&'scene Primitive, Transform);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.aggregate_primitive.children.len() { 
+            return None;
+        }
+
+        let child_idx = self.aggregate_primitive.children[self.index];
+        let direct_descendant = self.scene.get_primitive(child_idx);
+        self.index += 1;
+
+        Some((direct_descendant, Transform::identity()))
+    }
+}
+
+impl<'scene> Iterator for DescendantsIter<'scene> {
+    type Item = (&'scene Primitive, Transform);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.aggregate_primitive.children.len() {
+            return None;
+        }
+
+        let child_idx = self.aggregate_primitive.children[self.index];
+        let mut current = self.scene.get_primitive(child_idx);
+        let mut transform = Transform::identity();
+
+        loop {
+            match current {
+                Primitive::Basic(_) => break,
+                Primitive::Aggregate(_) => break,
+                Primitive::Transform(transform_primitive) => {
+                    let child_idx = transform_primitive.primitive;
+                    current = self.scene.get_primitive(child_idx);
+                    transform = transform.compose(transform_primitive.transform.clone());
+                },
+                
+            }
+        }
+
+        Some((current, transform))
+    }
+}
+
+impl Scene {
+    fn root(&self) -> &AggregatePrimitive {
+        self.get_aggregate_primitive(self.root_primitive)
+    }
+    
+    fn direct_descendants_iter<'scene>(&'scene self, aggregate_primitive: &'scene AggregatePrimitive) 
+        -> DirectDescendantsIter<'scene> {
+        DirectDescendantsIter { scene: self, aggregate_primitive, index: 0 }
+    }
+
+    fn descendants_iter<'scene>(&'scene self, aggregate_primitive: &'scene AggregatePrimitive)
+        -> DescendantsIter<'scene> {
+        DescendantsIter { scene: self, aggregate_primitive, index: 0 }
+    }
+}
 
 impl Scene {
     pub fn from_gltf_file(filepath: &Path, render_tile: Option<RenderTile>) -> anyhow::Result<Scene> {
@@ -27,9 +152,8 @@ impl Scene {
         let height: usize = HEIGHT;
         
         // detect gltf level instancing (i.e. two nodes with the same "mesh" attribute)
-        let mut instancing_map: HashMap<usize, Range<PrimitiveIndex>> = HashMap::new();
+        let mut instancing_map: HashMap<usize, Range<usize>> = HashMap::new();
 
-        let mut transforms: Vec<Transform> = Vec::new();
         let mut primitives: Vec<Primitive> = Vec::new();
         let mut lights: Vec<Light> = Vec::new();
 
@@ -65,18 +189,19 @@ impl Scene {
                 // check if this mesh is instanced
                 if let Some(range) = instancing_map.get(&gltf_mesh.index()) {
                     for i in range.clone() {
+                        let instance_primitive_idx = BasicPrimitiveIndex(i as u32);
                         let transform_primitive = Primitive::Transform(TransformPrimitive {
-                            primitive: i,
+                            primitive: instance_primitive_idx.into(),
                             transform: transform.clone(),
                         });
-                        let transform_primitive_idx = primitives.len() as PrimitiveIndex;
+                        let transform_primitive_idx = TransformPrimitiveIndex(primitives.len() as u32);
                         primitives.push(transform_primitive);
-                        root_primitive_children.push(transform_primitive_idx);
+                        root_primitive_children.push(transform_primitive_idx.into());
                     }
                     continue;
                 }
 
-                let start = primitives.len() as PrimitiveIndex;
+                let start = primitives.len();
                 for gltf_primitive in gltf_mesh.primitives() {
                     let primitive_id = primitives.len() as u32;
                     let material_idx = gltf_primitive.material().index().unwrap_or(0) as u32;
@@ -99,23 +224,23 @@ impl Scene {
 
                     primitives.push(mesh_primitive);
                 };
-                let end = primitives.len() as PrimitiveIndex;
+                let end = primitives.len();
             
                 // record the range of this mesh in the instancing map
                 instancing_map.insert(gltf_mesh.index(), start..end);
 
                 // create transform primitives for them
                 for gltf_primitive in start..end {
-                    let primitive_id = gltf_primitive as PrimitiveIndex;
+                    let primitive_id = BasicPrimitiveIndex(gltf_primitive as u32);
                     
                     let transform_primitive = Primitive::Transform(TransformPrimitive {
-                        primitive: primitive_id,
+                        primitive: primitive_id.into(),
                         transform: transform.clone(),
                     });
 
-                    let transform_primitive_idx = primitives.len() as PrimitiveIndex;
+                    let transform_primitive_idx = TransformPrimitiveIndex(primitives.len() as u32);
                     primitives.push(transform_primitive);
-                    root_primitive_children.push(transform_primitive_idx);
+                    root_primitive_children.push(transform_primitive_idx.into());
                 }
             }
 
@@ -128,12 +253,11 @@ impl Scene {
         let root_primitive = Primitive::Aggregate(AggregatePrimitive {
             children: root_primitive_children
         });
-        let root_primitive_idx = primitives.len() as u32;
+        let root_primitive_idx = AggregatePrimitiveIndex(primitives.len() as u32);
         primitives.push(root_primitive);
 
         Ok(Scene {
             lights,
-            transforms,
             primitives,
             root_primitive: root_primitive_idx,
             camera: camera.expect("Scene must have camera"),
