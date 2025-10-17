@@ -4,12 +4,14 @@ use embree4_sys::{rtcBuildBVH, rtcNewBVH, rtcReleaseBVH, rtcThreadLocalAlloc, RT
 
 use crate::*;
 
-pub struct BVH {
+pub struct BVH<'device> {
+    // BVH is tied to lifetime of device
+    _device: &'device Device,
     handle: RTCBVH
 }
 
-pub struct BuiltBVH<NodeType> {
-    _handle: BVH, // kept around for RAII
+pub struct BuiltBVH<'device, NodeType> {
+    _bvh: BVH<'device>,
     root: *const NodeType
 }
 
@@ -201,7 +203,7 @@ impl<NodeType: Debug> BVHBuildArguments<NodeType> {
                     maxDepth: 32,
                     sahBlockSize: 1,
                     minLeafSize: 1,
-                    maxLeafSize: max_leaf_size.unwrap_or(RTCBuildConstants_RTC_BUILD_MAX_PRIMITIVES_PER_LEAF),
+                    maxLeafSize: max_leaf_size.unwrap_or(RTCBuildConstants_RTC_BUILD_MAX_PRIMITIVES_PER_LEAF as u32),
                     traversalCost: 1.0,
                     intersectionCost: 1.0,
                     bvh: bvh.handle,
@@ -225,32 +227,33 @@ impl<NodeType: Debug> BVHBuildArguments<NodeType> {
     }
 }
 
-impl BVH {
-    pub fn new(device: &Device) -> BVH {
+impl<'device> BVH<'device> {
+    pub fn new(device: &'device Device) -> BVH<'device> {
         BVH {
+            _device: device,
             handle: unsafe {
                 rtcNewBVH(device.handle)
             }
         }
     }
 
-    pub fn build<NodeType: Debug>(self, args: BVHBuildArguments<NodeType>) -> BuiltBVH<NodeType> {
+    pub fn build<NodeType: Debug>(self, args: BVHBuildArguments<NodeType>) -> BuiltBVH<'device, NodeType> {
         let embree_args = args.build(&self);
         let build_result = unsafe {
             rtcBuildBVH(&embree_args)
         };
         
-        BuiltBVH { _handle: self, root: build_result as *const NodeType }
+        BuiltBVH { _bvh: self, root: build_result as *const NodeType }
     }
 }
 
-impl<NodeType> BuiltBVH<NodeType> {
+impl<NodeType> BuiltBVH<'_, NodeType> {
     pub fn root(&self) -> &NodeType {
         unsafe { &*(self.root) }
     } 
 }
 
-impl Drop for BVH {
+impl Drop for BVH<'_> {
     fn drop(&mut self) {
         eprintln!("Dropping BVH");
         unsafe { 

@@ -1,19 +1,22 @@
 use std::{collections::VecDeque, ptr::null};
 use embree4::{bvh::{BVHBuildArguments, BVHCallbacks, BuiltBVH}, Bounds, BuildPrimitive, Device, BVH};
 
-use crate::{geometry::{Mesh, Vec3, Vec3u, AABB}, macros::{variadic_max_comparator, variadic_min_comparator}};
+use crate::{geometry::{Mesh, Shape, Vec3, AABB}, macros::{variadic_max_comparator, variadic_min_comparator}};
 
 #[derive(Debug)]
 pub enum BVHNode {
-    Inner {
+    // we keep pointers instead of references in internal BVHNode to avoid lifetime 
+    // complications; requires a small amount of unsafe
+    Inner { 
         left: *const BVHNode,
         right: *const BVHNode,
         left_aabb: AABB,
         right_aabb: AABB
     },
-    Leaf { // 8 triangles in a leaf at most
-        tri_count: u32, 
-        tri_indices: [u32; 8],
+    Leaf {
+        // 8 bvh primitives in a leaf at most
+        prim_count: u32, 
+        prim_indices: [u32; 8],
         geom_indices: [u32; 8]
     }
 }
@@ -34,13 +37,13 @@ impl Default for BVHNode {
     }
 }
 
-pub struct BVH2 {
-    handle: BuiltBVH<BVHNode>, 
+pub struct BVH2<'device> {
+    handle: BuiltBVH<'device, BVHNode>, 
 }
 
-impl BVH2 {
+impl BVH2<'_> {
     fn create_node_bvh2(child_count: u32) -> BVHNode {
-        assert!(child_count == 2);
+        assert!(child_count == 2, "Embree tried to create a BVH2 node with >2 children");
         BVHNode::Inner { 
             left: null(), 
             right: null(), 
@@ -50,7 +53,7 @@ impl BVH2 {
     }
 
     fn create_leaf_bvh2(primitives: &[BuildPrimitive]) -> BVHNode {
-        let indices = [0, 1, 2, 3, 4, 5, 6, 7].map(|i| 
+        let prim_indices = [0, 1, 2, 3, 4, 5, 6, 7].map(|i| 
             primitives.get(i).map(|p| p.primID).unwrap_or_default()
         );
 
@@ -59,8 +62,8 @@ impl BVH2 {
         );
 
         BVHNode::Leaf { 
-            tri_count: primitives.len() as u32, 
-            tri_indices: indices,
+            prim_count: primitives.len() as u32, 
+            prim_indices,
             geom_indices
         }
     }
@@ -95,86 +98,10 @@ impl BVH2 {
     );
 }
 
-impl BVH2 {
-    fn primitive_from_triangle(p0: Vec3, p1: Vec3, p2: Vec3, tri_index: u32, geom_index: u32) -> BuildPrimitive {
-        let min = variadic_min_comparator!(Vec3::elementwise_min, p0, p1, p2);
-        let max = variadic_max_comparator!(Vec3::elementwise_max, p0, p1, p2);
-        BuildPrimitive { 
-            lower_x: min.0, 
-            lower_y: min.1, 
-            lower_z: min.2, 
-            geomID: geom_index, 
-            upper_x: max.0, 
-            upper_y: max.1, 
-            upper_z: max.2, 
-            primID: tri_index 
-        }
-    }
-
-    fn primitive_from_sphere(center: Vec3, radius: f32, geom_index: u32) -> BuildPrimitive {
-        BuildPrimitive {
-            lower_x: center.x() - radius,
-            lower_y: center.y() - radius,
-            lower_z: center.z() - radius,
-            geomID: geom_index,
-            upper_x: center.x() + radius,
-            upper_y: center.y() + radius,
-            upper_z: center.z() + radius,
-            primID: 0,
-        }
-    }
-
-    fn primitives_from_meshes(meshes: &[Mesh]) -> Vec<BuildPrimitive> {
-        let mut primitives = Vec::new();
-        for (i, mesh) in meshes.iter().enumerate() {
-            for (j, tri) in mesh.tris.iter().cloned().enumerate() {
-                let (t0, t1, t2) = (tri.0, tri.1, tri.2);
-                let p0 = mesh.vertices[t0 as usize];
-                let p1 = mesh.vertices[t1 as usize];
-                let p2 = mesh.vertices[t2 as usize];
-                primitives.push(BVH2::primitive_from_triangle(p0, p1, p2, j as u32, i as u32));
-            }
-        }
-
-        primitives
-    }
-
-    fn sanity_check(root_node: *const BVHNode, top: bool) -> (i32, i32, i32, i32) {
-        let node = unsafe { root_node.read() };
-        let inner_nodes;
-        let leaf_nodes;
-        let tris;
-        let max_depth;
-        match node {
-            BVHNode::Inner { left, right, left_aabb, right_aabb } =>  {
-                let (left_inner_nodes, left_leaf_nodes, left_tris, left_max_depth) = BVH2::sanity_check(left, false);
-                let (right_inner_nodes, right_leaf_nodes, right_tris, right_max_depth) = BVH2::sanity_check(right, false);
-                inner_nodes = 1 + left_inner_nodes + right_inner_nodes;
-                leaf_nodes = left_leaf_nodes + right_leaf_nodes;
-                tris = left_tris + right_tris;
-                max_depth = i32::max(left_max_depth, right_max_depth) + 1;
-                eprintln!("height={}, left_aabb={:?}, right_aabb={:?}", max_depth, left_aabb, right_aabb);
-            },
-            BVHNode::Leaf { tri_count, .. } => {
-                inner_nodes = 0;
-                leaf_nodes = 1;
-                tris = tri_count as i32;
-                max_depth = 1;
-            },
-        }
-
-        if top {
-            println!("inner nodes={} leaf nodes={} tris={}, max_depth={}", inner_nodes, leaf_nodes, tris, max_depth);
-        }
-
-        return (inner_nodes, leaf_nodes, tris, max_depth);
-    }
-
-    pub fn create(device: &Device, meshes: &[Mesh]) -> BVH2 {
+impl<'device> BVH2<'device> {
+    fn create(device: &'device Device, primitives: Vec<BuildPrimitive>) -> BVH2<'device> {
         let bvh = BVH::new(device);
-        // println!("{}", device.get_error());
-
-        let primitives: Vec<BuildPrimitive> = BVH2::primitives_from_meshes(meshes);
+        
         let bvh_arguments = 
         BVHBuildArguments::new()
             .max_leaf_size(8)
@@ -182,7 +109,7 @@ impl BVH2 {
             .set_primitives(primitives.as_slice());
         
         let build_result = bvh.build(bvh_arguments);
-        // BVH2::sanity_check(build_result, true);
+        
         BVH2 { 
             handle: build_result
         }
@@ -190,7 +117,7 @@ impl BVH2 {
 }
 
 // unsafe accessors
-impl BVH2 {
+impl BVH2<'_> {
     pub fn root(&self) -> &BVHNode {
         self.handle.root()
     }
@@ -212,30 +139,124 @@ impl BVHNode {
     }
 }
 
+
+struct BVH2Builder {
+    primitives: Vec<BuildPrimitive>
+}
+
+impl BVH2Builder {
+    pub fn new() -> Self {
+        Self { primitives: Vec::new() }
+    }
+
+    pub fn add_shape(&mut self, shape: &Shape, geom_index: u32) {
+        match shape {
+            Shape::TriangleMesh(mesh) => self.add_mesh(mesh, geom_index),
+            Shape::Sphere { center, radius } => self.add_sphere(*center, *radius, geom_index),
+        }
+    }
+
+    pub fn add_sub_bvh(&mut self, bounds: AABB, geom_index: u32) {
+        self.add_bvh(bounds, geom_index);
+    }
+    
+    pub fn build<'device>(self, device: &'device Device) -> BVH2<'device> {
+        BVH2::create(device, self.primitives)
+    }
+}
+
+impl BVH2Builder {
+    fn add_tri(&mut self, p0: Vec3, p1: Vec3, p2: Vec3, tri_index: u32, geom_index: u32) {
+        let min = variadic_min_comparator!(Vec3::elementwise_min, p0, p1, p2);
+        let max = variadic_max_comparator!(Vec3::elementwise_max, p0, p1, p2);
+        let primitive = BuildPrimitive { 
+            lower_x: min.0, 
+            lower_y: min.1, 
+            lower_z: min.2, 
+            geomID: geom_index, 
+            upper_x: max.0, 
+            upper_y: max.1, 
+            upper_z: max.2, 
+            primID: tri_index 
+        };
+
+        self.primitives.push(primitive);
+    }
+
+    fn add_sphere(&mut self, center: Vec3, radius: f32, geom_index: u32) {
+        let primitive = BuildPrimitive {
+            lower_x: center.x() - radius,
+            lower_y: center.y() - radius,
+            lower_z: center.z() - radius,
+            geomID: geom_index,
+            upper_x: center.x() + radius,
+            upper_y: center.y() + radius,
+            upper_z: center.z() + radius,
+            primID: 0,
+        };
+
+        self.primitives.push(primitive);
+    }
+
+    fn add_mesh(&mut self, mesh: &Mesh, geom_index: u32) {
+        for (tri_index, tri) in mesh.tris.iter().cloned().enumerate() {
+            let (t0, t1, t2) = (tri.0, tri.1, tri.2);
+            let p0 = mesh.vertices[t0 as usize];
+            let p1 = mesh.vertices[t1 as usize];
+            let p2 = mesh.vertices[t2 as usize];
+            self.add_tri(p0, p1, p2, tri_index as u32 , geom_index);
+        }
+    }
+
+    fn add_bvh(&mut self, bounds: AABB, geom_index: u32) {
+        let primitive = BuildPrimitive {
+            lower_x: bounds.minimum.x(),
+            lower_y: bounds.minimum.y(),
+            lower_z: bounds.minimum.z(),
+            geomID: geom_index,
+            upper_x: bounds.maximum.x(),
+            upper_y: bounds.maximum.y(),
+            upper_z: bounds.maximum.z(),
+            primID: 0
+        };
+
+        self.primitives.push(primitive);
+    }
+}
+
 #[repr(C)]
 #[derive(Debug)]
 pub struct LinearizedBVHNode {
-    min_x: f32,
-    min_y: f32,
-    min_z: f32,
+    pub min_x: f32,
+    pub min_y: f32,
+    pub min_z: f32,
+    // if tri_count is 0, then this node is an internal node, and the value represents 
+    // index of left child (right child is subsequent element).
+    // otherwise, this node is a leaf node, and the value represents the index of the
+    // first PrimPtr
     pub left_first: u32,
-    max_x: f32,
-    max_y: f32,
-    max_z: f32,
-    pub tri_count: u32
+    pub max_x: f32,
+    pub max_y: f32,
+    pub max_z: f32,
+    pub prim_count: u32
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct TriPtr {
+pub struct PrimPtr {
     pub geom_id: u32,
-    pub verts: Vec3u
+    pub prim_id: u32,
+}
+
+pub struct LinearizedBVH {
+    pub nodes: Vec<LinearizedBVHNode>,
+    pub prim_ptrs: Vec<PrimPtr>,
 }
 
 impl LinearizedBVHNode {
-    pub fn linearize_bvh_mesh(bvh: &BVH2, meshes: &[Mesh]) -> (Vec<TriPtr>, Vec<LinearizedBVHNode>) {
-        // perform BFS over BVH, make triangles pointed to by leaf nodes contiguous
-        let pessimal_capacity = meshes.iter().map(|mesh| mesh.tris.len() / 8).sum();
-        let mut queue: VecDeque<(&BVHNode, AABB)> = VecDeque::with_capacity(pessimal_capacity);
+    pub fn linearize_bvh_mesh(bvh: &BVH2) -> LinearizedBVH {
+        // perform BFS over BVH, make primitives pointed to by leaf nodes contiguous
+        let mut queue: VecDeque<(&BVHNode, AABB)> = VecDeque::new();
         let node = bvh.root();
         let root_aabb;
 
@@ -243,13 +264,13 @@ impl LinearizedBVHNode {
             BVHNode::Inner { left_aabb, right_aabb, .. } => {
                 root_aabb = AABB::surrounding_box(*left_aabb, *right_aabb);
             },
-            BVHNode::Leaf { tri_count, tri_indices, geom_indices } => {
+            BVHNode::Leaf { .. } => {
                 unimplemented!("BVH root is a leaf node");
             }
         }
 
         let mut bvh_nodes: Vec<LinearizedBVHNode> = Vec::new();
-        let mut contiguous_tris: Vec<TriPtr> = Vec::new();
+        let mut contiguous_prims: Vec<PrimPtr> = Vec::new();
         queue.push_back((node, root_aabb));
         while !queue.is_empty() {
             let (node, aabb) = queue.pop_front().unwrap();
@@ -266,37 +287,39 @@ impl LinearizedBVHNode {
                         max_x: aabb.maximum.0, 
                         max_y: aabb.maximum.1, 
                         max_z: aabb.maximum.2, 
-                        tri_count: 0
+                        prim_count: 0
                     });
                 },
-                BVHNode::Leaf { tri_count, tri_indices, geom_indices } => {
+                BVHNode::Leaf { prim_count, prim_indices, geom_indices } => {
                     bvh_nodes.push(LinearizedBVHNode { 
                         min_x: aabb.minimum.0, 
                         min_y: aabb.minimum.1, 
                         min_z: aabb.minimum.2, 
-                        left_first: contiguous_tris.len() as u32, 
+                        left_first: contiguous_prims.len() as u32, 
                         max_x: aabb.maximum.0, 
                         max_y: aabb.maximum.1, 
                         max_z: aabb.maximum.2, 
-                        tri_count: *tri_count
+                        prim_count: *prim_count
                     });
 
                     
-                    for i in 0..*tri_count {
-                        let geom_id = geom_indices[i as usize] as usize;
-                        let mesh = &meshes[geom_id];
-                        let mesh_tri = mesh.tris[tri_indices[i as usize] as usize];
-                        let tri_ptr = TriPtr { 
-                            geom_id: geom_id as u32, 
-                            verts: mesh_tri 
+                    for i in 0..*prim_count {
+                        let geom_id = geom_indices[i as usize];
+                        let prim_id = prim_indices[i as usize];
+                        let prim_ptr = PrimPtr { 
+                            geom_id, 
+                            prim_id,
                         };
-                        contiguous_tris.push(tri_ptr);
+                        contiguous_prims.push(prim_ptr);
                     }
                 },
             }
         }
         
-        (contiguous_tris, bvh_nodes)
+        LinearizedBVH {
+            nodes: bvh_nodes,
+            prim_ptrs: contiguous_prims,
+        }
     }
 
     pub fn aabb(&self) -> AABB {

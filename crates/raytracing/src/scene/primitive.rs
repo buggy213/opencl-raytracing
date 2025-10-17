@@ -29,8 +29,8 @@
 //!     - Aggregate primitives recursively construct BVH, which becomes a single leaf in outer BVH
 //! - When constructing BVH with Embree, each "build primitive" has two associated values: geomID and primID
 //!     - We associate geomID with index into aggregate
-//!     - primID is the underlying index for shape included in BasicPrimitive that is the deepest descendant of 
-//!     aggregate element.
+//!     - primID is the underlying index for shape included in BasicPrimitive 
+//!     (note that transform primitives are folded away) during construction
 //!     - primID is 0 if that descendant is another AggregatePrimitive
 
 use crate::geometry::{Transform, Shape};

@@ -2,9 +2,6 @@ use std::{ptr::{self, null_mut}, ffi::CStr};
 
 use embree4_sys::{rtcGetDeviceError, rtcNewDevice, rtcReleaseDevice, rtcSetDeviceErrorFunction, RTCDevice, RTCError};
 
-
-
-
 pub struct Device {
     pub(crate) handle: RTCDevice
 }
