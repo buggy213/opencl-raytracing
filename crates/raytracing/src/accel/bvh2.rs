@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, ptr::null};
 use embree4::{bvh::{BVHBuildArguments, BVHCallbacks, BuiltBVH}, Bounds, BuildPrimitive, Device, BVH};
 
-use crate::{geometry::{Mesh, Shape, Vec3, AABB}, macros::{variadic_max_comparator, variadic_min_comparator}};
+use crate::{geometry::{Mesh, Shape, Transform, Vec3, AABB}, macros::{variadic_max_comparator, variadic_min_comparator}};
 
 #[derive(Debug)]
 pub enum BVHNode {
@@ -140,7 +140,7 @@ impl BVHNode {
 }
 
 
-struct BVH2Builder {
+pub struct BVH2Builder {
     primitives: Vec<BuildPrimitive>
 }
 
@@ -149,15 +149,15 @@ impl BVH2Builder {
         Self { primitives: Vec::new() }
     }
 
-    pub fn add_shape(&mut self, shape: &Shape, geom_index: u32) {
+    pub fn add_shape(&mut self, shape: &Shape, transform: &Transform, geom_index: u32) {
         match shape {
-            Shape::TriangleMesh(mesh) => self.add_mesh(mesh, geom_index),
-            Shape::Sphere { center, radius } => self.add_sphere(*center, *radius, geom_index),
+            Shape::TriangleMesh(mesh) => self.add_mesh(mesh, transform, geom_index),
+            Shape::Sphere { center, radius } => self.add_sphere(*center, *radius, transform, geom_index),
         }
     }
 
-    pub fn add_sub_bvh(&mut self, bounds: AABB, geom_index: u32) {
-        self.add_bvh(bounds, geom_index);
+    pub fn add_sub_bvh(&mut self, bounds: AABB, transform: &Transform, geom_index: u32, prim_index: u32) {
+        self.add_bvh(bounds, transform, geom_index, prim_index);
     }
     
     pub fn build<'device>(self, device: &'device Device) -> BVH2<'device> {
@@ -183,41 +183,50 @@ impl BVH2Builder {
         self.primitives.push(primitive);
     }
 
-    fn add_sphere(&mut self, center: Vec3, radius: f32, geom_index: u32) {
+    fn add_sphere(&mut self, center: Vec3, radius: f32, transform: &Transform, geom_index: u32) {
+        let aabb = AABB::new(
+            center - Vec3(radius, radius, radius), 
+            center + Vec3(radius, radius, radius)
+        );
+
+        let transformed_aabb = AABB::transform_aabb(aabb, transform);
+
         let primitive = BuildPrimitive {
-            lower_x: center.x() - radius,
-            lower_y: center.y() - radius,
-            lower_z: center.z() - radius,
+            lower_x: transformed_aabb.minimum.x(),
+            lower_y: transformed_aabb.minimum.y(),
+            lower_z: transformed_aabb.minimum.z(),
             geomID: geom_index,
-            upper_x: center.x() + radius,
-            upper_y: center.y() + radius,
-            upper_z: center.z() + radius,
+            upper_x: transformed_aabb.maximum.x(),
+            upper_y: transformed_aabb.maximum.y(),
+            upper_z: transformed_aabb.maximum.z(),
             primID: 0,
         };
 
         self.primitives.push(primitive);
     }
 
-    fn add_mesh(&mut self, mesh: &Mesh, geom_index: u32) {
+    fn add_mesh(&mut self, mesh: &Mesh, transform: &Transform, geom_index: u32) {
         for (tri_index, tri) in mesh.tris.iter().cloned().enumerate() {
             let (t0, t1, t2) = (tri.0, tri.1, tri.2);
-            let p0 = mesh.vertices[t0 as usize];
-            let p1 = mesh.vertices[t1 as usize];
-            let p2 = mesh.vertices[t2 as usize];
-            self.add_tri(p0, p1, p2, tri_index as u32 , geom_index);
+            let p0 = transform.apply_point(mesh.vertices[t0 as usize]);
+            let p1 = transform.apply_point(mesh.vertices[t1 as usize]);
+            let p2 = transform.apply_point(mesh.vertices[t2 as usize]);
+            self.add_tri(p0, p1, p2, tri_index as u32, geom_index);
         }
     }
 
-    fn add_bvh(&mut self, bounds: AABB, geom_index: u32) {
+    fn add_bvh(&mut self, bounds: AABB, transform: &Transform, geom_index: u32, prim_index: u32) {
+        let transformed_aabb = AABB::transform_aabb(bounds, transform);
+
         let primitive = BuildPrimitive {
-            lower_x: bounds.minimum.x(),
-            lower_y: bounds.minimum.y(),
-            lower_z: bounds.minimum.z(),
+            lower_x: transformed_aabb.minimum.x(),
+            lower_y: transformed_aabb.minimum.y(),
+            lower_z: transformed_aabb.minimum.z(),
             geomID: geom_index,
-            upper_x: bounds.maximum.x(),
-            upper_y: bounds.maximum.y(),
-            upper_z: bounds.maximum.z(),
-            primID: 0
+            upper_x: transformed_aabb.maximum.x(),
+            upper_y: transformed_aabb.maximum.y(),
+            upper_z: transformed_aabb.maximum.z(),
+            primID: prim_index
         };
 
         self.primitives.push(primitive);
@@ -248,13 +257,19 @@ pub struct PrimPtr {
     pub prim_id: u32,
 }
 
+impl LinearizedBVHNode {
+    pub fn bounds(&self) -> AABB {
+        AABB { minimum: Vec3(self.min_x, self.min_y, self.min_z), maximum: Vec3(self.max_x, self.max_y, self.max_z) }
+    }
+}
+
 pub struct LinearizedBVH {
     pub nodes: Vec<LinearizedBVHNode>,
     pub prim_ptrs: Vec<PrimPtr>,
 }
 
-impl LinearizedBVHNode {
-    pub fn linearize_bvh_mesh(bvh: &BVH2) -> LinearizedBVH {
+impl LinearizedBVH {
+    pub fn linearize_bvh(bvh: &BVH2) -> LinearizedBVH {
         // perform BFS over BVH, make primitives pointed to by leaf nodes contiguous
         let mut queue: VecDeque<(&BVHNode, AABB)> = VecDeque::new();
         let node = bvh.root();
@@ -322,7 +337,11 @@ impl LinearizedBVHNode {
         }
     }
 
-    pub fn aabb(&self) -> AABB {
-        AABB { minimum: Vec3(self.min_x, self.min_y, self.min_z), maximum: Vec3(self.max_x, self.max_y, self.max_z) }
+    pub fn root(&self) -> &LinearizedBVHNode {
+        &self.nodes[0]
+    }
+
+    pub fn bounds(&self) -> AABB {
+        self.root().bounds()
     }
 }

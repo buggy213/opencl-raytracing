@@ -10,9 +10,9 @@ pub struct Scene {
     primitives: Vec<Primitive>,
     root_primitive: AggregatePrimitiveIndex,
 
-    lights: Vec<Light>,
+    pub lights: Vec<Light>,
 
-    materials: Vec<Material>
+    pub materials: Vec<Material>
 }
 
 const HEIGHT: usize = 600;
@@ -29,7 +29,7 @@ impl From<PrimitiveIndex> for usize {
 }
 
 impl Scene {
-    fn primitive_index_from_usize(&self, raw_index: usize) -> PrimitiveIndex {
+    pub fn primitive_index_from_usize(&self, raw_index: usize) -> PrimitiveIndex {
         match &self.primitives[raw_index] {
             Primitive::Basic(_) => BasicPrimitiveIndex(raw_index as u32).into(),
             Primitive::Transform(_) => TransformPrimitiveIndex(raw_index as u32).into(),
@@ -37,12 +37,12 @@ impl Scene {
         }
     }
 
-    fn get_primitive(&self, primitive_index: PrimitiveIndex) -> &Primitive {
+    pub fn get_primitive(&self, primitive_index: PrimitiveIndex) -> &Primitive {
         let raw_index: usize = primitive_index.into();
         &self.primitives[raw_index]
     }
 
-    fn get_basic_primitive(&self, basic_primitive_index: BasicPrimitiveIndex) -> &BasicPrimitive {
+    pub fn get_basic_primitive(&self, basic_primitive_index: BasicPrimitiveIndex) -> &BasicPrimitive {
         let raw_index: usize = basic_primitive_index.0 as usize;
         match &self.primitives[raw_index] {
             Primitive::Basic(basic_primitive) => basic_primitive,
@@ -50,7 +50,7 @@ impl Scene {
         }
     }
 
-    fn get_transform_primitive(&self, transform_primitive_index: TransformPrimitiveIndex) -> &TransformPrimitive {
+    pub fn get_transform_primitive(&self, transform_primitive_index: TransformPrimitiveIndex) -> &TransformPrimitive {
         let raw_index: usize = transform_primitive_index.0 as usize;
         match &self.primitives[raw_index] {
             Primitive::Transform(transform_primitive) => transform_primitive,
@@ -58,7 +58,7 @@ impl Scene {
         }
     }
 
-    fn get_aggregate_primitive(&self, aggregate_primitive_index: AggregatePrimitiveIndex) -> &AggregatePrimitive {
+    pub fn get_aggregate_primitive(&self, aggregate_primitive_index: AggregatePrimitiveIndex) -> &AggregatePrimitive {
         let raw_index: usize = aggregate_primitive_index.0 as usize;
         match &self.primitives[raw_index] {
             Primitive::Aggregate(aggregate_primitive) => aggregate_primitive,
@@ -129,16 +129,16 @@ impl<'scene> Iterator for DescendantsIter<'scene> {
 }
 
 impl Scene {
-    fn root(&self) -> &AggregatePrimitive {
+    pub fn root(&self) -> &AggregatePrimitive {
         self.get_aggregate_primitive(self.root_primitive)
     }
     
-    fn direct_descendants_iter<'scene>(&'scene self, aggregate_primitive: &'scene AggregatePrimitive) 
+    pub fn direct_descendants_iter<'scene>(&'scene self, aggregate_primitive: &'scene AggregatePrimitive) 
         -> DirectDescendantsIter<'scene> {
         DirectDescendantsIter { scene: self, aggregate_primitive, index: 0 }
     }
 
-    fn descendants_iter<'scene>(&'scene self, aggregate_primitive: &'scene AggregatePrimitive)
+    pub fn descendants_iter<'scene>(&'scene self, aggregate_primitive: &'scene AggregatePrimitive)
         -> DescendantsIter<'scene> {
         DescendantsIter { scene: self, aggregate_primitive, index: 0 }
     }

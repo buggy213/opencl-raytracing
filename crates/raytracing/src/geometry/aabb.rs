@@ -1,3 +1,5 @@
+use crate::geometry::Transform;
+
 use super::vec3::Vec3;
 
 /// Axis-aligned bounding box
@@ -6,6 +8,19 @@ use super::vec3::Vec3;
 pub struct AABB {
     pub minimum: Vec3,
     pub maximum: Vec3
+}
+
+#[macro_export]
+macro_rules! from_points {
+    ($($y:expr),+) => (
+        {
+            let minimum = crate::macros::variadic_min_comparator!(Vec3::elementwise_min, $($y),+);
+            let maximum = crate::macros::variadic_max_comparator!(Vec3::elementwise_max, $($y),+);
+            AABB {
+                minimum, maximum
+            }
+        }
+    );
 }
 
 impl AABB {
@@ -50,15 +65,20 @@ impl AABB {
             ) 
         }
     }
-}
 
-use crate::macros;
-macro_rules! from_points {
-    ($($y:expr),+) => (
-        let minimum = variadic_min_comparator!(Vec3::elementwise_min, $($y),+);
-        let maximum = variadic_max_comparator!(Vec3::elementwise_max, $($y),+);
-        AABB {
-            minimum, maximum
-        }
-    );
+    pub fn transform_aabb(a: AABB, t: &Transform) -> AABB {
+        let v0 = a.minimum;
+        let v1 = a.maximum;
+        
+        let x000 = t.apply_point(Vec3(v0.0, v0.1, v0.2));
+        let x001 = t.apply_point(Vec3(v0.0, v0.1, v1.2));
+        let x010 = t.apply_point(Vec3(v0.0, v1.1, v0.2));
+        let x011 = t.apply_point(Vec3(v0.0, v1.1, v1.2));
+        let x100 = t.apply_point(Vec3(v1.0, v0.1, v0.2));
+        let x101 = t.apply_point(Vec3(v1.0, v0.1, v1.2));
+        let x110 = t.apply_point(Vec3(v1.0, v1.1, v0.2));
+        let x111 = t.apply_point(Vec3(v1.0, v1.1, v1.2));
+
+        from_points!(x000, x001, x010, x011, x100, x101, x110, x111)
+    }
 }

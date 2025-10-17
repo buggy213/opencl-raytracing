@@ -31,11 +31,9 @@
 //!     - We associate geomID with index into aggregate
 //!     - primID is the underlying index for shape included in BasicPrimitive 
 //!     (note that transform primitives are folded away) during construction
-//!     - primID is 0 if that descendant is another AggregatePrimitive
+//!     - primID is index into an array of BVHs if that descendant is another AggregatePrimitive
 
 use crate::geometry::{Transform, Shape};
-use crate::materials::Material;
-use crate::lights::Light;
 
 /// Index into the owning Scene's arrays
 pub type MaterialIndex = u32;
