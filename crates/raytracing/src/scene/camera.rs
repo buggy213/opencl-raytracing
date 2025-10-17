@@ -31,7 +31,7 @@ impl Camera {
             screen_to_zero.compose(Transform::scale(Vec3(1.0 / scaling_x, 1.0 / scaling_y, 1.0)));
         let screen_to_raster: Transform = 
             screen_to_ndc.compose(Transform::scale(Vec3(width as f32, height as f32, 1.0)));
-        if let Some(RenderTile { x0, y0, x1, y1 }) = render_tile {
+        if let Some(RenderTile { x0, y0, .. }) = render_tile {
             let screen_to_raster_tile: Transform = 
                 screen_to_raster
                     .compose(Transform::translate(Vec3(-(x0 as f32), -(y0 as f32), 0.0)));

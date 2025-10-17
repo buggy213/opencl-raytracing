@@ -1,9 +1,4 @@
-use crate::geometry::{Vec3, vec3::Vec3u, Transform};
-
-#[derive(Debug)]
-pub enum MeshError {
-    UntriangulatedError,
-}
+use crate::geometry::{Vec3, vec3::Vec3u};
 
 // Note that a single "logical" mesh could be split into multiple Mesh structs
 // if it contains >1 material. Each Mesh struct actually maps more closely to 
