@@ -1,4 +1,4 @@
-use crate::geometry::Vec3;
+use crate::{geometry::{Transform, Vec3}, scene::{BasicPrimitiveIndex, PrimitiveIndex}};
 
 #[derive(Debug)]
 #[repr(C)]
@@ -8,8 +8,9 @@ pub enum Light {
         intensity: Vec3
     },
     DiffuseAreaLight {
-        prim_id: u32,
-        radiance: Vec3
+        prim_id: BasicPrimitiveIndex,
+        radiance: Vec3,
+        transform: Transform,
     }
 }
 
@@ -23,7 +24,7 @@ impl Light {
         Light::PointLight { position: light_position.into(), intensity }
     }
 
-    pub fn from_emissive_geometry(prim_id: u32, radiance: Vec3) -> Light {
-        Light::DiffuseAreaLight { prim_id, radiance }
+    pub fn from_emissive_geometry(prim_id: BasicPrimitiveIndex, radiance: Vec3, transform: Transform) -> Light {
+        Light::DiffuseAreaLight { prim_id, radiance, transform }
     }
 }

@@ -1,9 +1,8 @@
-use raytracing::{accel::bvh2::{BVH2Builder, LinearizedBVH}, scene::{AggregatePrimitive, Primitive, Scene}};
+use raytracing::{accel::bvh2::{BVH2Builder, BreadthFirstLinearizedBVH, DepthFirstLinearizedBVH}, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
 
 // CPU-backend specific acceleration structures
-struct CPUAccelerationStructures {
-    root_bvh: LinearizedBVH,
-    bvhs: Vec<LinearizedBVH>
+pub(crate) struct CPUAccelerationStructures {
+    pub(crate) bvhs: Vec<DepthFirstLinearizedBVH>
 }
 
 // to prepare a scene for CPU render, must turn all AggregatePrimitives into BVHs using Embree
@@ -11,26 +10,23 @@ struct CPUAccelerationStructures {
 fn prepare_cpu_scene(scene: &Scene) -> CPUAccelerationStructures {
     let embree = embree4::Device::new();
 
-    let mut bvh_builder = BVH2Builder::new();
-    let descendants = scene.descendants_iter(scene.root());
-
-    let mut bvhs: Vec<LinearizedBVH> = Vec::new();
-    
+    let mut bvhs: Vec<DepthFirstLinearizedBVH> = Vec::new();
     fn recursive_helper(
         embree: &embree4::Device,
-        bvhs: &mut Vec<LinearizedBVH>, 
+        bvhs: &mut Vec<DepthFirstLinearizedBVH>, 
         scene: &Scene, 
-        aggregate_primitive: &AggregatePrimitive
+        aggregate_primitive_index: AggregatePrimitiveIndex
     ) -> usize {
         let mut bvh_builder = BVH2Builder::new();
-        let descendants = scene.descendants_iter(aggregate_primitive);
-        for (geom_index, (primitive, transform)) in descendants.enumerate() {
-            match primitive {
+        let descendants = scene.descendants_iter(aggregate_primitive_index);
+        for (geom_index, (primitive_index, transform)) in descendants.enumerate() {
+            match scene.get_primitive(primitive_index) {
                 Primitive::Basic(basic) => {
                     bvh_builder.add_shape(&basic.shape, &transform, geom_index as u32);
                 }
-                Primitive::Aggregate(aggregate) => {
-                    let sub_bvh_index = recursive_helper(embree, bvhs, scene, aggregate);
+                Primitive::Aggregate(_) => {
+                    let aggregate_index = primitive_index.try_into().unwrap();
+                    let sub_bvh_index = recursive_helper(embree, bvhs, scene, aggregate_index);
                     let bounds = bvhs[sub_bvh_index].bounds();
                     bvh_builder.add_sub_bvh(bounds, &transform, geom_index as u32, sub_bvh_index as u32);
                 }
@@ -40,32 +36,22 @@ fn prepare_cpu_scene(scene: &Scene) -> CPUAccelerationStructures {
 
         let bvh = bvh_builder.build(embree);
         let bvh_index = bvhs.len();
-        let bvh = LinearizedBVH::linearize_bvh(&bvh);
+        let bvh = DepthFirstLinearizedBVH::linearize_bvh(&bvh);
         bvhs.push(bvh);
 
         bvh_index
     }
 
-    for (geom_index, (primitive, transform)) in descendants.enumerate() {
-        match primitive {
-            Primitive::Basic(basic) => {
-                bvh_builder.add_shape(&basic.shape, &transform, geom_index as u32);
-            }
-            Primitive::Aggregate(aggregate) => {
-                let sub_bvh_index = recursive_helper(&embree, &mut bvhs, scene, aggregate);
-                let bounds = bvhs[sub_bvh_index].bounds();
-                bvh_builder.add_sub_bvh(bounds, &transform, geom_index as u32, sub_bvh_index as u32);
-            }
-            Primitive::Transform(_) => unreachable!("descendants iterator should flatten transforms")
-        }
-    }
+    recursive_helper(&embree, &mut bvhs, scene, scene.root_index());
 
-
-    let root_bvh = bvh_builder.build(&embree);
-    let root_bvh = LinearizedBVH::linearize_bvh(&root_bvh);
-
-    CPUAccelerationStructures { 
-        root_bvh, 
+    CPUAccelerationStructures {
         bvhs 
+    }
+}
+
+impl CPUAccelerationStructures {
+    pub(crate) fn root_bvh_index(&self) -> usize {
+        // construction algorithm pushes root bvh last
+        self.bvhs.len() - 1
     }
 }

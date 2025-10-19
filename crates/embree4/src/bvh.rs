@@ -1,4 +1,4 @@
-use std::{ffi::{c_uint, c_void}, fmt::Debug, mem::size_of, ptr::{null_mut, slice_from_raw_parts}};
+use std::{ffi::{c_uint, c_void}, fmt::Debug, marker::PhantomData, mem::size_of, ptr::{null_mut, slice_from_raw_parts}};
 
 use embree4_sys::{rtcBuildBVH, rtcNewBVH, rtcReleaseBVH, rtcThreadLocalAlloc, RTCBounds, RTCBuildArguments, RTCBuildConstants_RTC_BUILD_MAX_PRIMITIVES_PER_LEAF, RTCBuildFlags::RTC_BUILD_FLAG_NONE, RTCBuildPrimitive, RTCBuildQuality::RTC_BUILD_QUALITY_MEDIUM, RTCThreadLocalAllocator, RTCBVH};
 
@@ -6,7 +6,7 @@ use crate::*;
 
 pub struct BVH<'device> {
     // BVH is tied to lifetime of device
-    _device: &'device Device,
+    _device: PhantomData<&'device Device>,
     handle: RTCBVH
 }
 
@@ -230,7 +230,7 @@ impl<NodeType: Debug> BVHBuildArguments<NodeType> {
 impl<'device> BVH<'device> {
     pub fn new(device: &'device Device) -> BVH<'device> {
         BVH {
-            _device: device,
+            _device: PhantomData,
             handle: unsafe {
                 rtcNewBVH(device.handle)
             }

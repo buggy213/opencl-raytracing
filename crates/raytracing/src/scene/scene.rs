@@ -70,77 +70,91 @@ impl Scene {
 // Helpers for traversing primitive graph
 
 // Iterator over direct descendants of an AggregatePrimitive
-struct DirectDescendantsIter<'scene> {
+pub struct DirectDescendantsIter<'scene> {
     scene: &'scene Scene,
-    aggregate_primitive: &'scene AggregatePrimitive,
+    aggregate_primitive_index: AggregatePrimitiveIndex,
     index: usize,
 }
 
 // Iterator over leaf descendants of an AggregatePrimitive
-struct DescendantsIter<'scene> {
+pub struct DescendantsIter<'scene> {
     scene: &'scene Scene,
-    aggregate_primitive: &'scene AggregatePrimitive,
+    aggregate_primitive_index: AggregatePrimitiveIndex,
     index: usize,
 }
 
 impl<'scene> Iterator for DirectDescendantsIter<'scene> {
-    type Item = (&'scene Primitive, Transform);
+    type Item = (PrimitiveIndex, Transform);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.aggregate_primitive.children.len() { 
+        let aggregate_primitive = self.scene.get_aggregate_primitive(self.aggregate_primitive_index);
+        if self.index >= aggregate_primitive.children.len() { 
             return None;
         }
 
-        let child_idx = self.aggregate_primitive.children[self.index];
-        let direct_descendant = self.scene.get_primitive(child_idx);
+        let result = self.scene.get_direct_descendant(self.aggregate_primitive_index, self.index);
         self.index += 1;
 
-        Some((direct_descendant, Transform::identity()))
+        Some(result)
     }
 }
 
 impl<'scene> Iterator for DescendantsIter<'scene> {
-    type Item = (&'scene Primitive, Transform);
+    type Item = (PrimitiveIndex, Transform);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.aggregate_primitive.children.len() {
+        let aggregate_primitive = self.scene.get_aggregate_primitive(self.aggregate_primitive_index);
+        if self.index >= aggregate_primitive.children.len() {
             return None;
         }
 
-        let child_idx = self.aggregate_primitive.children[self.index];
-        let mut current = self.scene.get_primitive(child_idx);
+        let result = self.scene.get_descendant(self.aggregate_primitive_index, self.index);
+        self.index += 1;
+
+        Some(result)
+    }
+}
+
+impl Scene {
+    pub fn root_index(&self) -> AggregatePrimitiveIndex {
+        self.root_primitive
+    }
+    
+    pub fn direct_descendants_iter<'scene>(&'scene self, aggregate_primitive_index: AggregatePrimitiveIndex) 
+        -> DirectDescendantsIter<'scene> {
+        DirectDescendantsIter { scene: self, aggregate_primitive_index, index: 0 }
+    }
+
+    pub fn descendants_iter<'scene>(&'scene self, aggregate_primitive_index: AggregatePrimitiveIndex)
+        -> DescendantsIter<'scene> {
+        DescendantsIter { scene: self, aggregate_primitive_index, index: 0 }
+    }
+
+    
+    pub fn get_direct_descendant<'scene>(&'scene self, aggregate_primitive_index: AggregatePrimitiveIndex, index: usize) 
+        -> (PrimitiveIndex, Transform) {
+        (self.get_aggregate_primitive(aggregate_primitive_index).children[index], Transform::identity())
+    }
+
+    pub fn get_descendant<'scene>(&'scene self, aggregate_primitive_index: AggregatePrimitiveIndex, index: usize) 
+        -> (PrimitiveIndex, Transform) {
+        let mut current_idx = self.get_aggregate_primitive(aggregate_primitive_index).children[index];
         let mut transform = Transform::identity();
 
         loop {
-            match current {
+            match self.get_primitive(current_idx) {
                 Primitive::Basic(_) => break,
                 Primitive::Aggregate(_) => break,
                 Primitive::Transform(transform_primitive) => {
                     let child_idx = transform_primitive.primitive;
-                    current = self.scene.get_primitive(child_idx);
+                    current_idx = child_idx;
                     transform = transform.compose(transform_primitive.transform.clone());
                 },
                 
             }
         }
 
-        Some((current, transform))
-    }
-}
-
-impl Scene {
-    pub fn root(&self) -> &AggregatePrimitive {
-        self.get_aggregate_primitive(self.root_primitive)
-    }
-    
-    pub fn direct_descendants_iter<'scene>(&'scene self, aggregate_primitive: &'scene AggregatePrimitive) 
-        -> DirectDescendantsIter<'scene> {
-        DirectDescendantsIter { scene: self, aggregate_primitive, index: 0 }
-    }
-
-    pub fn descendants_iter<'scene>(&'scene self, aggregate_primitive: &'scene AggregatePrimitive)
-        -> DescendantsIter<'scene> {
-        DescendantsIter { scene: self, aggregate_primitive, index: 0 }
+        (current_idx, transform)
     }
 }
 
@@ -203,14 +217,19 @@ impl Scene {
 
                 let start = primitives.len();
                 for gltf_primitive in gltf_mesh.primitives() {
-                    let primitive_id = primitives.len() as u32;
                     let material_idx = gltf_primitive.material().index().unwrap_or(0) as u32;
 
                     let rt_mesh = Mesh::from_gltf_primitive(gltf_primitive, &buffers);
                     let mesh_shape = Shape::TriangleMesh(rt_mesh);
                     
+                    let basic_primitive_idx = BasicPrimitiveIndex(primitives.len() as u32);
+
                     let area_light_idx = if material_emissions[material_idx as usize] != Vec3::zero() {
-                        let area_light = Light::from_emissive_geometry(primitive_id, material_emissions[material_idx as usize]);
+                        let area_light = Light::from_emissive_geometry(
+                            basic_primitive_idx, 
+                            material_emissions[material_idx as usize],
+                            transform.clone(),
+                        );
                         let area_light_idx = lights.len() as u32;
                         lights.push(area_light);
                         Some(area_light_idx)

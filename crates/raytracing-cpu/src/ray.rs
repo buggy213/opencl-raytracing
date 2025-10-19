@@ -1,4 +1,4 @@
-use raytracing::geometry::Vec3;
+use raytracing::geometry::{Transform, Vec3};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Ray {
@@ -10,5 +10,13 @@ pub struct Ray {
 impl Ray {
     pub fn at(&self, t: f32) -> Vec3 {
         self.origin + self.direction * t
+    }
+
+    pub fn transform(ray: Ray, transform: &Transform) -> Ray {
+        Ray {
+            origin: transform.apply_point(ray.origin),
+            direction: transform.apply_vector(ray.direction),
+            debug: ray.debug
+        }
     }
 }

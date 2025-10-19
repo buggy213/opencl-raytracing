@@ -70,8 +70,43 @@ impl From<AggregatePrimitiveIndex> for PrimitiveIndex {
     }
 }
 
+impl TryFrom<PrimitiveIndex> for BasicPrimitiveIndex {
+    type Error = ();
+
+    fn try_from(value: PrimitiveIndex) -> Result<Self, Self::Error> {
+        match value {
+            PrimitiveIndex::BasicPrimitiveIndex(basic_primitive_index) => Ok(basic_primitive_index),
+            PrimitiveIndex::TransformPrimitiveIndex(_) => Err(()),
+            PrimitiveIndex::AggregatePrimitiveIndex(_) => Err(()),
+        }
+    }
+}
+
+impl TryFrom<PrimitiveIndex> for TransformPrimitiveIndex {
+    type Error = ();
+
+    fn try_from(value: PrimitiveIndex) -> Result<Self, Self::Error> {
+        match value {
+            PrimitiveIndex::BasicPrimitiveIndex(_) => Err(()),
+            PrimitiveIndex::TransformPrimitiveIndex(transform_primitive_index) => Ok(transform_primitive_index),
+            PrimitiveIndex::AggregatePrimitiveIndex(_) => Err(()),
+        }
+    }
+}
+
+impl TryFrom<PrimitiveIndex> for AggregatePrimitiveIndex {
+    type Error = ();
+
+    fn try_from(value: PrimitiveIndex) -> Result<Self, Self::Error> {
+        match value {
+            PrimitiveIndex::BasicPrimitiveIndex(_) => Err(()),
+            PrimitiveIndex::TransformPrimitiveIndex(_) => Err(()),
+            PrimitiveIndex::AggregatePrimitiveIndex(aggregate_primitive_index) => Ok(aggregate_primitive_index),
+        }
+    }
+}
+
 pub type AreaLightIndex = u32;
-pub type TransformIndex = u32;
 
 /// The main enum for all scene primitives
 #[derive(Debug, Clone)]
