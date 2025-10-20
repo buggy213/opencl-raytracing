@@ -1,4 +1,4 @@
-use raytracing::{accel::bvh2::{BVH2Builder, BreadthFirstLinearizedBVH, DepthFirstLinearizedBVH}, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
+use raytracing::{accel::bvh2::{BVH2Builder, DepthFirstLinearizedBVH}, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
 
 // CPU-backend specific acceleration structures
 pub(crate) struct CPUAccelerationStructures {
@@ -7,7 +7,7 @@ pub(crate) struct CPUAccelerationStructures {
 
 // to prepare a scene for CPU render, must turn all AggregatePrimitives into BVHs using Embree
 // this is done recursively to handle multi-level BVH
-fn prepare_cpu_scene(scene: &Scene) -> CPUAccelerationStructures {
+pub(crate) fn prepare_cpu_scene(scene: &Scene) -> CPUAccelerationStructures {
     let embree = embree4::Device::new();
 
     let mut bvhs: Vec<DepthFirstLinearizedBVH> = Vec::new();

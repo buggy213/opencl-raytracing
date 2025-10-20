@@ -40,9 +40,10 @@ struct LocalTraversalContext {
     scaling_factor: f32,
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct CPUTraversalContext<'scene> {
-    scene: &'scene Scene,
-    acceleration_structures: &'scene CPUAccelerationStructures,
+    pub(crate) scene: &'scene Scene,
+    pub(crate) acceleration_structures: &'scene CPUAccelerationStructures,
 }
 
 

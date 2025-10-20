@@ -1,9 +1,10 @@
-use accel::{traverse_bvh, BVHData};
+use accel::{traverse_bvh};
 use lights::{light_radiance, occluded, sample_light};
 use materials::CpuMaterial;
 use ray::Ray;
-use raytracing::{accel::{bvh2::LinearizedBVHNode, BVH2}, geometry::{Matrix4x4, Vec3}, scene::{Camera, Scene}};
-use embree4::Device;
+use raytracing::{geometry::{Matrix4x4, Vec3}, scene::{Camera, Scene}};
+
+use crate::accel::CPUTraversalContext;
 
 mod ray;
 mod accel;
@@ -11,6 +12,7 @@ mod geometry;
 mod lights;
 mod materials;
 mod sample;
+mod scene;
 
 fn generate_ray(camera: &Camera, x: u32, y: u32) -> Ray {
     let x_disp = 0.0;
@@ -31,8 +33,7 @@ fn generate_ray(camera: &Camera, x: u32, y: u32) -> Ray {
 
 fn ray_radiance(
     ray: Ray, 
-    bvh: &BVHData, 
-    scene: &Scene, 
+    traversal_context: CPUTraversalContext,
 
     raytracer_settings: &RaytracerSettings
 ) -> Vec3 {
@@ -43,6 +44,11 @@ fn ray_radiance(
     let mut specular_bounce = true;
     let mut radiance = Vec3::zero();
     let mut path_weight = Vec3(1.0, 1.0, 1.0);
+
+    let CPUTraversalContext {
+        scene,
+        acceleration_structures: _,
+    } = traversal_context;
 
     loop {
         // respect near/far clip settings for primary ray
@@ -57,7 +63,7 @@ fn ray_radiance(
             ray, 
             t_min,
             t_max,
-            bvh, 
+            traversal_context, 
             false,
         );
 
@@ -93,7 +99,7 @@ fn ray_radiance(
             for light in &scene.lights {
                 for _ in 0..raytracer_settings.light_sample_count {
                     let light_sample = sample_light(light, scene, hit.point);
-                    let occluded = occluded(bvh, light_sample);
+                    let occluded = occluded(traversal_context, light_sample);
                     if !occluded {
                         let wi = w2o.apply_vector(-light_sample.shadow_ray.direction); // shadow ray from light to hit point, we want other way
                         let bsdf_value = material.get_bsdf(wo, wi);
@@ -130,14 +136,13 @@ fn ray_radiance(
 
 fn first_hit_normals(
     ray: Ray, 
-    bvh: &BVHData, 
-    scene: &Scene
+    traversal_context: CPUTraversalContext
 ) -> Vec3 {
     let hit_info = traverse_bvh(
         ray, 
         0.0,
         f32::INFINITY,
-        bvh, 
+        traversal_context, 
         false,
     );
 
@@ -167,15 +172,12 @@ pub fn render(scene: &mut Scene, raytracer_settings: RaytracerSettings) -> Vec<V
 
 
     // construct BVH using embree
-    let embree_device = Device::new();
-    let mesh_bvh: BVH2 = BVH2::create(&embree_device, &scene.meshes);
-    let (bvh_indices, linearized_bvh) = LinearizedBVHNode::linearize_bvh_mesh(&mesh_bvh, &scene.meshes);
-    let bvh = BVHData {
-        nodes: &linearized_bvh,
-        meshes: &scene.meshes,
-        indices: &bvh_indices,
-    };
-
+    let cpu_acceleration_structures = scene::prepare_cpu_scene(scene);
+    let cpu_traversal_context = accel::CPUTraversalContext::new(
+        &scene,
+        &cpu_acceleration_structures
+    );
+    
     let mut radiance_buffer: Vec<Vec3> = Vec::with_capacity(width * height);
 
     // enter main tracing loop
@@ -185,15 +187,14 @@ pub fn render(scene: &mut Scene, raytracer_settings: RaytracerSettings) -> Vec<V
             
             if raytracer_settings.debug_normals {
                 let ray = generate_ray(camera, i as u32, j as u32);
-                radiance = first_hit_normals(ray, &bvh, scene);
+                radiance = first_hit_normals(ray, cpu_traversal_context);
             }
             else {
-                for s in 0..raytracer_settings.samples_per_pixel {
+                for _ in 0..raytracer_settings.samples_per_pixel {
                     let ray = generate_ray(camera, i as u32, j as u32);
                     radiance += ray_radiance(
                         ray, 
-                        &bvh, 
-                        &scene,  
+                        cpu_traversal_context, 
                         &raytracer_settings
                     );
                 }
