@@ -141,6 +141,14 @@ impl ops::Sub for Vec3 {
     }
 }
 
+impl ops::SubAssign for Vec3 {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.0 -= rhs.0;
+        self.1 -= rhs.1;
+        self.2 -= rhs.2;
+    }
+}
+
 // element-wise product
 impl ops::Mul for Vec3 {
     type Output = Vec3;

@@ -271,6 +271,50 @@ impl Matrix4x4 {
         me
     }
 
+    // rotate theta clockwise about v, assuming right-handed coordinate system
+    pub fn rotation(theta: f32, v: Vec3) -> Matrix4x4 {
+        // rotation matrix
+        let a14 = 0.0;
+        let a24 = 0.0;
+        let a34 = 0.0;
+        let a41 = 0.0;
+        let a42 = 0.0;
+        let a43 = 0.0;
+        let a44 = 1.0;
+
+        let rotate_u_about_v = |u: Vec3| {
+            let v_c = v * Vec3::dot(u, v);
+            let v1 = u - v;
+            let v2 = Vec3::cross(v, v1);
+
+            v_c + v1 * f32::cos(theta) + v2 * f32::sin(theta)
+        };
+
+        let x_under_rotation = rotate_u_about_v(Vec3(1.0, 0.0, 0.0));
+        let a11 = x_under_rotation.x();
+        let a21 = x_under_rotation.y();
+        let a31 = x_under_rotation.z();
+
+        let y_under_rotation = rotate_u_about_v(Vec3(0.0, 1.0, 0.0));
+        let a12 = y_under_rotation.x();
+        let a22 = y_under_rotation.y();
+        let a32 = y_under_rotation.z();
+
+        let z_under_rotation = rotate_u_about_v(Vec3(0.0, 0.0, 1.0));
+        let a13 = z_under_rotation.x();
+        let a23 = z_under_rotation.y();
+        let a33 = z_under_rotation.z();
+
+        Matrix4x4::create(
+            a11, a12, a13, a14, 
+            a21, a22, a23, a24, 
+            a31, a32, a33, a34, 
+            a41, a42, a43, a44
+        )
+    }
+}
+
+impl Matrix4x4 {
     pub fn apply_point(&self, p: Vec3) -> Vec3 {
         let a = self.data[0][0] * p.0 + self.data[0][1] * p.1 + self.data[0][2] * p.2 + self.data[0][3] * 1.0;
         let b = self.data[1][0] * p.0 + self.data[1][1] * p.1 + self.data[1][2] * p.2 + self.data[1][3] * 1.0;

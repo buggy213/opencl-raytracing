@@ -1,4 +1,4 @@
-use crate::{geometry::{Transform, Vec3}, scene::{BasicPrimitiveIndex, PrimitiveIndex}};
+use crate::{geometry::{Transform, Vec3}, scene::BasicPrimitiveIndex};
 
 #[derive(Debug)]
 #[repr(C)]

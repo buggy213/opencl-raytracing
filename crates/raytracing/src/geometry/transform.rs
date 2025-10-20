@@ -3,8 +3,8 @@ use super::{Matrix4x4, Vec3};
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct Transform {
-    forward: Matrix4x4,
-    inverse: Matrix4x4
+    pub forward: Matrix4x4,
+    pub inverse: Matrix4x4
 }
 
 impl Transform {
@@ -84,6 +84,51 @@ impl From<Matrix4x4> for Transform {
         Transform {
             forward: value,
             inverse: Matrix4x4::invert(&value).expect("failed to invert matrix")
+        }
+    }
+}
+
+impl Transform {
+    pub fn look_at(camera_pos: Vec3, target_pos: Vec3, up: Vec3) -> Transform {
+        // affine transform
+        let a41 = 0.0;
+        let a42 = 0.0;
+        let a43 = 0.0;
+        let a44 = 1.0;
+        
+        // translation
+        let a14 = camera_pos.x();
+        let a24 = camera_pos.y();
+        let a34 = camera_pos.z();
+
+        // (+z)-forward
+        let view_direction_world = (target_pos - camera_pos).unit();
+        let a13 = view_direction_world.x();
+        let a23 = view_direction_world.y();
+        let a33 = view_direction_world.z();
+
+        // x from (y cross z)
+        let left = Vec3::cross(up, view_direction_world).unit();
+        let a11 = left.x();
+        let a21 = left.y();
+        let a31 = left.z();
+
+        // y from (z cross x)
+        let up = Vec3::cross(view_direction_world, left);
+        let a12 = up.x();
+        let a22 = up.y();
+        let a32 = up.z();
+        
+        let camera_to_world = Matrix4x4::create(
+            a11, a12, a13, a14, 
+            a21, a22, a23, a24, 
+            a31, a32, a33, a34, 
+            a41, a42, a43, a44
+        );
+
+        Transform { 
+            forward: camera_to_world, 
+            inverse: camera_to_world.invert().expect("look-at transform should be invertible") 
         }
     }
 }

@@ -127,7 +127,7 @@ pub(crate) fn traverse_bvh(
         let local_t_min = t_min / local_traversal_context.scaling_factor;
         let local_closest_t = closest_t / local_traversal_context.scaling_factor;
         let local_bvh = &acceleration_structures.bvhs[bvh_index as usize];
-        let node = &acceleration_structures.bvhs[bvh_index as usize].nodes[node_index as usize];
+        let node = &local_bvh.nodes[node_index as usize];
 
         use raytracing::accel::bvh2::DepthFirstLinearizedBVHNode::{Internal, Leaf};
         match node {

@@ -38,8 +38,10 @@ fn save_png(radiance: &[Vec3], scene: &Scene, output_path: &Path) {
 }
 
 fn main() {
+    tracing_subscriber::fmt::init();
+
     let cli_args = CommandLineArguments::parse();
-    let default_scene = PathBuf::from("scenes/cbbunny.glb");
+    let default_scene = PathBuf::from("scenes/cb.glb");
     let path = cli_args.input.unwrap_or(default_scene);
     let mut scene = Scene::from_gltf_file(&path, None)
         .expect("failed to load scene");
@@ -48,13 +50,13 @@ fn main() {
         max_ray_depth: 1,
         light_sample_count: cli_args.light_samples,
         samples_per_pixel: cli_args.spp,
-        accumulate_bounces: true,
+        accumulate_bounces: false,
 
-        debug_normals: false,
+        debug_normals: true,
     };
 
     let output = render(&mut scene, raytracer_settings);
 
-    let output_path = Path::new("scenes/cbbunny.png");
+    let output_path = Path::new("scenes/cb.png");
     save_png(&output, &scene, output_path);
 }
