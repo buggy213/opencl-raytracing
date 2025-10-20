@@ -136,3 +136,21 @@ pub struct TransformPrimitive {
 pub struct AggregatePrimitive {
     pub children: Vec<PrimitiveIndex>,
 }
+
+impl From<BasicPrimitive> for Primitive {
+    fn from(value: BasicPrimitive) -> Self {
+        Self::Basic(value)
+    }
+}
+
+impl From<TransformPrimitive> for Primitive {
+    fn from(value: TransformPrimitive) -> Self {
+        Self::Transform(value)
+    }
+}
+
+impl From<AggregatePrimitive> for Primitive {
+    fn from(value: AggregatePrimitive) -> Self {
+        Self::Aggregate(value)
+    }
+}

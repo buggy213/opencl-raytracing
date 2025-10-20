@@ -156,6 +156,12 @@ impl Quaternion {
     }
 }
 
+impl From<[f32; 4]> for Quaternion {
+    fn from(value: [f32; 4]) -> Self {
+        Quaternion(value[0], Vec3(value[1], value[2], value[3]))
+    }
+}
+
 impl From<Quaternion> for Matrix4x4 {
     fn from(value: Quaternion) -> Self {
         let v = value.pure().unit();

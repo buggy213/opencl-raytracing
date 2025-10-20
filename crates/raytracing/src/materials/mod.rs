@@ -1,5 +1,6 @@
 use crate::geometry::Vec3;
 
+#[derive(Debug)]
 pub enum Material {
     Diffuse { 
         albedo: Vec3

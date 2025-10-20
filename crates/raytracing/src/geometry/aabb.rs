@@ -81,4 +81,11 @@ impl AABB {
 
         from_points!(x000, x001, x010, x011, x100, x101, x110, x111)
     }
+
+    pub fn infinite() -> AABB {
+        AABB { 
+            minimum: Vec3(f32::NEG_INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY), 
+            maximum: Vec3(f32::INFINITY, f32::INFINITY, f32::INFINITY) 
+        }
+    }
 }

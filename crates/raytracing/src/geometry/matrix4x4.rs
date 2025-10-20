@@ -5,6 +5,7 @@ use super::Vec3;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Matrix4x4 {
+    // row-major
     pub data: [[f32; 4]; 4]
 }
 

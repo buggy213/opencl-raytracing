@@ -1,15 +1,30 @@
 use gltf::camera::Projection;
 
-use crate::geometry::{Transform, Matrix4x4, Vec3};
+use crate::geometry::{Matrix4x4, Quaternion, Transform, Vec3};
 
+#[derive(Debug)]
+pub enum CameraType {
+    Orthographic {
+        screen_space_width: f32,
+        screen_space_height: f32,
+    },
+    Perspective {
+        yfov: f32, // radians
+    }
+}
+
+#[derive(Debug)]
 pub struct Camera {
-    pub is_perspective: bool,
-    pub camera_position: [f32; 3],
-    pub world_to_raster: Transform,
+    pub camera_position: Vec3,
+    pub camera_rotation: Quaternion,
+
+    pub camera_type: CameraType,
     pub raster_width: usize,
     pub raster_height: usize,
     pub near_clip: f32,
-    pub far_clip: f32
+    pub far_clip: f32,
+    
+    pub world_to_raster: Transform,
 }
 
 const DEFAULT_FAR_CLIP: f32 = 1000.0;
@@ -43,7 +58,7 @@ impl Camera {
     }
 
     // Creates transform from camera space to raster space through screen space
-    // fov given in degrees
+    // fov given in radians
     fn create_perspective_transform(far_clip: f32, near_clip: f32, yfov: f32, width: usize, height: usize, render_tile: Option<RenderTile>) -> Transform {
         let persp: Matrix4x4 = Matrix4x4::create(
             1.0, 0.0, 0.0, 0.0, 
@@ -55,7 +70,7 @@ impl Camera {
         let persp: Transform = Transform::from(persp);
         let wide: bool = width >= height;
         let fov: f32 = if wide { yfov * (width as f32 / height as f32) } else { yfov };
-        let invt: f32 = 1.0 / f32::tan(fov.to_radians() / 2.0);
+        let invt: f32 = 1.0 / f32::tan(fov / 2.0);
         let fov_scale: Transform = Transform::scale(Vec3(-invt, invt, 1.0)); // not sure why flipping x coordinate is required, but oh well
         // if image is wide, screen space x ranges from -1 to 1 and screen space y ranges from -k to k where k is proportionally smaller
         // if image is tall, screen space x ranges from -k to k and screen space y ranges from -1 to 1 where k is proportionally smaller
@@ -86,12 +101,13 @@ impl Camera {
 
     pub fn from_gltf_camera_node(camera_node: &gltf::Node, raster_height: usize, render_tile: Option<RenderTile>) -> Camera {
         let gltf_camera: gltf::Camera = camera_node.camera().unwrap();
-        let camera_position: [f32; 3] = camera_node.transform().decomposed().0;
+        let (camera_position, camera_rotation, _) = camera_node.transform().decomposed();
+
         let mut camera_to_world_matrix: Matrix4x4 = Matrix4x4{ data: camera_node.transform().matrix() };
         camera_to_world_matrix.transpose();
         let world_to_camera_matrix: Matrix4x4 = camera_to_world_matrix.invert().unwrap();
         let world_to_camera: Transform = Transform::from(world_to_camera_matrix);
-        let is_perspective;
+        let camera_type;
         let (world_to_raster, raster_width) = 
         match gltf_camera.projection() {
             Projection::Perspective(perspective) => {
@@ -99,13 +115,13 @@ impl Camera {
                 let camera_to_raster: Transform = Self::create_perspective_transform(
                     -perspective.zfar().unwrap_or(DEFAULT_FAR_CLIP),
                     -perspective.znear(), 
-                    perspective.yfov().to_degrees(), 
+                    perspective.yfov(), 
                     width, 
                     raster_height,
                     render_tile
                 );
                 let world_to_raster: Transform = world_to_camera.compose(camera_to_raster);
-                is_perspective = true;
+                camera_type = CameraType::Perspective { yfov: perspective.yfov() };
                 (world_to_raster, width)
             },
             Projection::Orthographic(orthographic) => {
@@ -123,19 +139,60 @@ impl Camera {
                     render_tile
                 );
                 let world_to_raster: Transform = world_to_camera.compose(camera_to_raster);
-                is_perspective = false;
+                camera_type = CameraType::Orthographic { 
+                    screen_space_width, 
+                    screen_space_height, 
+                };
                 (world_to_raster, width)
             }
         };
 
         Camera {
-            is_perspective,
-            camera_position,
-            world_to_raster,
+            camera_position: camera_position.into(),
+            camera_rotation: camera_rotation.into(),
+            camera_type,
             raster_width,
             raster_height,
             near_clip: 0.01,
-            far_clip: 1000.0
+            far_clip: 1000.0,
+            world_to_raster,
+        }
+    }
+
+    // creates camera w/ lookat transform + specified raster parameters
+    pub fn lookat_camera(
+        camera_position: Vec3, 
+        target: Vec3,
+
+        raster_width: usize,
+        raster_height: usize,
+
+    ) -> Camera {
+        let yfov = (45.0_f32).to_radians();
+        let near_clip = 0.01;
+        let far_clip = 1000.0;
+
+        let camera_to_raster = Camera::create_perspective_transform(
+            far_clip, 
+            near_clip, 
+            yfov, 
+            raster_width, 
+            raster_height, 
+            None
+        );
+
+        let camera_to_world = Transform::look_at(camera_position, target, Vec3(0.0, 1.0, 0.0));
+        let world_to_camera = camera_to_world.invert();
+
+        Camera { 
+            camera_position, 
+            camera_rotation: Quaternion(0.0, Vec3::zero()), // TODO: rotation matrix -> quaternion conversion
+            camera_type: CameraType::Perspective { yfov: (30.0_f32).to_radians() }, 
+            raster_width, 
+            raster_height, 
+            near_clip: 0.01, 
+            far_clip: 1000.0, 
+            world_to_raster: world_to_camera.compose(camera_to_raster)
         }
     }
 }

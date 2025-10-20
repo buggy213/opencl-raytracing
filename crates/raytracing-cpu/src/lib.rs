@@ -164,12 +164,11 @@ pub struct RaytracerSettings {
     pub debug_normals: bool,
 }
 
-pub fn render(scene: &mut Scene, raytracer_settings: RaytracerSettings) -> Vec<Vec3> {
+pub fn render(scene: &Scene, raytracer_settings: RaytracerSettings) -> Vec<Vec3> {
     let width = scene.camera.raster_width;
     let height = scene.camera.raster_height;
 
     let camera = &scene.camera;
-
 
     // construct BVH using embree
     let cpu_acceleration_structures = scene::prepare_cpu_scene(scene);

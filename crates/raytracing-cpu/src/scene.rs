@@ -1,6 +1,7 @@
 use raytracing::{accel::bvh2::{BVH2Builder, DepthFirstLinearizedBVH}, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
 
 // CPU-backend specific acceleration structures
+#[derive(Debug)]
 pub(crate) struct CPUAccelerationStructures {
     pub(crate) bvhs: Vec<DepthFirstLinearizedBVH>
 }

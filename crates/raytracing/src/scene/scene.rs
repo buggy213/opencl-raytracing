@@ -1,9 +1,10 @@
 use std::{collections::HashMap, ops::Range, path::Path};
 
-use crate::{geometry::{Matrix4x4, Mesh, Shape, Transform, Vec3}, lights::Light, materials::Material, scene::primitive::{AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex, Primitive, PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex}};
+use crate::{geometry::{Matrix4x4, Mesh, Shape, Transform, Vec3}, lights::Light, materials::Material, scene::{camera::CameraType, primitive::{AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex, Primitive, PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex}}};
 
 use super::camera::{Camera, RenderTile};
 
+#[derive(Debug)]
 pub struct Scene {
     pub camera: Camera,
 
@@ -283,8 +284,124 @@ impl Scene {
             materials
         })
     }
+}
 
+struct SceneBuilder {
+    camera: Option<Camera>,
+    primitives: Vec<Primitive>,
+    primitive_idxs: Vec<PrimitiveIndex>,
+    materials: Vec<Material>,
+}
+
+impl SceneBuilder {
+    fn new() -> Self {
+        SceneBuilder { 
+            camera: None, 
+            primitives: Vec::new(), 
+            primitive_idxs: Vec::new(), 
+            materials: Vec::new() 
+        }
+    }
+
+    fn add_lookat_camera(
+        mut self,
+        camera_position: Vec3,
+        target: Vec3,
+        raster_width: usize,
+        raster_height: usize,
+    ) -> Self {
+        let camera = Camera::lookat_camera(
+            camera_position, 
+            target, 
+            raster_width, 
+            raster_height
+        );
+
+        self.camera = Some(camera);
+
+        self
+    }
+
+    fn add_shape_at_position(
+        mut self,
+        shape: Shape,
+        material: Material,
+        position: Vec3,
+    ) -> Self {
+        let material_idx = self.materials.len() as u32;
+        self.materials.push(material);
+
+        let basic_primitive_idx = BasicPrimitiveIndex(self.primitives.len() as u32);
+        let basic_primitive = BasicPrimitive {
+            shape,
+            material: material_idx,
+            area_light: None,
+        };
+
+        self.primitives.push(basic_primitive.into());
+
+        let transform_primitive_idx = TransformPrimitiveIndex(self.primitives.len() as u32);
+        let transformed = TransformPrimitive {
+            primitive: basic_primitive_idx.into(),
+            transform: Transform::translate(position),
+        };
+
+        self.primitives.push(transformed.into());
+
+        self.primitive_idxs.push(transform_primitive_idx.into());
+        self
+    }
+
+    fn build(mut self) -> Scene {
+        let root_primitive_idx = AggregatePrimitiveIndex(self.primitives.len() as u32);
+        let root_primitive = AggregatePrimitive {
+            children: self.primitive_idxs,
+        };
+
+        self.primitives.push(root_primitive.into());
+
+        Scene { 
+            camera: self.camera.expect("scene description incomplete"), 
+            primitives: self.primitives, 
+            root_primitive: root_primitive_idx, 
+            lights: Vec::new(), 
+            materials: self.materials 
+        }
+    }
+}
+
+pub mod test_scenes {
+    use crate::{geometry::{Shape, Vec3}, materials::Material, scene::Scene};
+
+    use super::SceneBuilder;
+
+    // super simple test scene with one sphere, no light
     pub fn test_scene() -> Scene {
-        todo!()
+        let scene_builder = SceneBuilder::new();
+        
+        let sphere = Shape::Sphere { 
+            center: Vec3::zero(), 
+            radius: 1.0
+        };
+
+        let sphere_material = Material::Diffuse { 
+            albedo: Vec3(1.0, 0.0, 0.0) 
+        };
+
+        let scene = scene_builder
+        .add_shape_at_position(
+            sphere, 
+            sphere_material,
+            Vec3(0.0, 0.0, -3.0)
+        )
+        .add_lookat_camera(
+            Vec3(0.0, 0.0, 0.0), 
+            Vec3(0.0, 0.0, -3.0), 
+            400, 
+            400
+        )
+        .build();
+
+        scene
     }
 }

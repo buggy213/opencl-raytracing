@@ -3,6 +3,7 @@ use std::{fs::File, path::{Path, PathBuf}};
 use clap::Parser;
 use raytracing::{geometry::Vec3, scene::Scene};
 use raytracing_cpu::{render, RaytracerSettings};
+use raytracing::scene::test_scenes;
 
 #[derive(Debug, Parser)]
 struct CommandLineArguments {
@@ -37,14 +38,22 @@ fn save_png(radiance: &[Vec3], scene: &Scene, output_path: &Path) {
     writer.write_image_data(&image_data).expect("failed to write PNG data");
 }
 
+fn normals_to_rgb(normals: &mut [Vec3]) {
+    for normal in normals {
+        *normal += Vec3(1.0, 1.0, 1.0);
+        *normal /= 2.0;
+        *normal *= 1000.0;
+    }
+}
+
 fn main() {
     tracing_subscriber::fmt::init();
 
     let cli_args = CommandLineArguments::parse();
-    let default_scene = PathBuf::from("scenes/cb.glb");
-    let path = cli_args.input.unwrap_or(default_scene);
-    let mut scene = Scene::from_gltf_file(&path, None)
+    let default_scene = PathBuf::from("scenes/cbbunny.glb");
+    let scene = Scene::from_gltf_file(&default_scene, None)
         .expect("failed to load scene");
+    // let scene = test_scenes::test_scene();
 
     let raytracer_settings = RaytracerSettings {
         max_ray_depth: 1,
@@ -55,8 +64,12 @@ fn main() {
         debug_normals: true,
     };
 
-    let output = render(&mut scene, raytracer_settings);
+    let mut output = render(&scene, raytracer_settings);
+    
+    if raytracer_settings.debug_normals {
+        normals_to_rgb(&mut output);
+    }
 
-    let output_path = Path::new("scenes/cb.png");
+    let output_path = Path::new("scenes/test.png");
     save_png(&output, &scene, output_path);
 }

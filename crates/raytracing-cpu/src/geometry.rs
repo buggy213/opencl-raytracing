@@ -4,7 +4,8 @@ use raytracing::geometry::{Mesh, Shape, Transform, Vec3, Vec3u, AABB};
 
 use crate::ray::Ray;
 
-// return range of t at which ray intersects an AABB, or infinity if no intersection
+// return range of t at which ray intersects an AABB (possibly including negative values of t), 
+// or None if no intersection
 pub(crate) fn intersect_aabb(
     aabb: AABB, 
     ray: Ray
@@ -90,7 +91,7 @@ fn ray_sphere_intersect(
     let c = origin_minus_center.square_magnitude() - radius * radius;
 
     let discriminant = b * b - 4.0 * a * c;
-    let (t1, t2) = if discriminant < 0.0 {
+    let (mut t1, mut t2) = if discriminant < 0.0 {
         return None
     }
     else if discriminant == 0.0 {
@@ -102,6 +103,10 @@ fn ray_sphere_intersect(
         let q = -0.5 * (b + b.signum() * discriminant.sqrt());
         (q / a, c / q)
     };
+
+    if t1 > t2 {
+        std::mem::swap(&mut t1, &mut t2);
+    }
 
     let t = if t1 >= t_min && t1 <= t_max {
         t1

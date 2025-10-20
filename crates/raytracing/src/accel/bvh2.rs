@@ -1,5 +1,6 @@
 use std::{collections::VecDeque, num::NonZero, ptr::null};
 use embree4::{bvh::{BVHBuildArguments, BVHCallbacks, BuiltBVH}, Bounds, BuildPrimitive, Device, BVH};
+use tracing::warn;
 
 use crate::{geometry::{Mesh, Shape, Transform, Vec3, AABB}, macros::{variadic_max_comparator, variadic_min_comparator}};
 
@@ -370,6 +371,7 @@ impl DepthFirstLinearizedBVHNode {
     }
 }
 
+#[derive(Debug)]
 pub struct DepthFirstLinearizedBVH {
     pub nodes: Vec<DepthFirstLinearizedBVHNode>,
     pub prim_ptrs: Vec<PrimPtr>,
@@ -394,7 +396,9 @@ impl DepthFirstLinearizedBVH {
                 root_aabb = AABB::surrounding_box(*left_aabb, *right_aabb);
             },
             BVHNode::Leaf { .. } => {
-                unimplemented!("BVH root is a leaf node");
+                warn!("BVH root is a leaf node, setting bounds to infinity");
+                
+                root_aabb = AABB::infinite();
             }
         }
 

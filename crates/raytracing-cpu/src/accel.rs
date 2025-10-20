@@ -226,7 +226,7 @@ pub(crate) fn traverse_bvh(
                     let left_child_index = node_index + 1;
                     let left_child_bounds = local_bvh.nodes[left_child_index as usize].bounds();
                     match geometry::intersect_aabb(left_child_bounds, local_ray) {
-                        Some(Range { start, .. }) if start > local_closest_t => {
+                        Some(Range { start, .. }) if start < local_closest_t => {
                             stack.push(TraversalStackEntry { 
                                 aggregate_index, 
                                 bvh_index, 
@@ -243,7 +243,7 @@ pub(crate) fn traverse_bvh(
                     stack.pop();
                     let right_child_bounds = local_bvh.nodes[*right_child_offset as usize].bounds();
                     match geometry::intersect_aabb(right_child_bounds, local_ray) {
-                        Some(Range { start, .. }) if start > local_closest_t => {
+                        Some(Range { start, .. }) if start < local_closest_t => {
                             stack.push(TraversalStackEntry { 
                                 aggregate_index, 
                                 bvh_index, 
