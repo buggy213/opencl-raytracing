@@ -147,6 +147,99 @@ impl Quaternion {
     pub fn dot(a: Quaternion, b: Quaternion) -> f32 {
         a.0 * b.0 + Vec3::dot(a.1, b.1)
     }
+
+    #[allow(non_snake_case, reason = "math convention")]
+    pub fn from_rotation_matrix(rotation: Matrix4x4) -> Quaternion {
+        /* https://en.wikipedia.org/wiki/Rotation_matrix#Quaternion
+        the explanation on wikipedia is a bit confusing, so i'll explain it here too
+        basically, a unit quaternion corresponds to the rotation matrix
+        \begin{pmatrix}
+            1   - 2y^2 - 2z^2 & 2xy - 2zw         & 2xz + 2yw          \\
+            2xy + 2zw         & 1   - 2x^2 - 2z^2 & 2yz - 2xw          \\
+            2xz - 2yw         & 2yz + 2xw         & 1   - 2x^2 - 2y^2
+        \end{pmatrix}
+
+        we want to find w, x, y, z given this matrix. the straightforward approach
+        is to notice that the trace equals 4w^2 - 1 using the normalization condition
+        w^2 + x^2 + y^2 + z^2 = 1, and we can solve for the positive root to get w.
+        note that flipping the sign of w, x, y, and z represents the same rotation since
+        every term is of degree 0 (constant) or 2; we fix this degree of freedom by choosing
+        the positive root!
+
+        to find x, we can notice Q_11 - Q_22 - Q_33 = 4x^2 - 1, and solve for x. however, 
+        we need to ensure that x has the right sign; Q_32 - Q_23 = 4xw, and we chose w to be
+        positive, so this fixes the sign of x. finding y and z is similar.
+
+        doing this approach requires 4 square roots, which is expensive. it is possible to directly
+        use the skew-symmetry of the matrix to do better. specifically, if we define r = sqrt(1 + tr Q),
+        s = 1/(2r) and w = (1/2)r, then we saw before that Q_32 - Q_23 = 4xw, so 
+        x = (Q_32 - Q_23)/(4w) = (Q_32 - Q_23)s. We can derive similar expressions for y and z. 
+
+        however, there is still a problem - this can have numerical instability when tr Q \approx -1,
+        and so we divide by almost 0 when calculating s. this corresponds to cos(\theta/2) \approx 0, or
+        \theta \approx \pi (180 degree rotation).
+
+        suppose Q_11 is the largest diagonal entry, then r = sqrt(1 + Q_11 - Q_22 - Q_33) is not small.
+        this is actually not super trivial to justify, but apparently it's true?
+        furthermore, 1 + Q_11 - Q_22 - Q_33 = 4x^2, so x = r/2. we can then use the same approach of
+        difference of skew-symmetric elements to find w, y, and z, while avoiding numerical instability.
+
+        the same can be done for Q_22, Q_33 being the largest.
+        */
+
+        let Q_11 = rotation.data[0][0];
+        let Q_12 = rotation.data[0][1];
+        let Q_13 = rotation.data[0][2];
+        let Q_21 = rotation.data[1][0];
+        let Q_22 = rotation.data[1][1];
+        let Q_23 = rotation.data[1][2];
+        let Q_31 = rotation.data[2][0];
+        let Q_32 = rotation.data[2][1];
+        let Q_33 = rotation.data[2][2];
+
+        let trace = Q_11 + Q_22 + Q_33;
+        
+
+        let w: f32;
+        let x: f32;
+        let y: f32;
+        let z: f32;
+
+        if trace > 0.0 {
+            let r = (1.0 + trace).sqrt();
+            let s = 1.0 / (2.0 * r);
+            w = 0.5 * r;
+            x = (Q_32 - Q_23) * s;
+            y = (Q_13 - Q_31) * s;
+            z = (Q_21 - Q_12) * s;
+        }
+        else if Q_11 >= Q_22 && Q_11 >= Q_33 {
+            let r = (1.0 + Q_11 - Q_22 - Q_33).sqrt();
+            let s = 1.0 / (2.0 * r);
+            w = (Q_32 - Q_23) * s;
+            x = 0.5 * r;
+            y = (Q_12 + Q_21) * s;
+            z = (Q_13 + Q_31) * s;
+        }
+        else if Q_22 >= Q_11 && Q_22 >= Q_33 {
+            let r = (1.0 - Q_11 + Q_22 - Q_33).sqrt();
+            let s = 1.0 / (2.0 * r);
+            w = (Q_13 - Q_31) * s;
+            x = (Q_12 + Q_21) * s;
+            y = 0.5 * r;
+            z = (Q_23 + Q_32) * s;
+        }
+        else {
+            let r = (1.0 - Q_11 - Q_22 + Q_33).sqrt();
+            let s = 1.0 / (2.0 * r);
+            w = (Q_21 - Q_12) * s;
+            x = (Q_13 + Q_31) * s;
+            y = (Q_23 + Q_32) * s;
+            z = 0.5 * r;
+        }
+
+        Quaternion(w, Vec3(x, y, z))
+    }
 }
 
 impl Quaternion {

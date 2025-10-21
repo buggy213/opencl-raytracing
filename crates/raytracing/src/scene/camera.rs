@@ -186,7 +186,7 @@ impl Camera {
 
         Camera { 
             camera_position, 
-            camera_rotation: Quaternion(0.0, Vec3::zero()), // TODO: rotation matrix -> quaternion conversion
+            camera_rotation: Quaternion::from_rotation_matrix(camera_to_world.forward), 
             camera_type: CameraType::Perspective { yfov: (30.0_f32).to_radians() }, 
             raster_width, 
             raster_height, 
