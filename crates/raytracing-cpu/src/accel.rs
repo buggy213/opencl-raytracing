@@ -156,7 +156,7 @@ pub(crate) fn traverse_bvh(
                         if let Some(intersect_result) = intersect_result {
                             let global_t = intersect_result.t * local_traversal_context.scaling_factor;
                             let global_point = local_to_root_transform.apply_point(intersect_result.point);
-                            let global_normal = local_to_root_transform.apply_normal(intersect_result.normal);
+                            let global_normal = local_to_root_transform.apply_normal(intersect_result.normal).unit();
 
                             hit_info = Some(HitInfo { 
                                 t: global_t, 

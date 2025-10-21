@@ -66,11 +66,13 @@ pub(crate) fn intersect_shape(
         return None;
     };
 
-    
+    let w_point = o2w_transform.apply_point(o_intersection_result.point);
+    let w_normal = o2w_transform.apply_normal(o_intersection_result.normal).unit();
+
     let w_intersection_result = IntersectResult {
         t: o_intersection_result.t * s,
-        point: o2w_transform.apply_point(o_intersection_result.point),
-        normal: o2w_transform.apply_normal(o_intersection_result.normal),
+        point: w_point,
+        normal: w_normal,
     };
 
     Some(w_intersection_result)
