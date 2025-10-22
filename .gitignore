@@ -4,6 +4,9 @@
 
 *.dump
 *.log
-# Added by cargo
 
+# lockfile
+Cargo.lock
+
+# Added by cargo
 target

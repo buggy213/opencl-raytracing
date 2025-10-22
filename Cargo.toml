@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 
 members = [ 
     "crates/embree4",
@@ -12,3 +12,26 @@ members = [
     
     "crates/viewer"
 ]
+
+[workspace.dependencies]
+# error-handling
+thiserror = "2.0.17"
+anyhow = "1.0.100"
+
+# logging
+tracing = "0.1.41"
+tracing-subscriber = "0.3.20"
+
+# standard crates
+rand = "0.9.2"
+
+# workspace members
+embree4 = { path = "crates/embree4" }
+embree4-sys = { path = "crates/embree4-sys" }
+
+raytracing = { path = "crates/raytracing" }
+
+raytracing-cl = { path = "crates/raytracing-cl" }
+raytracing-cpu = { path = "crates/raytracing-cpu" }
+
+viewer = { path = "crates/viewer" }

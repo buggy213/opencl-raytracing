@@ -3,17 +3,14 @@ name = "raytracing-cpu"
 version = "0.1.0"
 edition = "2024"
 
-[dependencies.raytracing]
-path = "../raytracing"
-
-[dependencies.embree4]
-path = "../embree4"
-
 [dependencies]
-rand = "0.9.1"
-tracing = "0.1.41"
+rand = { workspace = true }
+tracing = { workspace = true }
+
+embree4 = { workspace = true }
+raytracing = { workspace = true }
 
 [dev-dependencies]
 png = "0.17.16"
 clap = { version = "4.5.39", features = ["derive"] }
-tracing-subscriber = "0.3.20"
+tracing-subscriber = { workspace = true }

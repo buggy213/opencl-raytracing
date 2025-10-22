@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 opencl3 = "0.9.2"
 cl3 = "0.9.1"
-rand = "0.8.5"
+rand = { workspace = true }
 
-[dependencies.raytracing]
-path = "../raytracing"
+raytracing = { workspace = true }

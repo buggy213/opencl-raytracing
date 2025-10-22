@@ -4,7 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-thiserror = "2.0.12"
-
-[dependencies.embree4-sys]
-path = "../embree4-sys"
+thiserror = { workspace = true }
+embree4-sys = { workspace = true }
