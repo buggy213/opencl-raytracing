@@ -1,15 +1,17 @@
-use crate::geometry::Vec3;
+use crate::geometry::{Complex, Vec3};
 
 #[derive(Debug)]
 pub enum Material {
     Diffuse { 
         albedo: Vec3
     },
-    Dielectric { 
+
+    // perfectly smooth dielectric material / conductor material
+    // bsdf are purely delta functions
+    SmoothDielectric { 
         eta: f32 
     },
-    Conductor { 
-        eta: f32, 
-        k: f32 
+    SmoothConductor { 
+        eta: Complex
     },
 }

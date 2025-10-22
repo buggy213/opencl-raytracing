@@ -3,6 +3,7 @@ mod matrix4x4;
 mod quaternion;
 mod vec3;
 mod vec2;
+mod complex;
 mod aabb;
 mod shapes;
 
@@ -13,6 +14,7 @@ pub use vec3::Vec3;
 pub use vec3::Vec3u;
 pub use vec2::Vec2;
 pub use quaternion::Quaternion;
+pub use complex::Complex;
 pub use aabb::AABB;
 
 pub use shapes::Shape;
