@@ -140,3 +140,15 @@ impl ops::Div<f32> for Vec2 {
         self * (1.0 / rhs)
     }
 }
+
+impl From<[f32; 2]> for Vec2 {
+    fn from(value: [f32; 2]) -> Self {
+        Vec2(value[0], value[1])
+    }
+}
+
+impl From<Vec2> for [f32; 2] {
+    fn from(value: Vec2) -> Self {
+        [value.0, value.1]
+    }
+}

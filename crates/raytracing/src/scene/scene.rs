@@ -220,7 +220,7 @@ impl Scene {
                 for gltf_primitive in gltf_mesh.primitives() {
                     let material_idx = gltf_primitive.material().index().unwrap_or(0) as u32;
 
-                    let rt_mesh = Mesh::from_gltf_primitive(gltf_primitive, &buffers);
+                    let rt_mesh = Mesh::from_gltf_primitive(gltf_mesh.clone(), gltf_primitive, &buffers);
                     let mesh_shape = Shape::TriangleMesh(rt_mesh);
                     
                     let basic_primitive_idx = BasicPrimitiveIndex(primitives.len() as u32);
