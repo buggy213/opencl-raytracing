@@ -24,6 +24,7 @@ tracing-subscriber = "0.3.20"
 
 # standard crates
 rand = "0.9.2"
+num = "0.4.3"
 
 # workspace members
 embree4 = { path = "crates/embree4" }

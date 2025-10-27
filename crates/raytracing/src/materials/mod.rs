@@ -15,3 +15,9 @@ pub enum Material {
         eta: Complex
     },
 }
+
+mod image;
+mod texture;
+
+pub use image::Image;
+pub use texture::Texture;

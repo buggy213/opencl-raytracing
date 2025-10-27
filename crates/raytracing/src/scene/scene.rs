@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Range, path::Path};
 
-use crate::{geometry::{Matrix4x4, Mesh, Shape, Transform, Vec3}, lights::Light, materials::Material, scene::{camera::CameraType, primitive::{AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex, Primitive, PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex}}};
+use crate::{geometry::{Matrix4x4, Mesh, Shape, Transform, Vec3}, lights::Light, materials::Material, scene::primitive::{AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex, Primitive, PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex}};
 
 use super::camera::{Camera, RenderTile};
 
@@ -13,7 +13,7 @@ pub struct Scene {
 
     pub lights: Vec<Light>,
 
-    pub materials: Vec<Material>
+    pub materials: Vec<Material>,
 }
 
 const HEIGHT: usize = 600;

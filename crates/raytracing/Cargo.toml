@@ -9,6 +9,7 @@ edition = "2024"
 image = "0.25.8"
 anyhow = { workspace = true }
 rand = { workspace = true }
+num = { workspace = true }
 tracing = { workspace = true }
 
 embree4 = { workspace = true }
