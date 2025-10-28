@@ -283,3 +283,26 @@ impl Image {
         })
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::materials::Image;
+
+    #[test]
+    fn test_mipmap_generation() {
+        let crate_path = env!("CARGO_MANIFEST_DIR");
+        let test_path = std::path::Path::new(crate_path)
+            .join("test");
+
+        let img = Image::load_from_path(&test_path.join("mip_test.jpg"))
+            .expect("failed to load image");
+        
+        img.buffer
+            .save(&test_path.join("output_base.png"))
+            .expect("failed to save base image");
+        for (i, mip) in img.mips.iter().enumerate() {
+            let filename = format!("output_mip_{}.png", i);
+            mip.save(&test_path.join(filename)).expect("failed to save mip image");
+        }
+    }
+}
