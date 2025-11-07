@@ -138,7 +138,7 @@ impl RenderView for RenderOutputView {
             ui.text("Pixel peeper");
             let tex_id = self.debug_texture_id;
             imgui::Image::new(tex_id, [200.0, 200.0]).build(ui);
-
+            
             let index = self.gui_state.mouse_pos[1] as usize * self.render_output_size.width as usize 
                     + self.gui_state.mouse_pos[0] as usize;
             let radiance_value = self.render_output[index];
@@ -606,8 +606,8 @@ impl RenderOutputView {
     fn update(&mut self, io: &imgui::Io, device: &wgpu::Device, queue: &wgpu::Queue) -> WindowRequests {
         if io.mouse_pos != [f32::MAX, f32::MAX] {
             self.gui_state.mouse_pos = [
-                io.mouse_pos[0] as u32,
-                io.mouse_pos[1] as u32,
+                u32::clamp(io.mouse_pos[0] as u32, 0, self.render_output_size.width - 1),
+                u32::clamp(io.mouse_pos[1] as u32, 0, self.render_output_size.height - 1),
             ];
         }
 
