@@ -1,39 +1,58 @@
 //! For now, we only support 4-channel textures. The actual underlying image data might
 //! not actually have 4 channels; the remaining channels are treated as all 0's if accessed
 
-use crate::geometry::Vec4;
+use std::fmt::Display;
 
-#[derive(Debug)]
+use gltf::texture::WrappingMode;
+
+use crate::{geometry::Vec4, materials::image::ImageId};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilterMode {
     Nearest, Bilinear, Trilinear
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WrapMode {
     Repeat, Mirror, Clamp
 }
 
-#[derive(Debug)]
-pub struct TextureSampler {
-    filter: FilterMode,
-    wrap: WrapMode
+impl From<WrappingMode> for WrapMode {
+    fn from(value: WrappingMode) -> Self {
+        match value {
+            WrappingMode::ClampToEdge => Self::Clamp,
+            WrappingMode::MirroredRepeat => Self::Mirror,
+            WrappingMode::Repeat => Self::Repeat,
+        }
+    }
 }
+
+impl Display for WrapMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WrapMode::Repeat => f.write_str("repeat"),
+            WrapMode::Mirror => f.write_str("mirror"),
+            WrapMode::Clamp => f.write_str("clamp"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct TextureSampler {
+    pub filter: FilterMode,
+    pub wrap: WrapMode
+}
+
+pub struct TextureId(pub u32);
 
 #[derive(Debug)]
 pub enum Texture {
-    ImageTexture,
+    ImageTexture {
+        image: ImageId,
+        sampler: TextureSampler
+    },
     ConstantTexture {
         value: Vec4
     },
-
-}
-
-impl Texture {
-    pub fn sample(&self, u: f32, v: f32) -> Vec4 {
-        match self {
-            Texture::ImageTexture => todo!(),
-            Texture::ConstantTexture { value } => *value,
-        }
-    }
 }
 

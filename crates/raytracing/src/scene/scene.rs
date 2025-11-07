@@ -1,6 +1,8 @@
-use std::{collections::HashMap, ops::Range, path::Path};
+use std::{borrow::Cow, collections::HashMap, ops::Range, path::Path};
 
-use crate::{geometry::{Matrix4x4, Mesh, Shape, Transform, Vec3}, lights::Light, materials::Material, scene::primitive::{AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex, Primitive, PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex}};
+use tracing::warn;
+
+use crate::{geometry::{Matrix4x4, Mesh, Shape, Transform, Vec3}, lights::Light, materials::{FilterMode, Image, ImageId, Material, Texture, TextureSampler, WrapMode}, scene::primitive::{AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex, Primitive, PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex}};
 
 use super::camera::{Camera, RenderTile};
 
@@ -14,6 +16,9 @@ pub struct Scene {
     pub lights: Vec<Light>,
 
     pub materials: Vec<Material>,
+
+    pub textures: Vec<Texture>,
+    pub images: Vec<Image>,
 }
 
 const HEIGHT: usize = 600;
@@ -174,8 +179,63 @@ impl Scene {
 
         let mut root_primitive_children: Vec<PrimitiveIndex> = Vec::new();
 
-        let mut materials: Vec<Material> = Vec::new();
-        let mut material_emissions: Vec<Vec3> = Vec::new();
+        let mut images: Vec<Image> = Vec::with_capacity(document.images().len());
+        for image in document.images() {
+            match image.source() {
+                gltf::image::Source::View { view: _, mime_type: _ } => {
+                    todo!("implement binary image deserialization")
+                },
+                gltf::image::Source::Uri { uri, mime_type: _ } => {
+                    let img = Image::load_from_path(Path::new(uri))?;
+                    images.push(img);
+                },
+            }
+        }
+
+        let mut textures: Vec<Texture> = Vec::with_capacity(document.textures().len());
+        for texture in document.textures() {
+            let image_id = ImageId(texture.source().index() as u32);
+            let sampler = texture.sampler();
+            
+            let sampler_name = match (sampler.name(), sampler.index()) {
+                (Some(name), _) => Cow::Borrowed(name),
+                (None, Some(idx)) => {
+                    Cow::Owned(idx.to_string())
+                }
+                (None, None) => Cow::Borrowed("default")
+            };
+
+            let wrap_s: WrapMode = sampler.wrap_s().into();
+            let wrap_t: WrapMode = sampler.wrap_t().into();
+            
+            if wrap_s != wrap_t {
+                warn!(
+                    "gltf sampler ({}) defined with different wrap modes along s ({}) and t ({}), which we don't support. using {}",
+                    sampler_name,
+                    wrap_s,
+                    wrap_t,
+                    wrap_s
+                );
+            }
+
+            let wrap = wrap_s;
+            
+            // TODO: actually respect filter mode from gltf (its model is somewhat different)
+            let filter_mode = FilterMode::Nearest;
+
+            let texture = Texture::ImageTexture { 
+                image: image_id, 
+                sampler: TextureSampler {
+                    filter: filter_mode,
+                    wrap,
+                }
+            };
+
+            textures.push(texture);
+        }
+
+        let mut materials: Vec<Material> = Vec::with_capacity(document.materials().len());
+        let mut material_emissions: Vec<Vec3> = Vec::with_capacity(document.materials().len());
         for material in document.materials() {
             let diffuse_color = material.pbr_metallic_roughness().base_color_factor();
             let diffuse = Material::Diffuse { 
@@ -281,7 +341,9 @@ impl Scene {
             primitives,
             root_primitive: root_primitive_idx,
             camera: camera.expect("Scene must have camera"),
-            materials
+            materials,
+            textures,
+            images
         })
     }
 }
@@ -365,7 +427,9 @@ impl SceneBuilder {
             primitives: self.primitives, 
             root_primitive: root_primitive_idx, 
             lights: Vec::new(), 
-            materials: self.materials 
+            materials: self.materials,
+            textures: Vec::new(),
+            images: Vec::new(),
         }
     }
 }

@@ -20,4 +20,9 @@ mod image;
 mod texture;
 
 pub use image::Image;
+pub use image::ImageId;
 pub use texture::Texture;
+pub use texture::TextureId;
+pub use texture::WrapMode;
+pub use texture::FilterMode;
+pub use texture::TextureSampler;

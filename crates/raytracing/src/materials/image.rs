@@ -1,5 +1,7 @@
 //! For now, we only support 4-channel images. The actual underlying image data might
 //! not actually have 4 channels; the remaining channels are treated as all 0.
+//! This is also an intentionally limited interface, only encapsulating common behavior
+//! across different platforms (color space conversion)
 //! 
 //! I really don't like this current implementation - will want to revisit this in the future
 //! maybe a custom Image handling facility is better?
@@ -7,15 +9,32 @@
 use std::path::Path;
 
 use anyhow::Context;
-use image::{buffer::ConvertBuffer, imageops, metadata::Cicp, ColorType, ConvertColorOptions, DynamicImage, ImageBuffer, ImageReader, Luma, LumaA, Pixel, Primitive, Rgb, Rgba};
+use image::{
+    buffer::ConvertBuffer, 
+    imageops, 
+    metadata::Cicp, 
+    ColorType, 
+    ConvertColorOptions, 
+    DynamicImage, 
+    ImageBuffer, 
+    ImageReader, 
+    Luma, 
+    LumaA, 
+    Pixel, 
+    Primitive, 
+    Rgb, 
+    Rgba
+};
 use num::ToPrimitive;
 use tracing::warn;
 
 #[derive(Debug)]
 pub struct Image {
     buffer: image::DynamicImage,
-    mips: Vec<image::DynamicImage>,
 }
+
+#[derive(Debug, Clone, Copy)]
+pub struct ImageId(pub u32);
 
 // `image` crate is "opinionated" about the image formats it supports in the standard container
 // we need to do repeated resizing at higher precision f32 to avoid artifacts, even for grayscale / grayscale+alpha
@@ -182,34 +201,6 @@ impl Image {
         }
     }
 
-    pub fn get_channel_mip(&self, x: u32, y: u32, c: u32, mip: u32) -> f32 {
-        if c >= self.depth() {
-            return 0.0;
-        }
-
-        let mip = if mip as usize >= self.mips.len() {
-            warn!("out-of-bounds mip level, returning value from highest mip");
-            self.mips.len() - 1
-        }
-        else {
-            mip as usize
-        };
-
-        match &self.mips[mip] {
-            DynamicImage::ImageLuma8(image_buffer) => Self::get_pixel_channel(image_buffer, x, y, c),
-            DynamicImage::ImageLumaA8(image_buffer) => Self::get_pixel_channel(image_buffer, x, y, c),
-            DynamicImage::ImageRgb8(image_buffer) => Self::get_pixel_channel(image_buffer, x, y, c),
-            DynamicImage::ImageRgba8(image_buffer) => Self::get_pixel_channel(image_buffer, x, y, c),
-            DynamicImage::ImageLuma16(image_buffer) => Self::get_pixel_channel(image_buffer, x, y, c),
-            DynamicImage::ImageLumaA16(image_buffer) => Self::get_pixel_channel(image_buffer, x, y, c),
-            DynamicImage::ImageRgb16(image_buffer) => Self::get_pixel_channel(image_buffer, x, y, c),
-            DynamicImage::ImageRgba16(image_buffer) => Self::get_pixel_channel(image_buffer, x, y, c),
-            DynamicImage::ImageRgb32F(image_buffer) => Self::get_pixel_channel(image_buffer, x, y, c),
-            DynamicImage::ImageRgba32F(image_buffer) => Self::get_pixel_channel(image_buffer, x, y, c),
-            _ => unreachable!("mipmap generation code cannot create unknown formats"),
-        }
-    }
-
     fn generate_mips(base: &image::DynamicImage) -> Vec<image::DynamicImage> {
         // ensure float, power-of-two, linear values before starting
         if base.color_space() != Cicp::SRGB_LINEAR {
@@ -274,12 +265,9 @@ impl Image {
         if let Err(conversion_err) = conversion_result {
             warn!("Unable to convert to linear values for image {} (reason: {})", path.display(), conversion_err);
         }
-
-        let mips = Image::generate_mips(&image_data);
         
         Ok(Self {
             buffer: image_data,
-            mips
         })
     }
 }
@@ -300,7 +288,10 @@ mod test {
         img.buffer
             .save(&test_path.join("output_base.png"))
             .expect("failed to save base image");
-        for (i, mip) in img.mips.iter().enumerate() {
+        
+        let mips = Image::generate_mips(&img.buffer);
+        
+        for (i, mip) in mips.iter().enumerate() {
             let filename = format!("output_mip_{}.png", i);
             mip.save(&test_path.join(filename)).expect("failed to save mip image");
         }
