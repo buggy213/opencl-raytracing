@@ -2,7 +2,7 @@ use raytracing::{accel::bvh2::{BVH2Builder, DepthFirstLinearizedBVH}, geometry::
 
 // CPU-backend specific acceleration structures
 #[derive(Debug)]
-pub(crate) struct CPUAccelerationStructures {
+pub(crate) struct CpuAccelerationStructures {
     pub(crate) bvhs: Vec<DepthFirstLinearizedBVH>,
 
     // We cache the transforms from local BVH space to global space
@@ -15,9 +15,9 @@ pub(crate) struct CPUAccelerationStructures {
 // generally, images can just be used straight from the scene representation
 // but, we need to prepare mipmaps for images that require it 
 // (i.e. a texture using trilinear filtering references some image)
-// for now, we'll just support bilinear interpolation 
-// (since adding ray differentials is a bit tricky) and this won't be used at all. 
-pub(crate) fn prepare_cpu_scene(scene: &Scene) -> CPUAccelerationStructures {
+// for now, we'll just support bilinear interpolation, but set up interface so 
+// that adding mipmaps later is easy
+pub(crate) fn prepare_cpu_scene(scene: &Scene) -> CpuAccelerationStructures {
     let embree = embree4::Device::new();
 
     let mut bvhs: Vec<DepthFirstLinearizedBVH> = Vec::new();
@@ -72,13 +72,13 @@ pub(crate) fn prepare_cpu_scene(scene: &Scene) -> CPUAccelerationStructures {
         scene.root_index()
     );
 
-    CPUAccelerationStructures {
+    CpuAccelerationStructures {
         bvhs,
         bvh_transforms
     }
 }
 
-impl CPUAccelerationStructures {
+impl CpuAccelerationStructures {
     pub(crate) fn root_bvh_index(&self) -> usize {
         // construction algorithm pushes root bvh last
         self.bvhs.len() - 1

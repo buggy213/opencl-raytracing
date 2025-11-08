@@ -1,5 +1,5 @@
 use raytracing::{geometry::{Shape, Vec3}, lights::Light, scene::Scene};
-use crate::{accel::CPUTraversalContext, ray::Ray, sample::sample_uniform2, traverse_bvh};
+use crate::{CpuRaytracingContext, accel::TraversalCache, ray::Ray, sample::sample_uniform2, traverse_bvh};
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct LightSample {
@@ -108,12 +108,13 @@ pub(crate) fn light_radiance(light: &Light, _hit_point: Vec3) -> Vec3 {
     }
 }
 
-pub(crate) fn occluded(traversal_context: &mut CPUTraversalContext, light_sample: LightSample) -> bool {
+pub(crate) fn occluded(context: &CpuRaytracingContext, traversal_cache: &mut TraversalCache, light_sample: LightSample) -> bool {
     traverse_bvh(
         light_sample.shadow_ray, 
         0.001, 
         light_sample.distance - 0.001, 
-        traversal_context, 
+        context,
+        traversal_cache, 
         true,
     ).is_some()
 }

@@ -3,11 +3,11 @@ use std::ops::Range;
 use raytracing::{
     accel::bvh2::PrimPtr, 
     geometry::{Vec2, Vec3, AABB}, 
-    scene::{AggregatePrimitiveIndex, Primitive, Scene}
+    scene::{AggregatePrimitiveIndex, Primitive}
 };
 
-use crate::geometry::{self, intersect_aabb};
-use crate::{ray::Ray, scene::CPUAccelerationStructures};
+use crate::{CpuRaytracingContext, geometry::{self, intersect_aabb}};
+use crate::ray::Ray;
 
 // all fields in world-space
 pub(crate) struct HitInfo {
@@ -39,30 +39,18 @@ struct TraversalStackEntry {
 // out-of-line of traversal code / traversal stack for simplicity. we also keep the
 // allocation of traversal stack here to avoid allocating for every traversal
 #[derive(Debug, Clone)]
-struct TraversalCache {
+pub(crate) struct TraversalCache {
     local_rays: Vec<Option<Ray>>,
     stack: Vec<TraversalStackEntry>,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct CPUTraversalContext<'scene> {
-    pub(crate) scene: &'scene Scene,
-    pub(crate) acceleration_structures: &'scene CPUAccelerationStructures,
-    traversal_cache: TraversalCache
-}
+impl TraversalCache {
+    const DEFAULT_TRAVERSAL_STACK_SIZE: usize = 64;
 
-impl<'scene> CPUTraversalContext<'scene> {
-    pub(crate) fn new(scene: &'scene Scene, acceleration_structures: &'scene CPUAccelerationStructures)
-        -> CPUTraversalContext<'scene> {
-        let traversal_cache = TraversalCache {
-            local_rays: vec![None; acceleration_structures.bvhs.len()],
-            stack: Vec::with_capacity(48),
-        };
-
-        CPUTraversalContext { 
-            scene, 
-            acceleration_structures,
-            traversal_cache
+    pub(crate) fn new(context: &CpuRaytracingContext) -> Self {
+        TraversalCache { 
+            local_rays: vec![None; context.acceleration_structures.bvhs.len()], 
+            stack: Vec::with_capacity(Self::DEFAULT_TRAVERSAL_STACK_SIZE) 
         }
     }
 }
@@ -74,17 +62,17 @@ pub(crate) fn traverse_bvh(
     ray: Ray,
     t_min: f32,
     t_max: f32, 
-    traversal_context: &mut CPUTraversalContext,
+    context: &CpuRaytracingContext,
+    traversal_cache: &mut TraversalCache,
     early_exit: bool,
 ) -> Option<HitInfo> {
     // t_min, closest_t are in root coordinate frame
     let mut closest_t = t_max;
 
-    let CPUTraversalContext { 
+    let CpuRaytracingContext { 
         scene, 
         acceleration_structures,
-        traversal_cache
-    } = traversal_context;
+    } = context;
 
     let stack: &mut Vec<TraversalStackEntry> = &mut traversal_cache.stack;
     let local_rays = &mut traversal_cache.local_rays;
