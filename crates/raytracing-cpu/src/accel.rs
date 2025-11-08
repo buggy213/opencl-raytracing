@@ -156,7 +156,7 @@ pub(crate) fn traverse_bvh(
 
                             hit_info = Some(HitInfo { 
                                 t: global_t, 
-                                uv: Vec2(0.0, 0.0), // TODO: uvs 
+                                uv: intersect_result.uv, // TODO: uvs 
                                 point: global_point, 
                                 normal: global_normal, 
                                 material_idx: basic_primitive.material, 

@@ -57,6 +57,10 @@ impl Vec2 {
     pub fn elementwise_max(a: Vec2, b: Vec2) -> Vec2 {
         Vec2(f32::max(a.0, b.0), f32::max(a.1, b.1))
     }
+
+    pub fn zero() -> Vec2 {
+        Vec2(0.0, 0.0)
+    }
 }
 
 impl ops::AddAssign for Vec2 {

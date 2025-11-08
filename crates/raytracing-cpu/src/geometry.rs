@@ -167,16 +167,21 @@ fn ray_mesh_intersect(
     let n0 = mesh.normals[i0 as usize];
     let n1 = mesh.normals[i1 as usize];
     let n2 = mesh.normals[i2 as usize];
-    let uv0 = mesh.uvs[i0 as usize];
-    let uv1 = mesh.uvs[i1 as usize];
-    let uv2 = mesh.uvs[i2 as usize];
+
     
     let (t, u, v) = ray_triangle_intersect(p0, p1, p2, o_ray, t_min, t_max)?;
 
     let w = 1.0 - u - v;
     let n = Vec3::normalized(w * n0 + u * n1 + v * n2);
-    let uv = w * uv0 + u * uv1 + v * uv2;
-
+    let uv = if mesh.uvs.is_empty() {
+        Vec2::zero()    
+    } else {
+        let uv0 = mesh.uvs[i0 as usize];
+        let uv1 = mesh.uvs[i1 as usize];
+        let uv2 = mesh.uvs[i2 as usize];
+        w * uv0 + u * uv1 + v * uv2
+    };
+    
     Some(IntersectResult {
         t,
         uv,

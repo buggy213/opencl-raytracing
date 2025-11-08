@@ -1,4 +1,6 @@
-use tracing::info;
+use std::borrow::Cow;
+
+use tracing::warn;
 
 use crate::geometry::{vec3::Vec3u, Vec2, Vec3};
 
@@ -46,7 +48,10 @@ impl Mesh {
             for normal in iter {
                 normals.push(normal.into());
             }
-        } else { todo!("unable to load normals"); }
+        } else {
+            // TODO: calculate vertex normals here? or perpendicular to intersected triangle? 
+            todo!("unable to load normals"); 
+        }
 
         if let Some(iter) = reader.read_tex_coords(0) {
             uvs.reserve_exact(vertices.len());
@@ -77,7 +82,12 @@ impl Mesh {
             }
         } 
         else {
-            info!("no uvs loaded for gltf primitive {} (in mesh {})", primitive.index(), mesh.index()); 
+            let mesh_name = match mesh.name() {
+                Some(name) => Cow::Borrowed(name),
+                None => Cow::Owned(format!("{}", mesh.index())),
+            };
+            
+            warn!("no uvs loaded for gltf primitive {} (in mesh {})", primitive.index(), mesh_name);
         }
         
         Mesh {
