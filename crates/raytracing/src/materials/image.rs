@@ -28,6 +28,8 @@ use image::{
 use num::ToPrimitive;
 use tracing::warn;
 
+use crate::geometry::Vec4;
+
 #[derive(Debug)]
 pub struct Image {
     buffer: image::DynamicImage,
@@ -145,6 +147,14 @@ impl Image {
         }    
     }
 
+    pub fn width(&self) -> u32 {
+        self.buffer.width()
+    }
+
+    pub fn height(&self) -> u32 {
+        self.buffer.height()
+    }
+
     fn get_pixel_channel<P: Pixel>(
         image_buffer: &ImageBuffer<P, Vec<P::Subpixel>>,
         x: u32,
@@ -199,6 +209,15 @@ impl Image {
                 unimplemented!("unsupported dynamic image format")
             },
         }
+    }
+
+    pub fn get_pixel(&self, x: u32, y: u32) -> Vec4 {
+        Vec4(
+            self.get_channel(x, y, 0),
+            self.get_channel(x, y, 1),
+            self.get_channel(x, y, 2),
+            self.get_channel(x, y, 3)
+        )
     }
 
     fn generate_mips(base: &image::DynamicImage) -> Vec<image::DynamicImage> {

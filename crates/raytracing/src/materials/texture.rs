@@ -37,6 +37,40 @@ impl Display for WrapMode {
     }
 }
 
+impl WrapMode {
+    pub fn apply(&self, x: f32) -> f32 {
+        match self {
+            WrapMode::Repeat => {
+                let frac = f32::fract(x);
+                if frac < 0.0 {
+                    1.0 + frac
+                }
+                else {
+                    frac
+                }
+            },
+            WrapMode::Mirror => {
+                let frac = f32::fract(x);
+                let repeat = if frac < 0.0 {
+                    1.0 + frac
+                }
+                else {
+                    frac
+                };
+                
+                let floor = f32::floor(x) as i32;
+                if i32::rem_euclid(floor, 2) == 1 {
+                    1.0 - repeat
+                }
+                else {
+                    repeat
+                }
+            },
+            WrapMode::Clamp => f32::clamp(x, 0.0, 1.0),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct TextureSampler {
     pub filter: FilterMode,

@@ -1,6 +1,6 @@
-use std::ops::Range;
+use std::{f32, ops::Range};
 
-use raytracing::geometry::{Mesh, Shape, Transform, Vec3, Vec3u, AABB};
+use raytracing::geometry::{AABB, Mesh, Shape, Transform, Vec2, Vec3, Vec3u};
 
 use crate::ray::Ray;
 
@@ -38,6 +38,7 @@ pub(crate) fn intersect_aabb(
 #[derive(Debug, Clone)]
 pub(crate) struct IntersectResult {
     pub(crate) t: f32,
+    pub(crate) uv: Vec2,
     pub(crate) point: Vec3,
     pub(crate) normal: Vec3,
 }
@@ -75,6 +76,7 @@ pub(crate) fn intersect_shape(
 
     let w_intersection_result = IntersectResult {
         t: o_intersection_result.t,
+        uv: o_intersection_result.uv,
         point: w_point,
         normal: w_normal,
     };
@@ -124,10 +126,29 @@ fn ray_sphere_intersect(
         return None
     };
 
+    // we take the convention of u being azimuthal angle (phi), 
+    // v being polar angle (theta) with z-up
+    let point = o_ray.at(t);
+    
+    let r_cos_theta = point.z();
+    let theta = f32::acos(r_cos_theta / radius);
+    let r_sin_theta_cos_phi = point.x();
+    let cos_phi = r_sin_theta_cos_phi / (radius * f32::sin(theta));
+    let phi = if point.y() > 0.0 {
+        f32::acos(cos_phi)
+    } else {
+        2.0 * f32::consts::PI - f32::acos(cos_phi)
+    };
+    let uv = Vec2(
+        phi / (2.0 * f32::consts::PI),
+        theta / f32::consts::PI 
+    );
+
     let result = IntersectResult {
         t,
-        point: o_ray.at(t),
-        normal: (o_ray.at(t) - center) / radius,
+        uv,
+        point,
+        normal: (point - center) / radius,
     };
     
     Some(result)
@@ -146,8 +167,22 @@ fn ray_mesh_intersect(
     let n0 = mesh.normals[i0 as usize];
     let n1 = mesh.normals[i1 as usize];
     let n2 = mesh.normals[i2 as usize];
+    let uv0 = mesh.uvs[i0 as usize];
+    let uv1 = mesh.uvs[i1 as usize];
+    let uv2 = mesh.uvs[i2 as usize];
     
-    ray_triangle_intersect(p0, p1, p2, n0, n1, n2, o_ray, t_min, t_max)
+    let (t, u, v) = ray_triangle_intersect(p0, p1, p2, o_ray, t_min, t_max)?;
+
+    let w = 1.0 - u - v;
+    let n = Vec3::normalized(w * n0 + u * n1 + v * n2);
+    let uv = w * uv0 + u * uv1 + v * uv2;
+
+    Some(IntersectResult {
+        t,
+        uv,
+        point: o_ray.at(t),
+        normal: n
+    })
 }
 
 #[allow(non_snake_case)] // conventional symbols
@@ -155,13 +190,11 @@ fn ray_triangle_intersect(
     p0: Vec3,
     p1: Vec3,
     p2: Vec3,
-    n0: Vec3,
-    n1: Vec3,
-    n2: Vec3,
+    
     o_ray: Ray,
     t_min: f32,
     t_max: f32,
-) -> Option<IntersectResult> {
+) -> Option<(f32, f32, f32)> {
     // Moller-Trumbore algorithm
     let e1 = p1 - p0;
     let e2 = p2 - p0;
@@ -191,14 +224,5 @@ fn ray_triangle_intersect(
         return None;
     }
 
-    let w = 1.0 - u - v;
-    let n = Vec3::normalized(w * n0 + u * n1 + v * n2);
-    
-    let result = IntersectResult {
-        t,
-        point: o_ray.at(t),
-        normal: n
-    };
-
-    Some(result)
+    Some((t, u, v))
 }
