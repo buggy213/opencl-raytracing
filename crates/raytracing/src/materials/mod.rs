@@ -6,8 +6,8 @@ pub enum Material {
         albedo: Vec3
     },
 
-    // perfectly smooth dielectric material / conductor material
-    // bsdf are purely delta functions
+    // perfectly smooth dielectric material / conductor materials
+    // bsdfs are purely delta functions
     SmoothDielectric { 
         eta: f32 
     },

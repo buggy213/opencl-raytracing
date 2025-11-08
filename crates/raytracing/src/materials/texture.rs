@@ -77,16 +77,33 @@ pub struct TextureSampler {
     pub wrap: WrapMode
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct TextureId(pub u32);
 
 #[derive(Debug)]
 pub enum Texture {
+    // "Base" textures
     ImageTexture {
         image: ImageId,
         sampler: TextureSampler
     },
     ConstantTexture {
         value: Vec4
+    },
+
+    // "Derived" textures
+
+    // output = a * b at each point
+    ScaleTexture {
+        a: TextureId,
+        b: TextureId
+    },
+
+    // output = mix(a, b, c) at each point
+    MixTexture {
+        a: TextureId,
+        b: TextureId,
+        c: TextureId
     },
 }
 

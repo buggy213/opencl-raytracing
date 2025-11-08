@@ -4,9 +4,16 @@ struct CpuMipmap {
     mips: Vec<image::DynamicImage>
 }
 
+// generally, images can just be used straight from the scene representation
+// but, we need to prepare mipmaps for images that require it 
+// (i.e. a texture using trilinear filtering references some image)
+// for now, we'll just support bilinear interpolation, but set up interface so 
+// that adding mipmaps later is easy
+
 // Wrapper around scene representation of textures / images to add sampling and
 // (TODO) mipmap support
-struct CpuTextures<'scene> {
+#[derive(Debug, Clone)]
+pub(crate) struct CpuTextures<'scene> {
     scene_textures: &'scene [Texture],
     scene_images: &'scene [Image]
 }
@@ -77,6 +84,29 @@ impl CpuTextures<'_> {
                 Self::sample_image_texture(image, u, v, *sampler)
             },
             Texture::ConstantTexture { value } => *value,
+            Texture::ScaleTexture { a, b } => {
+                let a_val = self.sample(*a, u, v);
+                let b_val = self.sample(*b, u, v);
+                a_val * b_val
+            },
+            Texture::MixTexture { a, b, c } => {
+                let one = Vec4(1.0, 1.0, 1.0, 1.0);
+                let c_val = self.sample(*c, u, v);
+                
+                let b_val = if c_val == Vec4::zero() {
+                    Vec4::zero()
+                } else { 
+                    self.sample(*b, u, v)
+                };
+
+                let a_val = if c_val == one {
+                    Vec4::zero()
+                } else {
+                    self.sample(*a, u, v)
+                };
+
+                (one - c_val) * a_val + c_val * b_val
+            },
         }
     }
 }

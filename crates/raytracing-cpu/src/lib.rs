@@ -4,7 +4,7 @@ use materials::CpuMaterial;
 use ray::Ray;
 use raytracing::{geometry::{Matrix4x4, Vec3}, scene::{Camera, Scene}};
 
-use crate::{accel::TraversalCache, scene::CpuAccelerationStructures};
+use crate::{accel::TraversalCache, scene::CpuAccelerationStructures, texture::CpuTextures};
 
 mod ray;
 mod accel;
@@ -19,6 +19,7 @@ mod texture;
 pub(crate) struct CpuRaytracingContext<'scene> {
     pub(crate) scene: &'scene Scene,
     pub(crate) acceleration_structures: &'scene CpuAccelerationStructures,
+    pub(crate) cpu_textures: CpuTextures<'scene>,
 }
 
 impl<'scene> CpuRaytracingContext<'scene> {
@@ -29,6 +30,7 @@ impl<'scene> CpuRaytracingContext<'scene> {
         CpuRaytracingContext { 
             scene, 
             acceleration_structures,
+            cpu_textures: CpuTextures::new(scene)
         }
     }
 }
@@ -188,7 +190,7 @@ pub fn render(scene: &Scene, raytracer_settings: RaytracerSettings) -> Vec<Vec3>
     let camera = &scene.camera;
 
     // construct BVH using embree
-    let cpu_acceleration_structures = scene::prepare_cpu_scene(scene);
+    let cpu_acceleration_structures = scene::prepare_cpu_acceleration_structures(scene);
     let cpu_raytracing_context = CpuRaytracingContext::new(
         &scene,
         &cpu_acceleration_structures
