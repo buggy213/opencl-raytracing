@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc, time::Instant};
+use std::{borrow::Cow, sync::Arc, time::{Duration, Instant}};
 
 use imgui::MouseCursor;
 use imgui_wgpu::{Renderer, RendererConfig};
@@ -33,6 +33,7 @@ struct Application {
     wgpu_handles: WgpuHandles<'static>,
     
     imgui_state: ImguiInternalState,
+    last_frame: Instant,
     
     current_view: Box<dyn RenderView>,
 }
@@ -161,6 +162,7 @@ impl Application {
             logical_size,
 
             wgpu_handles,
+            last_frame: Instant::now(),
 
             imgui_state,
             
@@ -399,6 +401,33 @@ impl Application {
         )
     }
 
+    fn draw_frame(&mut self) {
+        let frame = self.wgpu_handles.surface.get_current_texture()
+            .expect("Unable to get next swapchain image");
+        
+        let window_requests = self.update();
+        self.handle_window_requests(&window_requests);
+        self.render();
+        self.render_imgui();
+        
+        // blit the rendered output to the swapchain image
+        let mut blit_encoder = self.wgpu_handles.device.create_command_encoder(
+            &wgpu::CommandEncoderDescriptor { label: Some("Blit Encoder") }
+        );
+        let source_view = self.wgpu_handles.draw_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let dest_view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        self.wgpu_handles.blitter.copy(
+            &self.wgpu_handles.device, 
+            &mut blit_encoder, 
+            &source_view, 
+            &dest_view
+        );
+        self.wgpu_handles.queue.submit(Some(blit_encoder.finish()));
+
+        frame.present();
+    }
+
     fn handle_window_requests(&self, window_requests: &WindowRequests) {
         window_requests.apply(&self.window);
     }
@@ -455,33 +484,15 @@ impl ApplicationHandler for Application {
             }
             
             WindowEvent::RedrawRequested if !event_loop.exiting() => {
-                let frame = self.wgpu_handles.surface.get_current_texture()
-                    .expect("Unable to get next swapchain image");
-                
-                let window_requests = self.update();
-                self.handle_window_requests(&window_requests);
-                self.render();
-                self.render_imgui();
-                
-                // blit the rendered output to the swapchain image
-                let mut blit_encoder = self.wgpu_handles.device.create_command_encoder(
-                    &wgpu::CommandEncoderDescriptor { label: Some("Blit Encoder") }
-                );
-                let source_view = self.wgpu_handles.draw_texture.create_view(&wgpu::TextureViewDescriptor::default());
-                let dest_view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-                self.wgpu_handles.blitter.copy(
-                    &self.wgpu_handles.device, 
-                    &mut blit_encoder, 
-                    &source_view, 
-                    &dest_view
-                );
-                self.wgpu_handles.queue.submit(Some(blit_encoder.finish()));
-
-                frame.present();
-
-                // request redraw for the next frame
-                self.window.request_redraw();
+                let now = Instant::now();
+                if now.duration_since(self.last_frame) >= Duration::from_secs_f32(1.0 / 60.0) {
+                    self.draw_frame();
+                    self.last_frame = now;
+                    self.window.request_redraw();
+                }
+                else {
+                    self.window.request_redraw();
+                }
             }
             
             WindowEvent::Resized(new_size) => {
