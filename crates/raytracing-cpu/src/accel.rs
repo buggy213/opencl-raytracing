@@ -1,6 +1,10 @@
 use std::ops::Range;
 
-use raytracing::{accel::bvh2::PrimPtr, geometry::{Transform, Vec2, Vec3, AABB}, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
+use raytracing::{
+    accel::bvh2::PrimPtr, 
+    geometry::{Vec2, Vec3, AABB}, 
+    scene::{AggregatePrimitiveIndex, Primitive, Scene}
+};
 
 use crate::geometry::{self, intersect_aabb};
 use crate::{ray::Ray, scene::CPUAccelerationStructures};
@@ -31,28 +35,34 @@ struct TraversalStackEntry {
     progress: u32,
 }
 
-// Every BVH is traversed in its local coordinate frame we store this info 
-// out-of-line of traversal code / traversal stack for simplicity
+// Every BVH is traversed in its local coordinate frame. we store the transformed ray 
+// out-of-line of traversal code / traversal stack for simplicity. we also keep the
+// allocation of traversal stack here to avoid allocating for every traversal
 #[derive(Debug, Clone)]
-struct LocalTraversalContext {
-    transform: Transform,
-    local_ray: Ray,
-    scaling_factor: f32,
+struct TraversalCache {
+    local_rays: Vec<Option<Ray>>,
+    stack: Vec<TraversalStackEntry>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct CPUTraversalContext<'scene> {
     pub(crate) scene: &'scene Scene,
     pub(crate) acceleration_structures: &'scene CPUAccelerationStructures,
+    traversal_cache: TraversalCache
 }
-
 
 impl<'scene> CPUTraversalContext<'scene> {
     pub(crate) fn new(scene: &'scene Scene, acceleration_structures: &'scene CPUAccelerationStructures)
         -> CPUTraversalContext<'scene> {
+        let traversal_cache = TraversalCache {
+            local_rays: vec![None; acceleration_structures.bvhs.len()],
+            stack: Vec::with_capacity(48),
+        };
+
         CPUTraversalContext { 
             scene, 
             acceleration_structures,
+            traversal_cache
         }
     }
 }
@@ -64,7 +74,7 @@ pub(crate) fn traverse_bvh(
     ray: Ray,
     t_min: f32,
     t_max: f32, 
-    traversal_context: CPUTraversalContext,
+    traversal_context: &mut CPUTraversalContext,
     early_exit: bool,
 ) -> Option<HitInfo> {
     // t_min, closest_t are in root coordinate frame
@@ -73,9 +83,17 @@ pub(crate) fn traverse_bvh(
     let CPUTraversalContext { 
         scene, 
         acceleration_structures,
+        traversal_cache
     } = traversal_context;
 
-    let mut stack: Vec<TraversalStackEntry> = Vec::with_capacity(48);
+    let stack: &mut Vec<TraversalStackEntry> = &mut traversal_cache.stack;
+    let local_rays = &mut traversal_cache.local_rays;
+    
+    // nuke previous traversal context
+    stack.clear();
+    for r in local_rays.iter_mut() {
+        *r = None;
+    };
     
     // check intersection with root
     let root_bvh_index = acceleration_structures.root_bvh_index();
@@ -94,13 +112,7 @@ pub(crate) fn traverse_bvh(
     };
 
     stack.push(root_entry);
-
-    let mut local_traversal_ctxs: Vec<Option<LocalTraversalContext>> = vec![None; acceleration_structures.bvhs.len()];
-    local_traversal_ctxs[root_bvh_index] = Some(LocalTraversalContext {
-        transform: Transform::identity(),
-        local_ray: ray,
-        scaling_factor: 1.0,
-    });
+    local_rays[root_bvh_index] = Some(ray);
 
     let mut hit_info: Option<HitInfo> = None;
 
@@ -117,15 +129,8 @@ pub(crate) fn traverse_bvh(
             progress,
         } = *top_of_stack;
 
-        let local_traversal_context = local_traversal_ctxs[bvh_index as usize]
-            .as_ref()
-            .expect("uninitialized local traversal context");
-
-        let root_to_local_transform = local_traversal_context.transform.clone();
-        let local_to_root_transform = root_to_local_transform.invert();
-        let local_ray = local_traversal_context.local_ray;
-        let local_t_min = t_min / local_traversal_context.scaling_factor;
-        let local_closest_t = closest_t / local_traversal_context.scaling_factor;
+        let local_to_root_transform = &acceleration_structures.bvh_transforms[bvh_index as usize];
+        let local_ray = local_rays[bvh_index as usize].expect("uninitialized value in traversal cache");
         let local_bvh = &acceleration_structures.bvhs[bvh_index as usize];
         let node = &local_bvh.nodes[node_index as usize];
 
@@ -146,15 +151,18 @@ pub(crate) fn traverse_bvh(
                     Primitive::Basic(basic_primitive) => {
                         let intersect_result = geometry::intersect_shape(
                             local_ray, 
-                            local_t_min, 
-                            local_closest_t, 
+                            t_min, 
+                            closest_t, 
                             &transform, 
                             &basic_primitive.shape, 
                             prim_id
                         );
 
                         if let Some(intersect_result) = intersect_result {
-                            let global_t = intersect_result.t * local_traversal_context.scaling_factor;
+                            // Note: hierarchical affine transforms between BVHs scale both distances between points
+                            // and the ray direction vector, so t from bvh-space is always equivalent to "global" 
+                            // (i.e. in root bvh coordinate space) t. 
+                            let global_t = intersect_result.t;
                             let global_point = local_to_root_transform.apply_point(intersect_result.point);
                             let global_normal = local_to_root_transform.apply_normal(intersect_result.normal).unit();
 
@@ -194,17 +202,13 @@ pub(crate) fn traverse_bvh(
                         }
 
                         match geometry::intersect_aabb(sub_bvh_aabb, local_ray) {
-                            Some(Range { start, .. }) if start > local_closest_t => {
-                                // initialize local traversal context and push stack
-                                if local_traversal_ctxs[sub_bvh_index as usize].is_none() {
-                                    let root_to_sub_bvh = root_to_local_transform.compose(transform);
+                            Some(Range { start, .. }) if start > closest_t => {
+                                // initialize local ray in cache and push stack
+                                if local_rays[sub_bvh_index as usize].is_none() {
+                                    let sub_bvh_to_root = &acceleration_structures.bvh_transforms[sub_bvh_index as usize];
+                                    let root_to_sub_bvh = sub_bvh_to_root.invert();
                                     let new_local_ray = Ray::transform(ray, &root_to_sub_bvh);
-                                    let new_scaling_factor = new_local_ray.direction.length() / ray.direction.length(); 
-                                    local_traversal_ctxs[sub_bvh_index as usize] = Some(LocalTraversalContext { 
-                                        transform: root_to_sub_bvh, 
-                                        local_ray: new_local_ray, 
-                                        scaling_factor: new_scaling_factor
-                                    });
+                                    local_rays[sub_bvh_index as usize] = Some(new_local_ray);
                                 }
                                 stack.push(TraversalStackEntry { 
                                     aggregate_index: primitive_index.try_into().unwrap(), 
@@ -226,7 +230,7 @@ pub(crate) fn traverse_bvh(
                     let left_child_index = node_index + 1;
                     let left_child_bounds = local_bvh.nodes[left_child_index as usize].bounds();
                     match geometry::intersect_aabb(left_child_bounds, local_ray) {
-                        Some(Range { start, .. }) if start < local_closest_t => {
+                        Some(Range { start, .. }) if start < closest_t => {
                             stack.push(TraversalStackEntry { 
                                 aggregate_index, 
                                 bvh_index, 
@@ -243,7 +247,7 @@ pub(crate) fn traverse_bvh(
                     stack.pop();
                     let right_child_bounds = local_bvh.nodes[*right_child_offset as usize].bounds();
                     match geometry::intersect_aabb(right_child_bounds, local_ray) {
-                        Some(Range { start, .. }) if start < local_closest_t => {
+                        Some(Range { start, .. }) if start < closest_t => {
                             stack.push(TraversalStackEntry { 
                                 aggregate_index, 
                                 bvh_index, 

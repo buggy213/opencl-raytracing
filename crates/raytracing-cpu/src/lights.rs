@@ -108,7 +108,7 @@ pub(crate) fn light_radiance(light: &Light, _hit_point: Vec3) -> Vec3 {
     }
 }
 
-pub(crate) fn occluded(traversal_context: CPUTraversalContext, light_sample: LightSample) -> bool {
+pub(crate) fn occluded(traversal_context: &mut CPUTraversalContext, light_sample: LightSample) -> bool {
     traverse_bvh(
         light_sample.shadow_ray, 
         0.001, 

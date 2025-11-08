@@ -44,8 +44,8 @@ pub(crate) struct IntersectResult {
 
 pub(crate) fn intersect_shape(
     w_ray: Ray, // bvh-space
-    t_min: f32,
-    t_max: f32,
+    t_min: f32, // bvh-space
+    t_max: f32, // bvh-space
     o2w_transform: &Transform, // object-to-bvh
     shape: &Shape, // object-space
     prim_index: u32,
@@ -53,7 +53,11 @@ pub(crate) fn intersect_shape(
     let w2o_transform = o2w_transform.invert();
     let o_ray = Ray::transform(w_ray, &w2o_transform);
 
-    let s = o_ray.direction.length() / w_ray.direction.length();
+    /* Note: w2o_transform is affine, and can be decomposed into TRS,  
+       if there is any scaling, it will scale distances between points 
+       and the direction vector of the ray, so the t computed in object space
+       will be the same as the t in bvh-space (the same logic applies to min/max bounds as well)
+    */
     
     let Some(o_intersection_result) = (match shape {
         Shape::TriangleMesh(mesh) => {
@@ -70,7 +74,7 @@ pub(crate) fn intersect_shape(
     let w_normal = o2w_transform.apply_normal(o_intersection_result.normal).unit();
 
     let w_intersection_result = IntersectResult {
-        t: o_intersection_result.t * s,
+        t: o_intersection_result.t,
         point: w_point,
         normal: w_normal,
     };
@@ -80,11 +84,11 @@ pub(crate) fn intersect_shape(
 
 
 fn ray_sphere_intersect(
-    center: Vec3,
-    radius: f32,
+    center: Vec3, // object-space
+    radius: f32, // object-space
     o_ray: Ray, // object-space
-    t_min: f32,
-    t_max: f32,
+    t_min: f32, // object-space
+    t_max: f32, // object-space
 ) -> Option<IntersectResult> /* object-space */ {
     let origin_minus_center = o_ray.origin - center;
 
