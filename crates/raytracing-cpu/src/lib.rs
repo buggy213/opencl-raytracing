@@ -13,6 +13,7 @@ mod lights;
 mod materials;
 mod sample;
 mod scene;
+mod texture;
 
 fn generate_ray(camera: &Camera, x: u32, y: u32) -> Ray {
     let x_disp = 0.0;

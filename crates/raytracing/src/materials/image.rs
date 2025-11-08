@@ -270,6 +270,66 @@ impl Image {
             buffer: image_data,
         })
     }
+
+    pub fn load_from_gltf_image(gltf_image: gltf::image::Data) -> Self {
+        // Note: unwrapping here is ok, since gltf_image is internally doing the inverse of this
+        let dynamic_image: DynamicImage = match gltf_image.format {
+            gltf::image::Format::R8 => {
+                ImageBuffer::<Luma<u8>, Vec<u8>>::from_raw(gltf_image.width, gltf_image.height, gltf_image.pixels)
+                    .unwrap()
+                    .into()
+            },
+            gltf::image::Format::R8G8 => {
+                ImageBuffer::<LumaA<u8>, Vec<u8>>::from_raw(gltf_image.width, gltf_image.height, gltf_image.pixels)
+                    .unwrap()
+                    .into()
+            },
+            gltf::image::Format::R8G8B8 => {
+                ImageBuffer::<Rgb<u8>, Vec<u8>>::from_raw(gltf_image.width, gltf_image.height, gltf_image.pixels)
+                    .unwrap()
+                    .into()
+            },
+            gltf::image::Format::R8G8B8A8 => {
+                ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(gltf_image.width, gltf_image.height, gltf_image.pixels)
+                    .unwrap()
+                    .into()
+            },
+            gltf::image::Format::R16 => {
+                ImageBuffer::<Luma<u16>, Vec<u16>>::from_raw(gltf_image.width, gltf_image.height, bytemuck::cast_vec(gltf_image.pixels))
+                    .unwrap()
+                    .into()
+            },
+            gltf::image::Format::R16G16 => {
+                ImageBuffer::<LumaA<u16>, Vec<u16>>::from_raw(gltf_image.width, gltf_image.height, bytemuck::cast_vec(gltf_image.pixels))
+                    .unwrap()
+                    .into()
+            },
+            gltf::image::Format::R16G16B16 => {
+                ImageBuffer::<Rgb<u16>, Vec<u16>>::from_raw(gltf_image.width, gltf_image.height, bytemuck::cast_vec(gltf_image.pixels))
+                    .unwrap()
+                    .into()
+            },
+            gltf::image::Format::R16G16B16A16 => {
+                ImageBuffer::<Rgba<u16>, Vec<u16>>::from_raw(gltf_image.width, gltf_image.height, bytemuck::cast_vec(gltf_image.pixels))
+                    .unwrap()
+                    .into()
+            },
+            gltf::image::Format::R32G32B32FLOAT => {
+                ImageBuffer::<Rgb<f32>, Vec<f32>>::from_raw(gltf_image.width, gltf_image.height, bytemuck::cast_vec(gltf_image.pixels))
+                    .unwrap()
+                    .into()
+            },
+            gltf::image::Format::R32G32B32A32FLOAT => {
+                ImageBuffer::<Rgba<f32>, Vec<f32>>::from_raw(gltf_image.width, gltf_image.height, bytemuck::cast_vec(gltf_image.pixels))
+                    .unwrap()
+                    .into()
+            },
+        };
+
+        Self {
+            buffer: dynamic_image,
+        }
+    }
 }
 
 #[cfg(test)]

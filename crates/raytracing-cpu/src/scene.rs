@@ -11,6 +11,12 @@ pub(crate) struct CPUAccelerationStructures {
 
 // to prepare a scene for CPU render, must turn all AggregatePrimitives into BVHs using Embree
 // this is done recursively to handle multi-level BVH
+
+// generally, images can just be used straight from the scene representation
+// but, we need to prepare mipmaps for images that require it 
+// (i.e. a texture using trilinear filtering references some image)
+// for now, we'll just support bilinear interpolation 
+// (since adding ray differentials is a bit tricky) and this won't be used at all. 
 pub(crate) fn prepare_cpu_scene(scene: &Scene) -> CPUAccelerationStructures {
     let embree = embree4::Device::new();
 

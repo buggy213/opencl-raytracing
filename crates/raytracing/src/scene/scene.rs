@@ -166,7 +166,7 @@ impl Scene {
 
 impl Scene {
     pub fn from_gltf_file(filepath: &Path, render_tile: Option<RenderTile>) -> anyhow::Result<Scene> {
-        let (document, buffers, _images) = gltf::import(filepath)?;
+        let (document, buffers, image_data) = gltf::import(filepath)?;
         let scene_gltf = document.default_scene().unwrap();
         let mut camera: Option<Camera> = None;  
         let height: usize = HEIGHT;
@@ -176,20 +176,15 @@ impl Scene {
 
         let mut primitives: Vec<Primitive> = Vec::new();
         let mut lights: Vec<Light> = Vec::new();
-
+        
         let mut root_primitive_children: Vec<PrimitiveIndex> = Vec::new();
 
         let mut images: Vec<Image> = Vec::with_capacity(document.images().len());
-        for image in document.images() {
-            match image.source() {
-                gltf::image::Source::View { view: _, mime_type: _ } => {
-                    todo!("implement binary image deserialization")
-                },
-                gltf::image::Source::Uri { uri, mime_type: _ } => {
-                    let img = Image::load_from_path(Path::new(uri))?;
-                    images.push(img);
-                },
-            }
+        for gltf_image in image_data {
+            // annoyingly, gltf crate's import feature also uses the `image` crate under the hood
+            // so, we are essentially round-tripping data for no reason, but oh well
+            let image = Image::load_from_gltf_image(gltf_image);
+            images.push(image);
         }
 
         let mut textures: Vec<Texture> = Vec::with_capacity(document.textures().len());
