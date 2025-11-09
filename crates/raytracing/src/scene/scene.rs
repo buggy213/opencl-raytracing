@@ -407,12 +407,14 @@ impl SceneBuilder {
         &mut self,
         camera_position: Vec3,
         target: Vec3,
+        yfov: f32,
         raster_width: usize,
         raster_height: usize,
     ) {
         let camera = Camera::lookat_camera(
             camera_position, 
             target, 
+            yfov,
             raster_width, 
             raster_height
         );
@@ -488,21 +490,57 @@ impl SceneBuilder {
             camera: self.camera.expect("scene description incomplete"), 
             primitives: self.primitives, 
             root_primitive: root_primitive_idx, 
-            lights: Vec::new(), 
+            lights: self.lights, 
             materials: self.materials,
-            textures: Vec::new(),
+            textures: self.textures,
             images: Vec::new(),
         }
     }
 }
 
 pub mod test_scenes {
-    use crate::{geometry::{Shape, Vec3, Vec4}, materials::Material, scene::Scene};
+    use crate::{
+        geometry::{Mesh, Shape, Vec3, Vec3u, Vec4}, 
+        materials::Material, 
+        scene::Scene
+    };
 
     use super::SceneBuilder;
 
+    // helpers for basic meshes
+    fn make_mesh(verts: &[Vec3], tris: &[Vec3u], normals: &[Vec3]) -> Mesh {
+        Mesh {
+            vertices: verts.to_vec(),
+            tris: tris.to_vec(),
+            normals: normals.to_vec(),
+            uvs: Vec::new(),
+        }
+    }
+
+    fn make_plane(a: Vec3, b: Vec3, c: Vec3, d: Vec3, normal: Vec3) -> Mesh {
+        // ensure a, b, c, d are coplanar, counterclockwise
+        let ab = b - a;
+        let ac = c - a;
+        let x = Vec3::cross(ab, ac).unit();
+        
+        let cd = d - c;
+        let ca = -ac;
+        let y = Vec3::cross(cd, ca).unit();
+        
+        dbg!(normal);
+        dbg!(x);
+        assert!((x - normal).near_zero(), "points not in plane defined by normal");
+        assert!((y - normal).near_zero(), "points not in plane defined by normal");
+
+        make_mesh(
+            &[a, b, c, d],
+            &[Vec3u(0, 1, 2), Vec3u(2, 3, 0)],
+            &[normal, normal, normal, normal]
+        )
+    }
+
     // super simple test scene with one sphere, no light
-    pub fn test_scene() -> Scene {
+    pub fn sphere_scene() -> Scene {
         let mut scene_builder = SceneBuilder::new();
         
         let sphere = Shape::Sphere { 
@@ -525,7 +563,8 @@ pub mod test_scenes {
         );
         scene_builder.add_lookat_camera(
             Vec3(0.0, 0.0, 0.0), 
-            Vec3(0.0, 0.0, -3.0), 
+            Vec3(0.0, 0.0, -3.0),
+            45.0,
             400, 
             400
         );
@@ -536,17 +575,134 @@ pub mod test_scenes {
     }
 
     // template for cornell box, returns a SceneBuilder so other functions can add on top
-    pub fn cornell_box() -> SceneBuilder {
-        todo!()
+    // note: this isn't the same dimensions as the real cornell box
+    fn cornell_box() -> SceneBuilder {
+        let mut scene_builder = SceneBuilder::new();
+
+        // Dimensions: width=2, height=2, depth=1.5, y-up
+        let w = 2.0;
+        let h = 2.0;
+        let d = 1.5;
+
+        // Box corners
+        let left   = -w / 2.0;
+        let right  =  w / 2.0;
+        let bottom = 0.0;
+        let top    = h;
+        let back   = -d / 2.0;
+        let front  =  d / 2.0;
+
+        // Plane normals
+        let up    = Vec3(0.0, 1.0, 0.0);
+        let down  = Vec3(0.0, -1.0, 0.0);
+        let leftn = Vec3(1.0, 0.0, 0.0);
+        let rightn= Vec3(-1.0, 0.0, 0.0);
+        let backn = Vec3(0.0, 0.0, 1.0);
+
+        // Floor
+        let floor = make_plane(
+            Vec3(right, bottom, front),
+            Vec3(right, bottom, back),
+            Vec3(left, bottom, back),
+            Vec3(left, bottom, front),
+            up
+        );
+        // Ceiling
+        let ceiling = make_plane(
+            Vec3(left, top, front),
+            Vec3(left, top, back),
+            Vec3(right, top, back),
+            Vec3(right, top, front),
+            down
+        );
+        // Left wall
+        let left_wall = make_plane(
+            Vec3(left, bottom, back),
+            Vec3(left, top, back),
+            Vec3(left, top, front),
+            Vec3(left, bottom, front),
+            leftn
+        );
+        // Right wall
+        let right_wall = make_plane(
+            Vec3(right, bottom, front),
+            Vec3(right, top, front),
+            Vec3(right, top, back),
+            Vec3(right, bottom, back),
+            rightn
+        );
+        // Back wall
+        let back_wall = make_plane(
+            Vec3(right, bottom, back),
+            Vec3(right, top, back),
+            Vec3(left, top, back),
+            Vec3(left, bottom, back),
+            backn
+        );
+
+        // Add planes to scene builder with colored walls
+        let white = scene_builder.add_constant_texture(Vec4(1.0, 1.0, 1.0, 1.0));
+        let red   = scene_builder.add_constant_texture(Vec4(1.0, 0.0, 0.0, 1.0));
+        let blue  = scene_builder.add_constant_texture(Vec4(0.0, 0.0, 1.0, 1.0));
+
+        let white_diffuse = scene_builder.add_material(Material::Diffuse { albedo: white });
+        let red_diffuse   = scene_builder.add_material(Material::Diffuse { albedo: red });
+        let blue_diffuse  = scene_builder.add_material(Material::Diffuse { albedo: blue });
+
+        scene_builder.add_shape_at_position(Shape::TriangleMesh(floor), white_diffuse, Vec3(0.0, 0.0, 0.0));
+        scene_builder.add_shape_at_position(Shape::TriangleMesh(ceiling), white_diffuse, Vec3(0.0, 0.0, 0.0));
+        scene_builder.add_shape_at_position(Shape::TriangleMesh(left_wall), red_diffuse, Vec3(0.0, 0.0, 0.0));
+        scene_builder.add_shape_at_position(Shape::TriangleMesh(right_wall), blue_diffuse, Vec3(0.0, 0.0, 0.0));
+        scene_builder.add_shape_at_position(Shape::TriangleMesh(back_wall), white_diffuse, Vec3(0.0, 0.0, 0.0));
+        
+        // Camera looking into the box from the front
+        scene_builder.add_lookat_camera(
+            Vec3(0.0, h / 2.0, front + 0.5),
+            Vec3(0.0, h / 2.0, 0.0),
+            35.0,
+            600,
+            400,
+        );
+
+        // Add a point light near the top center
+        scene_builder.add_point_light(
+            Vec3(0.0, top - 0.1, 0.0), // slightly below the ceiling, centered
+            Vec3(1000.0, 1000.0, 1000.0),    // bright white light
+        );
+
+        scene_builder
     }
 
     // single dielectric sphere (ior = 1.5) in cornell box
     pub fn dielectric_scene() -> Scene {
-        todo!()
+        let cornell_box = cornell_box().build();
+        cornell_box
     }
 
     // single metal sphere (ior = 2.0 + 2.0i) in cornell box
     pub fn metal_scene() -> Scene {
         todo!()
+    }
+
+    pub struct TestScene {
+        pub name: &'static str,
+        pub func: fn() -> Scene
+    }
+
+    pub const fn all_test_scenes() -> &'static [TestScene] {
+        &[
+            TestScene {
+                name: "sphere",
+                func: sphere_scene
+            },
+            TestScene {
+                name: "dielectric",
+                func: dielectric_scene
+            },
+            TestScene {
+                name: "metal",
+                func: metal_scene
+            }
+        ]
     }
 }

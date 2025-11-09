@@ -164,11 +164,11 @@ impl Camera {
         camera_position: Vec3, 
         target: Vec3,
 
+        yfov: f32,
         raster_width: usize,
         raster_height: usize,
 
     ) -> Camera {
-        let yfov = (45.0_f32).to_radians();
         let near_clip = 0.01;
         let far_clip = 1000.0;
 
@@ -187,7 +187,7 @@ impl Camera {
         Camera { 
             camera_position, 
             camera_rotation: Quaternion::from_rotation_matrix(camera_to_world.forward), 
-            camera_type: CameraType::Perspective { yfov: (30.0_f32).to_radians() }, 
+            camera_type: CameraType::Perspective { yfov }, 
             raster_width, 
             raster_height, 
             near_clip: 0.01, 

@@ -9,6 +9,8 @@ use raytracing::scene::test_scenes;
 struct CommandLineArguments {
     #[arg(short, long)]
     input: Option<PathBuf>,
+    #[arg(long)]
+    scene: Option<String>,
     #[arg(short, long, default_value_t = 1)]
     spp: u32,
     #[arg(short, long, default_value_t = 1)]
@@ -50,18 +52,30 @@ fn main() {
     tracing_subscriber::fmt::init();
 
     let cli_args = CommandLineArguments::parse();
-    let default_scene = PathBuf::from("scenes/cbbunny.glb");
-    let scene = Scene::from_gltf_file(&default_scene, None)
-        .expect("failed to load scene");
-    // let scene = test_scenes::test_scene();
+    let scene = if let Some(filename) = cli_args.input {
+        Scene::from_gltf_file(&filename, None)
+            .expect("failed to load scene")
+    } else if let Some(name) = cli_args.scene {
+        let scene_func = test_scenes::all_test_scenes()
+            .iter()
+            .find(|s| s.name == name)
+            .expect("failed to find scene")
+            .func;
+
+        scene_func()
+    } else {
+        let default_scene = PathBuf::from("scenes/cbbunny.glb");
+        Scene::from_gltf_file(&default_scene, None)
+            .expect("failed to load scene")
+    };
 
     let raytracer_settings = RaytracerSettings {
-        max_ray_depth: 1,
+        max_ray_depth: 2,
         light_sample_count: cli_args.light_samples,
         samples_per_pixel: cli_args.spp,
-        accumulate_bounces: false,
+        accumulate_bounces: true,
 
-        debug_normals: true,
+        debug_normals: false,
     };
 
     let mut output = render(&scene, raytracer_settings);
