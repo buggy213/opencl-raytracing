@@ -1,18 +1,20 @@
-use crate::geometry::{Complex, Vec3};
 
 #[derive(Debug)]
 pub enum Material {
     Diffuse { 
-        albedo: Vec3
+        // only RGB is used, alpha is ignored
+        albedo: TextureId
     },
 
     // perfectly smooth dielectric material / conductor materials
     // bsdfs are purely delta functions
-    SmoothDielectric { 
-        eta: f32 
+    SmoothDielectric {
+        // only R is used
+        eta: TextureId
     },
-    SmoothConductor { 
-        eta: Complex
+    SmoothConductor {
+        // R is the real component, G is the imaginary component
+        eta: TextureId
     },
 }
 

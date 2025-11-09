@@ -15,6 +15,14 @@ impl Vec2 {
         self.1
     }
 
+    pub fn u(&self) -> f32 {
+        self.0
+    }
+    
+    pub fn v(&self) -> f32 {
+        self.1
+    }
+
     pub fn square_magnitude(&self) -> f32 {
         self.0 * self.0
             + self.1 * self.1

@@ -98,12 +98,13 @@ fn ray_radiance(
         }
 
         let material = &context.scene.materials[hit.material_idx as usize];
+        let bsdf = material.get_bsdf(hit.uv, &context.cpu_textures);
         let w2o = Matrix4x4::make_w2o(hit.normal);
         let o2w = w2o.transposed();
         let wo = w2o.apply_vector(-ray.direction);
 
         depth += 1;
-        specular_bounce = material.is_delta_bsdf();
+        specular_bounce = bsdf.is_delta_bsdf();
         if depth > raytracer_settings.max_ray_depth {
             break;
         }
@@ -119,7 +120,7 @@ fn ray_radiance(
                     let occluded = occluded(context, traversal_cache, light_sample);
                     if !occluded {
                         let wi = w2o.apply_vector(-light_sample.shadow_ray.direction); // shadow ray from light to hit point, we want other way
-                        let bsdf_value = material.get_bsdf(wo, wi);
+                        let bsdf_value = bsdf.evaluate_bsdf(wo, wi);
                         
                         let cos_theta = wi.z();
 
@@ -134,7 +135,7 @@ fn ray_radiance(
         }
 
         // indirect illumination
-        let bsdf_sample = material.sample_bsdf(wo);
+        let bsdf_sample = bsdf.sample_bsdf(wo);
         let cos_theta = bsdf_sample.wi.z();
         path_weight *= bsdf_sample.bsdf * cos_theta / bsdf_sample.pdf;
 

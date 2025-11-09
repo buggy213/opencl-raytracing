@@ -1,9 +1,9 @@
 use std::f32;
 
-use raytracing::{geometry::{Complex, Vec3}, materials::Material};
+use raytracing::{geometry::{Complex, Vec2, Vec3}, materials::Material};
 use tracing::warn;
 
-use crate::sample::{self, sample_cosine_hemisphere};
+use crate::{sample::{self, sample_cosine_hemisphere}, texture::CpuTextures};
 
 #[derive(Debug)]
 pub(crate) struct BsdfSample {
@@ -12,17 +12,25 @@ pub(crate) struct BsdfSample {
     pub(crate) pdf: f32
 }
 
-pub(crate) trait CpuMaterial {
-    fn get_bsdf(&self, wo: Vec3, wi: Vec3) -> Vec3;
-    fn sample_bsdf(&self, wo: Vec3) -> BsdfSample;
-    fn is_delta_bsdf(&self) -> bool;
+// Corresponds to `Material` evaluated at a specific point
+pub enum CpuBsdf {
+    Diffuse { 
+        albedo: Vec3
+    },
+
+    SmoothDielectric { 
+        eta: f32 
+    },
+    SmoothConductor { 
+        eta: Complex
+    },
 }
 
-impl CpuMaterial for Material {
+impl CpuBsdf {
     // local coordinates, wo and wi both in upper hemisphere
-    fn get_bsdf(&self, wo: Vec3, wi: Vec3) -> Vec3 {
+    pub(crate) fn evaluate_bsdf(&self, wo: Vec3, wi: Vec3) -> Vec3 {
         match self {
-            Material::Diffuse { albedo } => {
+            CpuBsdf::Diffuse { albedo } => {
                 *albedo / f32::consts::PI
             },
 
@@ -30,14 +38,14 @@ impl CpuMaterial for Material {
             // BSDF is composed of delta functions; we consider
             // the exact direction impossible to sample through
             // normal means 
-            Material::SmoothDielectric { .. } => Vec3::zero(),
-            Material::SmoothConductor { .. } => Vec3::zero()
+            CpuBsdf::SmoothDielectric { .. } => Vec3::zero(),
+            CpuBsdf::SmoothConductor { .. } => Vec3::zero()
         }
     }
 
-    fn sample_bsdf(&self, wo: Vec3) -> BsdfSample {
+    pub(crate) fn sample_bsdf(&self, wo: Vec3) -> BsdfSample {
         match self {
-            Material::Diffuse { albedo } => {
+            CpuBsdf::Diffuse { albedo } => {
                 // cosine-weighted hemisphere sampling
                 let (wi, pdf) = sample_cosine_hemisphere();
                 BsdfSample {
@@ -47,7 +55,7 @@ impl CpuMaterial for Material {
                 }
             },
 
-            Material::SmoothDielectric { eta } => {
+            CpuBsdf::SmoothDielectric { eta } => {
                 let normal = Vec3(0.0, 0.0, 1.0);
 
                 #[allow(non_snake_case, reason = "physics convention")]
@@ -99,7 +107,7 @@ impl CpuMaterial for Material {
 
                 bsdf_sample
             },
-            Material::SmoothConductor { eta } => {
+            CpuBsdf::SmoothConductor { eta } => {
                 let normal = Vec3(0.0, 0.0, 1.0);
                 let reflection_dir = Vec3::reflect(wo, normal);
                 let f = fresnel_complex(wo.z(), *eta) / wo.z();
@@ -115,11 +123,40 @@ impl CpuMaterial for Material {
     }
 
     // if BSDF only has deltas, then doing light sampling is not worthwhile
-    fn is_delta_bsdf(&self) -> bool {
+    pub(crate) fn is_delta_bsdf(&self) -> bool {
         match self {
-            Material::Diffuse { .. } => false,
-            Material::SmoothDielectric { .. } => true,
-            Material::SmoothConductor { .. } => true,
+            CpuBsdf::Diffuse { .. } => false,
+            CpuBsdf::SmoothDielectric { .. } => true,
+            CpuBsdf::SmoothConductor { .. } => true,
+        }
+    }
+}
+
+pub(crate) trait CpuMaterial {
+    // evaluate the material at a specific shading point to get a bsdf
+    fn get_bsdf(&self, uv: Vec2, textures: &CpuTextures) -> CpuBsdf;
+}
+
+impl CpuMaterial for Material {
+    fn get_bsdf(&self, uv: Vec2, textures: &CpuTextures) -> CpuBsdf {
+        match self {
+            Material::Diffuse { albedo } => {
+                let albedo = textures.sample(*albedo, uv.u(), uv.v());
+                let albedo = Vec3(albedo.r(), albedo.g(), albedo.b());
+                
+                CpuBsdf::Diffuse { albedo }
+            },
+            Material::SmoothDielectric { eta } => {
+                let eta = textures.sample(*eta, uv.u(), uv.v()).r();
+
+                CpuBsdf::SmoothDielectric { eta }
+            },
+            Material::SmoothConductor { eta } => {
+                let eta = textures.sample(*eta, uv.u(), uv.v());
+                let eta = Complex(eta.0, eta.1);
+
+                CpuBsdf::SmoothConductor { eta }
+            },
         }
     }
 }

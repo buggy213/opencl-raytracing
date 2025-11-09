@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::HashMap, ops::Range, path::Path};
 
 use tracing::warn;
 
-use crate::{geometry::{Matrix4x4, Mesh, Shape, Transform, Vec3}, lights::Light, materials::{FilterMode, Image, ImageId, Material, Texture, TextureSampler, WrapMode}, scene::primitive::{AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex, Primitive, PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex}};
+use crate::{geometry::{Matrix4x4, Mesh, Shape, Transform, Vec3, Vec4}, lights::Light, materials::{FilterMode, Image, ImageId, Material, Texture, TextureId, TextureSampler, WrapMode}, scene::primitive::{AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex, Primitive, PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex}};
 
 use super::camera::{Camera, RenderTile};
 
@@ -232,9 +232,48 @@ impl Scene {
         let mut materials: Vec<Material> = Vec::with_capacity(document.materials().len());
         let mut material_emissions: Vec<Vec3> = Vec::with_capacity(document.materials().len());
         for material in document.materials() {
-            let diffuse_color = material.pbr_metallic_roughness().base_color_factor();
+            let pbr_params = material.pbr_metallic_roughness();
+            let diffuse_gltf_texture = pbr_params.base_color_texture();
+            let diffuse_factor = pbr_params.base_color_factor();
+            
+            let albedo_texture = if let Some(gltf_tex) = diffuse_gltf_texture {
+                if gltf_tex.tex_coord() != 0 {
+                    let material_name = match material.name() {
+                        Some(name) => Cow::Borrowed(name),
+                        None => match material.index() {
+                            Some(material_id) => Cow::Owned(format!("{}", material_id)),
+                            None => Cow::Borrowed("default")
+                        },
+                    };
+
+                    warn!("material {} uses non-zero TEXCOORD attribute, not supported yet", material_name);
+                }
+                
+                let base_id = TextureId(gltf_tex.texture().index() as u32);
+                
+                if diffuse_factor != [1.0, 1.0, 1.0, 1.0] {
+                    let factor_id = TextureId(textures.len() as u32);
+                    textures.push(Texture::ConstantTexture { value: diffuse_factor.into() });
+                    let scale_id = TextureId(textures.len() as u32);
+                    textures.push(Texture::ScaleTexture { a: base_id, b: factor_id });
+                    
+                    scale_id
+                }
+                else {
+                    base_id
+                }
+            }
+            else {
+                let id = TextureId(textures.len() as u32);
+                textures.push(Texture::ConstantTexture { 
+                    value: diffuse_factor.into() 
+                });
+
+                id
+            };
+            
             let diffuse = Material::Diffuse { 
-                albedo: [diffuse_color[0], diffuse_color[1], diffuse_color[2]].into()
+                albedo: albedo_texture
             };
 
             materials.push(diffuse);
@@ -348,6 +387,7 @@ struct SceneBuilder {
     primitives: Vec<Primitive>,
     primitive_idxs: Vec<PrimitiveIndex>,
     materials: Vec<Material>,
+    textures: Vec<Texture>,
 }
 
 impl SceneBuilder {
@@ -356,7 +396,8 @@ impl SceneBuilder {
             camera: None, 
             primitives: Vec::new(), 
             primitive_idxs: Vec::new(), 
-            materials: Vec::new() 
+            materials: Vec::new(), 
+            textures: Vec::new(),
         }
     }
 
@@ -382,9 +423,16 @@ impl SceneBuilder {
     fn add_shape_at_position(
         mut self,
         shape: Shape,
-        material: Material,
+        albedo: Vec4,
         position: Vec3,
     ) -> Self {
+        let tex_id = TextureId(self.textures.len() as u32);
+        self.textures.push(Texture::ConstantTexture { value: albedo });
+
+        let material = Material::Diffuse { 
+            albedo: tex_id
+        };
+
         let material_idx = self.materials.len() as u32;
         self.materials.push(material);
 
@@ -430,7 +478,7 @@ impl SceneBuilder {
 }
 
 pub mod test_scenes {
-    use crate::{geometry::{Shape, Vec3}, materials::Material, scene::Scene};
+    use crate::{geometry::{Shape, Vec3, Vec4}, scene::Scene};
 
     use super::SceneBuilder;
 
@@ -443,14 +491,12 @@ pub mod test_scenes {
             radius: 1.0
         };
 
-        let sphere_material = Material::Diffuse { 
-            albedo: Vec3(1.0, 0.0, 0.0) 
-        };
+        
 
         let scene = scene_builder
         .add_shape_at_position(
             sphere, 
-            sphere_material,
+            Vec4(1.0, 1.0, 1.0, 1.0),
             Vec3(0.0, 0.0, -3.0)
         )
         .add_lookat_camera(
