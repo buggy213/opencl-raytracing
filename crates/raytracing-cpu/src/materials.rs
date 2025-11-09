@@ -157,6 +157,8 @@ impl CpuMaterial for Material {
 
                 CpuBsdf::SmoothConductor { eta }
             },
+
+            _ => todo!("support new material")
         }
     }
 }
@@ -225,4 +227,89 @@ fn fresnel_complex(cos_theta_i: f32, eta: Complex) -> f32 {
     let r_perp = (cos_theta_i - eta * cos_theta_t) / (cos_theta_i + eta * cos_theta_t);
 
     (r_parl.square_magnitude() + r_perp.square_magnitude()) / 2.0
+}
+
+// Trowbridge-Reitz microfacet distribution helper functions
+mod microfacet {
+    use std::f32;
+
+    use raytracing::geometry::Vec3;
+
+    use crate::sample::sample_unit_disk;
+
+    // PBRT 4ed 9.6.1
+    // represents relative differential area of microfacets pointing in a particular direction
+    // when microfacets distributed according to "ellipsoidal bumps"
+    // as usual, wm is in shading coordinate frame (+z <=> normal of "macrosurface")
+    fn distribution(wm: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
+        let cos_theta = wm.z();
+        let cos_theta_2 = cos_theta * cos_theta;
+        let sin_theta_2 = 1.0 - cos_theta_2;
+
+        let cos_phi = wm.x();
+        let sin_phi = wm.y();
+        
+        let e = (cos_phi * cos_phi) / (alpha_x * alpha_x) + (sin_phi * sin_phi) / (alpha_y * alpha_y);
+        let t = (1.0 + (sin_theta_2 / cos_theta_2) * e).powi(2);
+
+        1.0 / (f32::consts::PI * alpha_x * alpha_y * cos_theta_2 * cos_theta_2 * t)
+    }
+
+    // PBRT 4ed 9.6.2
+    // part of "Smith's approximation" to masking function G1, which accounts for microfacets
+    // blocking other microfacets
+    fn lambda(w: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
+        let cos_theta = w.z();
+        let cos_theta_2 = cos_theta * cos_theta;
+        let sin_theta_2 = 1.0 - cos_theta_2;
+        let tan_theta_2 = sin_theta_2 / cos_theta_2;
+
+        let cos_phi = w.x();
+        let sin_phi = w.y();
+
+        let alpha_2 = alpha_x * alpha_x * cos_phi * cos_phi + alpha_y * alpha_y * sin_phi * sin_phi;
+        ((1.0 + alpha_2 * tan_theta_2).sqrt() - 1.0) / 2.0
+    }
+
+    #[allow(non_snake_case, reason = "physics convention")]
+    fn G1(w: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
+        1.0 / (1.0 + lambda(w, alpha_x, alpha_y))
+    }
+
+    // PBRT 4ed 9.6.3
+    // an approximation to the masking-shadowing function (shadowing is masking but in the outgoing direction)
+    #[allow(non_snake_case, reason = "physics convention")]
+    fn G(wo: Vec3, wi: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
+        1.0 / (1.0 + lambda(wo, alpha_x, alpha_y) + lambda(wi, alpha_x, alpha_y)    )
+    }
+
+    // PBRT 4ed 9.6.4
+    // distribution of normals which are visible from some direction
+    // (leads to improved sampling efficiency)
+    fn visible_distribution(w: Vec3, wm: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
+        let cos_theta = w.z();
+
+        (G1(w, alpha_x, alpha_y) / cos_theta) * 
+        distribution(wm, alpha_x, alpha_y) * 
+        f32::max(0.0, Vec3::dot(w, wm))
+    }
+
+    // PBRT 4ed 9.6.4
+    // sample from visible normals distribution
+    fn sample_wm(w: Vec3, alpha_x: f32, alpha_y: f32) -> Vec3 {
+        let wh = Vec3(alpha_x * w.x(), alpha_y * w.y(), w.z()).unit();
+        let p = sample_unit_disk();
+        let t1 = if wh.z() < 0.9999 {
+            Vec3::cross(Vec3(0.0, 0.0, 1.0), wh)
+        }
+        else {
+            Vec3(1.0, 0.0, 0.0)
+        };
+        let t2 = Vec3::cross(wh, t1);
+
+        let nh: Vec3 = todo!();
+
+        nh.unit()
+    }
+
 }

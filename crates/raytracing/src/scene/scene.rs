@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::HashMap, ops::Range, path::Path};
 
 use tracing::warn;
 
-use crate::{geometry::{Matrix4x4, Mesh, Shape, Transform, Vec3, Vec4}, lights::Light, materials::{FilterMode, Image, ImageId, Material, Texture, TextureId, TextureSampler, WrapMode}, scene::primitive::{AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex, Primitive, PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex}};
+use crate::{geometry::{Matrix4x4, Mesh, Shape, Transform, Vec3, Vec4}, lights::Light, materials::{FilterMode, Image, ImageId, Material, Texture, TextureId, TextureSampler, WrapMode}, scene::primitive::{AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex, MaterialIndex, Primitive, PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex}};
 
 use super::camera::{Camera, RenderTile};
 
@@ -386,6 +386,7 @@ struct SceneBuilder {
     camera: Option<Camera>,
     primitives: Vec<Primitive>,
     primitive_idxs: Vec<PrimitiveIndex>,
+    lights: Vec<Light>,
     materials: Vec<Material>,
     textures: Vec<Texture>,
 }
@@ -396,18 +397,19 @@ impl SceneBuilder {
             camera: None, 
             primitives: Vec::new(), 
             primitive_idxs: Vec::new(), 
+            lights: Vec::new(),
             materials: Vec::new(), 
             textures: Vec::new(),
         }
     }
 
     fn add_lookat_camera(
-        mut self,
+        &mut self,
         camera_position: Vec3,
         target: Vec3,
         raster_width: usize,
         raster_height: usize,
-    ) -> Self {
+    ) {
         let camera = Camera::lookat_camera(
             camera_position, 
             target, 
@@ -416,30 +418,39 @@ impl SceneBuilder {
         );
 
         self.camera = Some(camera);
+    }
 
-        self
+    fn add_constant_texture(
+        &mut self,
+        value: Vec4
+    ) -> TextureId {
+        let const_texture_id = TextureId(self.textures.len() as u32);
+        let const_texture = Texture::ConstantTexture { value };
+        self.textures.push(const_texture);
+
+        const_texture_id
+    }
+
+    fn add_material(
+        &mut self,
+        material: Material
+    ) -> MaterialIndex {
+        let material_id = self.materials.len() as u32;
+        self.materials.push(material);
+
+        material_id
     }
 
     fn add_shape_at_position(
-        mut self,
+        &mut self,
         shape: Shape,
-        albedo: Vec4,
+        material_id: MaterialIndex,
         position: Vec3,
-    ) -> Self {
-        let tex_id = TextureId(self.textures.len() as u32);
-        self.textures.push(Texture::ConstantTexture { value: albedo });
-
-        let material = Material::Diffuse { 
-            albedo: tex_id
-        };
-
-        let material_idx = self.materials.len() as u32;
-        self.materials.push(material);
-
+    ) {
         let basic_primitive_idx = BasicPrimitiveIndex(self.primitives.len() as u32);
         let basic_primitive = BasicPrimitive {
             shape,
-            material: material_idx,
+            material: material_id,
             area_light: None,
         };
 
@@ -454,7 +465,15 @@ impl SceneBuilder {
         self.primitives.push(transformed.into());
 
         self.primitive_idxs.push(transform_primitive_idx.into());
-        self
+    }
+
+    fn add_point_light(
+        &mut self,
+        position: Vec3,
+        intensity: Vec3
+    ) {
+        let point_light = Light::PointLight { position, intensity };
+        self.lights.push(point_light);
     }
 
     fn build(mut self) -> Scene {
@@ -478,35 +497,56 @@ impl SceneBuilder {
 }
 
 pub mod test_scenes {
-    use crate::{geometry::{Shape, Vec3, Vec4}, scene::Scene};
+    use crate::{geometry::{Shape, Vec3, Vec4}, materials::Material, scene::Scene};
 
     use super::SceneBuilder;
 
     // super simple test scene with one sphere, no light
     pub fn test_scene() -> Scene {
-        let scene_builder = SceneBuilder::new();
+        let mut scene_builder = SceneBuilder::new();
         
         let sphere = Shape::Sphere { 
             center: Vec3::zero(), 
             radius: 1.0
         };
 
-        
+        let white = scene_builder.add_constant_texture(
+            Vec4(1.0, 1.0, 1.0, 1.0)
+        );
 
-        let scene = scene_builder
-        .add_shape_at_position(
+        let white_diffuse = scene_builder.add_material(
+            Material::Diffuse { albedo: white }
+        );
+        
+        scene_builder.add_shape_at_position(
             sphere, 
-            Vec4(1.0, 1.0, 1.0, 1.0),
+            white_diffuse,
             Vec3(0.0, 0.0, -3.0)
-        )
-        .add_lookat_camera(
+        );
+        scene_builder.add_lookat_camera(
             Vec3(0.0, 0.0, 0.0), 
             Vec3(0.0, 0.0, -3.0), 
             400, 
             400
-        )
-        .build();
+        );
+        
+        let scene = scene_builder.build();
 
         scene
+    }
+
+    // template for cornell box, returns a SceneBuilder so other functions can add on top
+    pub fn cornell_box() -> SceneBuilder {
+        todo!()
+    }
+
+    // single dielectric sphere (ior = 1.5) in cornell box
+    pub fn dielectric_scene() -> Scene {
+        todo!()
+    }
+
+    // single metal sphere (ior = 2.0 + 2.0i) in cornell box
+    pub fn metal_scene() -> Scene {
+        todo!()
     }
 }
