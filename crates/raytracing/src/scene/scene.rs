@@ -407,13 +407,15 @@ impl SceneBuilder {
         &mut self,
         camera_position: Vec3,
         target: Vec3,
-        yfov: f32,
+        up: Vec3,
+        yfov: f32, // radians
         raster_width: usize,
         raster_height: usize,
     ) {
         let camera = Camera::lookat_camera(
             camera_position, 
             target, 
+            up,
             yfov,
             raster_width, 
             raster_height
@@ -527,8 +529,6 @@ pub mod test_scenes {
         let ca = -ac;
         let y = Vec3::cross(cd, ca).unit();
         
-        dbg!(normal);
-        dbg!(x);
         assert!((x - normal).near_zero(), "points not in plane defined by normal");
         assert!((y - normal).near_zero(), "points not in plane defined by normal");
 
@@ -564,7 +564,8 @@ pub mod test_scenes {
         scene_builder.add_lookat_camera(
             Vec3(0.0, 0.0, 0.0), 
             Vec3(0.0, 0.0, -3.0),
-            45.0,
+            Vec3(0.0, 1.0, 0.0),
+        (45.0_f32).to_radians(),
             400, 
             400
         );
@@ -579,71 +580,71 @@ pub mod test_scenes {
     fn cornell_box() -> SceneBuilder {
         let mut scene_builder = SceneBuilder::new();
 
-        // Dimensions: width=2, height=2, depth=1.5, y-up
+        // Dimensions: width=2, height=1.5, depth=2.0, y-up
         let w = 2.0;
-        let h = 2.0;
-        let d = 1.5;
+        let h = 1.5;
+        let d = 2.0;
 
         // Box corners
-        let left   = -w / 2.0;
-        let right  =  w / 2.0;
+        let left   = w / 2.0;
+        let right  =  -w / 2.0;
         let bottom = 0.0;
         let top    = h;
         let back   = -d / 2.0;
         let front  =  d / 2.0;
 
         // Plane normals
-        let up    = Vec3(0.0, 1.0, 0.0);
-        let down  = Vec3(0.0, -1.0, 0.0);
-        let leftn = Vec3(1.0, 0.0, 0.0);
-        let rightn= Vec3(-1.0, 0.0, 0.0);
-        let backn = Vec3(0.0, 0.0, 1.0);
+        let up    = Vec3(0.0, 0.0, 1.0);
+        let down  = Vec3(0.0, 0.0, -1.0);
+        let leftn = Vec3(-1.0, 0.0, 0.0);
+        let rightn= Vec3(1.0, 0.0, 0.0);
+        let backn = Vec3(0.0, 1.0, 0.0);
 
         // Floor
         let floor = make_plane(
-            Vec3(right, bottom, front),
-            Vec3(right, bottom, back),
-            Vec3(left, bottom, back),
-            Vec3(left, bottom, front),
+            Vec3(right, front, bottom),
+            Vec3(right, back, bottom),
+            Vec3(left, back, bottom),
+            Vec3(left, front, bottom),
             up
         );
         // Ceiling
         let ceiling = make_plane(
-            Vec3(left, top, front),
-            Vec3(left, top, back),
-            Vec3(right, top, back),
-            Vec3(right, top, front),
+            Vec3(left, front, top),
+            Vec3(left, back, top),
+            Vec3(right, back, top),
+            Vec3(right, front, top),
             down
         );
         // Left wall
         let left_wall = make_plane(
-            Vec3(left, bottom, back),
-            Vec3(left, top, back),
-            Vec3(left, top, front),
-            Vec3(left, bottom, front),
+            Vec3(left, front, bottom),
+            Vec3(left, back, bottom),
+            Vec3(left, back, top),
+            Vec3(left, front, top),
             leftn
         );
         // Right wall
         let right_wall = make_plane(
-            Vec3(right, bottom, front),
-            Vec3(right, top, front),
-            Vec3(right, top, back),
-            Vec3(right, bottom, back),
+            Vec3(right, front, top),
+            Vec3(right, back, top),
+            Vec3(right, back, bottom),
+            Vec3(right, front, bottom),
             rightn
         );
         // Back wall
         let back_wall = make_plane(
-            Vec3(right, bottom, back),
-            Vec3(right, top, back),
-            Vec3(left, top, back),
-            Vec3(left, bottom, back),
+            Vec3(right, back, top),
+            Vec3(left, back, top),
+            Vec3(left, back, bottom),
+            Vec3(right, back, bottom),
             backn
         );
 
         // Add planes to scene builder with colored walls
-        let white = scene_builder.add_constant_texture(Vec4(1.0, 1.0, 1.0, 1.0));
-        let red   = scene_builder.add_constant_texture(Vec4(1.0, 0.0, 0.0, 1.0));
-        let blue  = scene_builder.add_constant_texture(Vec4(0.0, 0.0, 1.0, 1.0));
+        let white = scene_builder.add_constant_texture(Vec4(0.6, 0.6, 0.6, 1.0));
+        let red   = scene_builder.add_constant_texture(Vec4(0.6, 0.2, 0.2, 1.0));
+        let blue  = scene_builder.add_constant_texture(Vec4(0.2, 0.2, 0.6, 1.0));
 
         let white_diffuse = scene_builder.add_material(Material::Diffuse { albedo: white });
         let red_diffuse   = scene_builder.add_material(Material::Diffuse { albedo: red });
@@ -657,16 +658,17 @@ pub mod test_scenes {
         
         // Camera looking into the box from the front
         scene_builder.add_lookat_camera(
-            Vec3(0.0, h / 2.0, front + 0.5),
-            Vec3(0.0, h / 2.0, 0.0),
-            35.0,
-            600,
-            400,
+            Vec3(0.0, front + 3.4, 0.4),
+            Vec3(0.0, 0.0, h / 2.0),
+            Vec3(0.0, 0.0, 1.0),
+            (37.8_f32).to_radians(),
+            500,
+            500,
         );
 
         // Add a point light near the top center
         scene_builder.add_point_light(
-            Vec3(0.0, top - 0.1, 0.0), // slightly below the ceiling, centered
+            Vec3(0.0, 0.0, top - 0.1), // slightly below the ceiling, centered
             Vec3(1000.0, 1000.0, 1000.0),    // bright white light
         );
 

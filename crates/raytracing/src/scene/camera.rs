@@ -164,7 +164,8 @@ impl Camera {
         camera_position: Vec3, 
         target: Vec3,
 
-        yfov: f32,
+        up: Vec3,
+        yfov: f32, // radians
         raster_width: usize,
         raster_height: usize,
 
@@ -181,7 +182,7 @@ impl Camera {
             None
         );
 
-        let camera_to_world = Transform::look_at(camera_position, target, Vec3(0.0, 1.0, 0.0));
+        let camera_to_world = Transform::look_at(camera_position, target, up);
         let world_to_camera = camera_to_world.invert();
 
         Camera { 

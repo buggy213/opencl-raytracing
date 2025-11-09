@@ -108,16 +108,16 @@ impl Transform {
         let a33 = view_direction_world.z();
 
         // x from (y cross z)
-        let left = Vec3::cross(up, view_direction_world).unit();
-        let a11 = left.x();
-        let a21 = left.y();
-        let a31 = left.z();
+        let right = Vec3::cross(view_direction_world, up).unit();
+        let a11 = right.x();
+        let a21 = right.y();
+        let a31 = right.z();
 
         // y from (z cross x)
-        let up = Vec3::cross(view_direction_world, left);
-        let a12 = up.x();
-        let a22 = up.y();
-        let a32 = up.z();
+        let down = Vec3::cross(view_direction_world, right);
+        let a12 = down.x();
+        let a22 = down.y();
+        let a32: f32 = down.z();
         
         let camera_to_world = Matrix4x4::create(
             a11, a12, a13, a14, 

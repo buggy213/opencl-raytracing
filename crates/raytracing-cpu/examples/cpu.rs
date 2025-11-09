@@ -25,6 +25,7 @@ fn save_png(radiance: &[Vec3], scene: &Scene, output_path: &Path) {
     let mut encoder = png::Encoder::new(file, width as u32, height as u32);
     encoder.set_color(png::ColorType::Rgb);
     encoder.set_depth(png::BitDepth::Eight);
+    encoder.set_source_gamma(png::ScaledFloat::new(1.0));
 
     let mut writer = encoder
         .write_header()
@@ -44,7 +45,6 @@ fn normals_to_rgb(normals: &mut [Vec3]) {
     for normal in normals {
         *normal += Vec3(1.0, 1.0, 1.0);
         *normal /= 2.0;
-        *normal *= 1000.0;
     }
 }
 
@@ -70,7 +70,7 @@ fn main() {
     };
 
     let raytracer_settings = RaytracerSettings {
-        max_ray_depth: 2,
+        max_ray_depth: 1,
         light_sample_count: cli_args.light_samples,
         samples_per_pixel: cli_args.spp,
         accumulate_bounces: true,
