@@ -55,6 +55,8 @@ impl Matrix4x4 {
     }
 
     pub fn make_w2o(normal: Vec3) -> Self {
+        // TODO: use tangent vector if available
+        
         // avoid degenerate case in gram-schmidt
         let x; 
         if (normal - Vec3(1.0, 0.0, 0.0)).near_zero() || (normal - Vec3(-1.0, 0.0, 0.0)).near_zero() {

@@ -15,6 +15,7 @@ pub(crate) struct HitInfo {
     pub(crate) uv: Vec2,
     pub(crate) point: Vec3,
     pub(crate) normal: Vec3,
+    // TODO: add tangent vector
 
     pub(crate) material_idx: u32,
     pub(crate) light_idx: Option<u32>,

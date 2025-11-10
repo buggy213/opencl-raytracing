@@ -41,6 +41,8 @@ pub(crate) struct IntersectResult {
     pub(crate) uv: Vec2,
     pub(crate) point: Vec3,
     pub(crate) normal: Vec3,
+    
+    // TODO: add tangent vector
 }
 
 pub(crate) fn intersect_shape(
