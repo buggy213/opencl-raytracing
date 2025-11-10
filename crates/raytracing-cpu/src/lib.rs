@@ -137,8 +137,10 @@ fn ray_radiance(
         }
 
         // indirect illumination
+        // wi and wo can be facing opposite the normal (e.g. reflection inside a glass sphere)
+        // cos_theta terms need to use absolute value to account for this
         let bsdf_sample = bsdf.sample_bsdf(wo);
-        let cos_theta = bsdf_sample.wi.z();
+        let cos_theta = bsdf_sample.wi.z().abs();
         path_weight *= bsdf_sample.bsdf * cos_theta / bsdf_sample.pdf;
 
         let world_dir = o2w.apply_vector(bsdf_sample.wi);

@@ -677,8 +677,17 @@ pub mod test_scenes {
 
     // single dielectric sphere (ior = 1.5) in cornell box
     pub fn dielectric_scene() -> Scene {
-        let cornell_box = cornell_box().build();
-        cornell_box
+        let mut cornell_box = cornell_box();
+        
+        let ior_texture = cornell_box.add_constant_texture(Vec4(1.5, 0.0, 0.0, 0.0));
+        let dielectric_material = cornell_box.add_material(Material::SmoothDielectric { eta: ior_texture });
+        cornell_box.add_shape_at_position(
+            Shape::Sphere { center: Vec3::zero(), radius: 0.5 }, 
+            dielectric_material, 
+            Vec3(0.0, 0.0, 0.75)
+        );
+
+        cornell_box.build()
     }
 
     // single metal sphere (ior = 2.0 + 2.0i) in cornell box

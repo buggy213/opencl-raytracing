@@ -13,6 +13,8 @@ struct CommandLineArguments {
     scene: Option<String>,
     #[arg(short = 't', long, default_value_t = 1)]
     num_threads: u32,
+    #[arg(short = 'd', long, default_value_t = 1)]
+    ray_depth: u32,
     #[arg(short, long, default_value_t = 1)]
     spp: u32,
     #[arg(short, long, default_value_t = 1)]
@@ -72,7 +74,7 @@ fn main() {
     };
 
     let raytracer_settings = RaytracerSettings {
-        max_ray_depth: 1,
+        max_ray_depth: cli_args.ray_depth,
         light_sample_count: cli_args.light_samples,
         samples_per_pixel: cli_args.spp,
         accumulate_bounces: true,

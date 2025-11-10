@@ -69,7 +69,8 @@ impl CpuBsdf {
                 let sample = sample::sample_uniform();
                 let bsdf_sample = if sample < R {
                     let reflection_dir = Vec3::reflect(wo, normal);
-                    let f = R / wo.z();
+                    let cos_theta = reflection_dir.z().abs();
+                    let f = R / cos_theta;
                     let pdf = R;
                     
                     BsdfSample {
@@ -95,9 +96,17 @@ impl CpuBsdf {
                     // refraction compresses / expands directions, and since radiance is 
                     // expressed per solid angle, it needs to account for this, otherwise
                     // the transmission part of BSDF is not energy-preserving when you integrate
-                    let f = (T / wo.z()) / (eta * eta);
+                    
+                    // eta might be inverted if interaction is behind surface
+                    let eta = if wo.z() < 0.0 {
+                        1.0 / *eta
+                    } else {
+                        *eta
+                    };
+                    let cos_theta = refract_dir.z().abs();
+                    let f = (T / cos_theta) / (eta * eta);
 
-                    let pdf = 1.0;
+                    let pdf = T;
                     BsdfSample {
                         wi: refract_dir,
                         bsdf: Vec3(f, f, f),
@@ -203,7 +212,7 @@ fn fresnel_dielectric(mut cos_theta_i: f32, mut eta: f32) -> f32 {
 
     let cos_theta_t = (1.0 - sin_theta_2_t).sqrt();
 
-    let r_parl = (eta * cos_theta_i - cos_theta_t) / (eta * cos_theta_i - cos_theta_t);
+    let r_parl = (eta * cos_theta_i - cos_theta_t) / (eta * cos_theta_i + cos_theta_t);
     let r_perp = (cos_theta_i - eta * cos_theta_t) / (cos_theta_i + eta * cos_theta_t);
 
     (r_parl * r_parl + r_perp * r_perp) / 2.0
