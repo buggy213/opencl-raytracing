@@ -40,6 +40,8 @@ struct GuiState {
     light_samples: u32,
     accumulate_bounces: bool,
 
+    num_threads: u32,
+
     debug_normals: bool,
 }
 
@@ -79,9 +81,9 @@ struct RaytracerResult {
 }
 
 fn raytrace_scene(path: &Path, settings: RaytracerSettings) -> RaytracerResult {
-    let mut scene = raytracing::scene::Scene::from_gltf_file(path, None).expect("failed to load scene");
+    let scene = raytracing::scene::Scene::from_gltf_file(path).expect("failed to load scene");
     let output = raytracing_cpu::render(
-        &mut scene, 
+        &scene, 
         settings
     );
     
@@ -175,6 +177,9 @@ impl RenderView for RenderOutputView {
 
                 combo.end();
             }
+
+            ui.input_scalar("# threads", &mut self.gui_state.num_threads).build();
+            self.gui_state.num_threads = u32::max(self.gui_state.num_threads, 1);
 
             ui.input_scalar("max ray depth", &mut self.gui_state.max_ray_depth).build();
 
@@ -354,6 +359,8 @@ impl RenderOutputView {
                 spp: 1,
                 light_samples: 1,
                 accumulate_bounces: true,
+
+                num_threads: 1,
 
                 debug_normals: false
             },
@@ -619,6 +626,8 @@ impl RenderOutputView {
                 samples_per_pixel: self.gui_state.spp,
                 light_sample_count: self.gui_state.light_samples,
                 accumulate_bounces: self.gui_state.accumulate_bounces,
+
+                num_threads: self.gui_state.num_threads,
 
                 debug_normals: self.gui_state.debug_normals,
             };

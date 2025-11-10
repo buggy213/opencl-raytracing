@@ -11,6 +11,8 @@ struct CommandLineArguments {
     input: Option<PathBuf>,
     #[arg(long)]
     scene: Option<String>,
+    #[arg(short = 't', long, default_value_t = 1)]
+    num_threads: u32,
     #[arg(short, long, default_value_t = 1)]
     spp: u32,
     #[arg(short, long, default_value_t = 1)]
@@ -53,7 +55,7 @@ fn main() {
 
     let cli_args = CommandLineArguments::parse();
     let scene = if let Some(filename) = cli_args.input {
-        Scene::from_gltf_file(&filename, None)
+        Scene::from_gltf_file(&filename)
             .expect("failed to load scene")
     } else if let Some(name) = cli_args.scene {
         let scene_func = test_scenes::all_test_scenes()
@@ -65,7 +67,7 @@ fn main() {
         scene_func()
     } else {
         let default_scene = PathBuf::from("scenes/cbbunny.glb");
-        Scene::from_gltf_file(&default_scene, None)
+        Scene::from_gltf_file(&default_scene)
             .expect("failed to load scene")
     };
 
@@ -74,6 +76,8 @@ fn main() {
         light_sample_count: cli_args.light_samples,
         samples_per_pixel: cli_args.spp,
         accumulate_bounces: true,
+
+        num_threads: cli_args.num_threads,
 
         debug_normals: false,
     };

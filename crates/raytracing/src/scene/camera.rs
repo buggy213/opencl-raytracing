@@ -29,16 +29,8 @@ pub struct Camera {
 
 const DEFAULT_FAR_CLIP: f32 = 1000.0;
 
-#[derive(Clone, Copy)]
-pub struct RenderTile {
-    pub x0: usize,
-    pub y0: usize,
-    pub x1: usize,
-    pub y1: usize
-}
-
 impl Camera {
-    fn create_screen_to_raster_transform(width: usize, height: usize, screen_space_top_left: Vec3, screen_space_bottom_right: Vec3, render_tile: Option<RenderTile>) -> Transform {
+    fn create_screen_to_raster_transform(width: usize, height: usize, screen_space_top_left: Vec3, screen_space_bottom_right: Vec3) -> Transform {
         let screen_to_zero: Transform = Transform::translate(-screen_space_top_left); // ignore depth
         let scaling_x: f32 = (screen_space_bottom_right - screen_space_top_left).x();
         let scaling_y: f32 = (screen_space_bottom_right - screen_space_top_left).y();
@@ -46,20 +38,13 @@ impl Camera {
             screen_to_zero.compose(Transform::scale(Vec3(1.0 / scaling_x, 1.0 / scaling_y, 1.0)));
         let screen_to_raster: Transform = 
             screen_to_ndc.compose(Transform::scale(Vec3(width as f32, height as f32, 1.0)));
-        if let Some(RenderTile { x0, y0, .. }) = render_tile {
-            let screen_to_raster_tile: Transform = 
-                screen_to_raster
-                    .compose(Transform::translate(Vec3(-(x0 as f32), -(y0 as f32), 0.0)));
-            return screen_to_raster_tile;
-        }
-        else {
-            return screen_to_raster;
-        }
+        
+        screen_to_raster
     }
 
     // Creates transform from camera space to raster space through screen space
     // fov given in radians
-    fn create_perspective_transform(far_clip: f32, near_clip: f32, yfov: f32, width: usize, height: usize, render_tile: Option<RenderTile>) -> Transform {
+    fn create_perspective_transform(far_clip: f32, near_clip: f32, yfov: f32, width: usize, height: usize) -> Transform {
         let persp: Matrix4x4 = Matrix4x4::create(
             1.0, 0.0, 0.0, 0.0, 
             0.0, 1.0, 0.0, 0.0, 
@@ -78,7 +63,7 @@ impl Camera {
             else { Vec3(-(width as f32 / height as f32), -1.0, 0.0) };
         let screen_space_bottom_right: Vec3 = if wide { Vec3(1.0, height as f32 / width as f32, 0.0) } 
             else { Vec3(width as f32 / height as f32, 1.0, 0.0) };
-        let screen_to_raster = Self::create_screen_to_raster_transform(width, height, screen_space_top_left, screen_space_bottom_right, render_tile);
+        let screen_to_raster = Self::create_screen_to_raster_transform(width, height, screen_space_top_left, screen_space_bottom_right);
         return persp.compose(fov_scale).compose(screen_to_raster);
     }
     
@@ -88,18 +73,17 @@ impl Camera {
         width: usize, 
         height: usize, 
         screen_space_width: f32, 
-        screen_space_height: f32, 
-        render_tile: Option<RenderTile>
+        screen_space_height: f32,
     ) -> Transform {
         let translate: Transform = Transform::translate(Vec3(0.0, 0.0, -near_clip));
         let scale: Transform = Transform::scale(Vec3(1.0, 1.0, 1.0 / (far_clip - near_clip)));
         let screen_space_top_left: Vec3 = Vec3(-screen_space_width / 2.0, -screen_space_height / 2.0, 0.0);
         let screen_space_bottom_right: Vec3 = Vec3(screen_space_width / 2.0, screen_space_height / 2.0, 0.0);
-        let screen_to_raster: Transform = Self::create_screen_to_raster_transform(width, height, screen_space_top_left, screen_space_bottom_right, render_tile);
+        let screen_to_raster: Transform = Self::create_screen_to_raster_transform(width, height, screen_space_top_left, screen_space_bottom_right);
         return translate.compose(scale).compose(screen_to_raster);
     }
 
-    pub fn from_gltf_camera_node(camera_node: &gltf::Node, raster_height: usize, render_tile: Option<RenderTile>) -> Camera {
+    pub fn from_gltf_camera_node(camera_node: &gltf::Node, raster_height: usize) -> Camera {
         let gltf_camera: gltf::Camera = camera_node.camera().unwrap();
         let (camera_position, camera_rotation, _) = camera_node.transform().decomposed();
 
@@ -118,7 +102,6 @@ impl Camera {
                     perspective.yfov(), 
                     width, 
                     raster_height,
-                    render_tile
                 );
                 let world_to_raster: Transform = world_to_camera.compose(camera_to_raster);
                 camera_type = CameraType::Perspective { yfov: perspective.yfov() };
@@ -136,7 +119,6 @@ impl Camera {
                     raster_height, 
                     screen_space_width, // idk why i need to flip this but i do
                     -screen_space_height,
-                    render_tile
                 );
                 let world_to_raster: Transform = world_to_camera.compose(camera_to_raster);
                 camera_type = CameraType::Orthographic { 
@@ -178,8 +160,7 @@ impl Camera {
             near_clip, 
             yfov, 
             raster_width, 
-            raster_height, 
-            None
+            raster_height,
         );
 
         let camera_to_world = Transform::look_at(camera_position, target, up);

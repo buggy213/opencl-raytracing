@@ -9,4 +9,3 @@ pub use primitive::{
     PrimitiveIndex, BasicPrimitiveIndex, TransformPrimitiveIndex, AggregatePrimitiveIndex
 };
 pub use camera::Camera;
-pub use camera::RenderTile;

@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use accel::{traverse_bvh};
 use lights::{light_radiance, occluded, sample_light};
 use materials::CpuMaterial;
@@ -181,14 +183,123 @@ pub struct RaytracerSettings {
     pub samples_per_pixel: u32,
     pub accumulate_bounces: bool,
 
+    pub num_threads: u32,
+
     pub debug_normals: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RenderTile {
+    x0: usize,
+    x1: usize,
+    y0: usize,
+    y1: usize
+}
+
+impl RenderTile {
+    const fn width(&self) -> usize {
+        self.x1 - self.x0
+    }
+
+    const fn height(&self) -> usize {
+        self.y1 - self.y0
+    }
+
+    const fn size(&self) -> usize {
+        self.width() * self.height()
+    }
+}
+
+fn create_render_jobs(scene: &Scene) -> Vec<RenderTile> {
+    const TILE_SIZE: usize = 64;
+    let width = scene.camera.raster_width;
+    let height = scene.camera.raster_height;
+
+    let tiles_x = width.div_ceil(TILE_SIZE);
+    let tiles_y = height.div_ceil(TILE_SIZE);
+    
+    let mut render_jobs = Vec::with_capacity(tiles_x * tiles_y);
+    for j in 0..tiles_y {
+        for i in 0..tiles_x {
+            let render_job = RenderTile {
+                x0: i * TILE_SIZE,
+                x1: usize::min(width, (i+1) * TILE_SIZE),
+                y0: j * TILE_SIZE,
+                y1: usize::min(height, (j+1) * TILE_SIZE),
+            };
+
+            render_jobs.push(render_job)
+        }
+    }
+
+    render_jobs
+}
+
+fn render_tile(
+    context: &CpuRaytracingContext,
+    traversal_cache: &mut TraversalCache,
+    tile: RenderTile, 
+    raytracer_settings: &RaytracerSettings
+) -> Vec<Vec3> {
+    let mut tile_radiance_buffer = Vec::with_capacity(tile.size());
+    let tile_width = tile.width();
+    let tile_height = tile.height();
+
+    for j in 0..tile_height {
+        for i in 0..tile_width {
+            let mut radiance = Vec3(0.0, 0.0, 0.0);
+            
+            if raytracer_settings.debug_normals {
+                let ray = generate_ray(&context.scene.camera, (tile.x0 + i) as u32, (tile.y0 + j) as u32);
+                radiance = first_hit_normals(
+                    ray, 
+                    context,
+                    traversal_cache,
+                );
+            }
+            else {
+                for _ in 0..raytracer_settings.samples_per_pixel {
+                    let ray = generate_ray(&context.scene.camera, (tile.x0 + i) as u32, (tile.y0 + j) as u32);
+
+                    radiance += ray_radiance(
+                        ray, 
+                        context,
+                        traversal_cache, 
+                        raytracer_settings
+                    );
+                }
+                
+                radiance /= raytracer_settings.samples_per_pixel as f32; 
+            }
+            
+            tile_radiance_buffer.push(radiance);
+        }
+    }
+
+    tile_radiance_buffer
+}
+
+fn merge_tile(
+    radiance_buffer_width: usize,
+    radiance_buffer: &mut [Vec3], 
+    tile: RenderTile,
+    tile_radiance: Vec<Vec3>
+) {
+    for j in 0..tile.height() {
+        for i in 0..tile.width() {
+            let tile_idx = i + j * tile.width();
+            let global_idx = (tile.x0 + i) + (tile.y0 + j) * radiance_buffer_width;
+            if radiance_buffer[global_idx] != Vec3::zero() {
+                panic!("overwriting stuff");
+            }
+            radiance_buffer[global_idx] = tile_radiance[tile_idx];
+        }
+    }
 }
 
 pub fn render(scene: &Scene, raytracer_settings: RaytracerSettings) -> Vec<Vec3> {
     let width = scene.camera.raster_width;
     let height = scene.camera.raster_height;
-
-    let camera = &scene.camera;
 
     // construct BVH using embree
     let cpu_acceleration_structures = scene::prepare_cpu_acceleration_structures(scene);
@@ -197,41 +308,102 @@ pub fn render(scene: &Scene, raytracer_settings: RaytracerSettings) -> Vec<Vec3>
         &cpu_acceleration_structures
     );
 
-    let mut traversal_cache = TraversalCache::new(&cpu_raytracing_context);
-    
-    let mut radiance_buffer: Vec<Vec3> = Vec::with_capacity(width * height);
+    let single_threaded = if raytracer_settings.debug_normals {
+        // debug normals is very cheap, so just keep it single threaded
+        true
+    } else {
+        raytracer_settings.num_threads == 1
+    };
 
-    // enter main tracing loop
-    for j in 0..height {
-        for i in 0..width {
-            let mut radiance = Vec3(0.0, 0.0, 0.0);
-            
-            if raytracer_settings.debug_normals {
-                let ray = generate_ray(camera, i as u32, j as u32);
-                radiance = first_hit_normals(
-                    ray, 
-                    &cpu_raytracing_context,
-                    &mut traversal_cache,
+    if single_threaded {
+        let mut traversal_cache = TraversalCache::new(&cpu_raytracing_context);
+        let full_screen = RenderTile {
+            x0: 0,
+            x1: width,
+            y0: 0,
+            y1: height,
+        };
+
+        render_tile(
+            &cpu_raytracing_context,
+            &mut traversal_cache,
+            full_screen,
+            &raytracer_settings
+        )
+    }
+    else {
+        // shared work queue that multiple threads pop from
+        // and mpsc channel that they send results back on
+        // main thread is responsible for aggregating results
+        let render_jobs = create_render_jobs(scene);
+
+        let mut render_job_count = render_jobs.len();
+        let mut radiance_buffer = vec![Vec3::zero(); width * height];
+        let work_queue = Arc::new(
+            Mutex::new(render_jobs)
+        );
+
+        let (result_channel_tx, result_channel_rx) = 
+            std::sync::mpsc::channel::<(RenderTile, Vec<Vec3>)>();
+
+        fn render_thread(
+            context: &CpuRaytracingContext,
+            work_queue: Arc<Mutex<Vec<RenderTile>>>,
+            result_channel_tx: std::sync::mpsc::Sender<(RenderTile, Vec<Vec3>)>,
+            raytracer_settings: &RaytracerSettings
+        ) {
+            let mut traversal_cache = TraversalCache::new(context);
+
+            loop {
+                let mut work_queue_guard = work_queue.lock().expect("lock poisoned");
+                let job = work_queue_guard.pop();
+                drop(work_queue_guard);
+
+                let Some(tile) = job else {
+                    break
+                };
+
+                let tile_radiance = render_tile(
+                    context, 
+                    &mut traversal_cache, 
+                    tile, 
+                    raytracer_settings
                 );
-            }
-            else {
-                for _ in 0..raytracer_settings.samples_per_pixel {
-                    let ray = generate_ray(camera, i as u32, j as u32);
 
-                    radiance += ray_radiance(
-                        ray, 
-                        &cpu_raytracing_context,
-                        &mut traversal_cache, 
+                result_channel_tx.send((tile, tile_radiance))
+                    .expect("no receiver (is main thread gone?)");
+            }
+        }
+        
+        std::thread::scope(|scope| {
+            for _ in 0..raytracer_settings.num_threads {
+                let thread_work_queue_handle = Arc::clone(&work_queue);
+                let thread_result_channel_tx = result_channel_tx.clone();
+                scope.spawn(|| {
+                    render_thread(
+                        &cpu_raytracing_context, 
+                        thread_work_queue_handle, 
+                        thread_result_channel_tx, 
                         &raytracer_settings
                     );
-                }
-                
-                radiance /= raytracer_settings.samples_per_pixel as f32; 
+                });
             }
-            
-            radiance_buffer.push(radiance);
-        }
-    }
 
-    radiance_buffer
+            while render_job_count > 0 {
+                let (tile, tile_radiance) = result_channel_rx.recv()
+                    .expect("no sender (are workers gone?)");
+
+                merge_tile(
+                    width, 
+                    &mut radiance_buffer, 
+                    tile, 
+                    tile_radiance
+                );
+
+                render_job_count -= 1;
+            }
+        });
+
+        radiance_buffer
+    }
 }

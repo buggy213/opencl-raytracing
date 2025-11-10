@@ -4,7 +4,7 @@ use tracing::warn;
 
 use crate::{geometry::{Matrix4x4, Mesh, Shape, Transform, Vec3, Vec4}, lights::Light, materials::{FilterMode, Image, ImageId, Material, Texture, TextureId, TextureSampler, WrapMode}, scene::primitive::{AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex, MaterialIndex, Primitive, PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex}};
 
-use super::camera::{Camera, RenderTile};
+use super::camera::Camera;
 
 #[derive(Debug)]
 pub struct Scene {
@@ -165,7 +165,7 @@ impl Scene {
 }
 
 impl Scene {
-    pub fn from_gltf_file(filepath: &Path, render_tile: Option<RenderTile>) -> anyhow::Result<Scene> {
+    pub fn from_gltf_file(filepath: &Path) -> anyhow::Result<Scene> {
         let (document, buffers, image_data) = gltf::import(filepath)?;
         let scene_gltf = document.default_scene().unwrap();
         let mut camera: Option<Camera> = None;  
@@ -284,7 +284,7 @@ impl Scene {
         
         for node in scene_gltf.nodes() {
             if node.camera().is_some() {
-                camera = Some(Camera::from_gltf_camera_node(&node, height, render_tile));
+                camera = Some(Camera::from_gltf_camera_node(&node, height));
             }
 
             if node.mesh().is_some() {
