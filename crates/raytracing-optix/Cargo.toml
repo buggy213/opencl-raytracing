@@ -1,0 +1,10 @@
+[package]
+name = "raytracing-optix"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+raytracing = { workspace = true }
+
+[build-dependencies]
+cmake = "0.1"
