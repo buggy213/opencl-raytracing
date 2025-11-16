@@ -22,7 +22,8 @@ pub enum CpuBsdf {
         eta: f32 
     },
     SmoothConductor { 
-        eta: Complex
+        eta: Vec3,
+        kappa: Vec3,
     },
 
     RoughConductor {
@@ -136,15 +137,19 @@ impl CpuBsdf {
                 bsdf_sample
             },
 
-            CpuBsdf::SmoothConductor { eta } => {
+            CpuBsdf::SmoothConductor { eta, kappa } => {
                 let normal = Vec3(0.0, 0.0, 1.0);
                 let reflection_dir = Vec3::reflect(wo, normal);
-                let f = fresnel_complex(wo.z(), *eta) / wo.z();
+                let f_r = fresnel_complex(wo.z(), Complex(eta.0, kappa.0)) / wo.z();
+                let f_g = fresnel_complex(wo.z(), Complex(eta.1, kappa.1)) / wo.z();
+                let f_b = fresnel_complex(wo.z(), Complex(eta.2, kappa.2)) / wo.z();
+                let f = Vec3(f_r, f_g, f_b);
+                
                 // pdf is also a delta, to cancel with the implied delta function in the BSDF
                 let pdf = 1.0;
                 BsdfSample {
                     wi: reflection_dir,
-                    bsdf: Vec3(f, f, f), // TODO: wavelength-dependence
+                    bsdf: f, // TODO: wavelength-dependence
                     pdf 
                 }
             },
@@ -194,11 +199,13 @@ impl CpuMaterial for Material {
 
                 CpuBsdf::SmoothDielectric { eta }
             },
-            Material::SmoothConductor { eta } => {
+            Material::SmoothConductor { eta, kappa } => {
                 let eta = textures.sample(*eta, uv.u(), uv.v());
-                let eta = Complex(eta.0, eta.1);
+                let kappa = textures.sample(*kappa, uv.u(), uv.v());
+                let eta = Vec3(eta.r(), eta.g(), eta.b());
+                let kappa = Vec3(kappa.r(), kappa.g(), kappa.b());
 
-                CpuBsdf::SmoothConductor { eta }
+                CpuBsdf::SmoothConductor { eta, kappa }
             },
 
             Material::RoughConductor { eta, roughness } => {

@@ -690,9 +690,23 @@ pub mod test_scenes {
         cornell_box.build()
     }
 
-    // single metal sphere (ior = 2.0 + 2.0i) in cornell box
+    // single "gold" sphere in cornell box
+    // ior at red wavelengths is 0.13 + 4.10i
+    // ior at green wavelengths is 0.43 + 2.46i
+    // ior at blue wavelengths is 1.38 + 1.91i
     pub fn metal_scene() -> Scene {
-        todo!()
+        let mut cornell_box = cornell_box();
+        
+        let ior_texture = cornell_box.add_constant_texture(Vec4(0.13, 0.43, 1.38, 0.0));
+        let kappa_texture = cornell_box.add_constant_texture(Vec4(4.10, 2.46, 1.91, 0.0));
+        let metal_material = cornell_box.add_material(Material::SmoothConductor { eta: ior_texture, kappa: kappa_texture });
+        cornell_box.add_shape_at_position(
+            Shape::Sphere { center: Vec3::zero(), radius: 0.5 }, 
+            metal_material, 
+            Vec3(0.0, 0.0, 0.75)
+        );
+
+        cornell_box.build()
     }
 
     pub struct TestScene {

@@ -13,8 +13,10 @@ pub enum Material {
         eta: TextureId
     },
     SmoothConductor {
-        // R is the real component, G is the imaginary component
-        eta: TextureId
+        // real component (alpha ignored)
+        eta: TextureId,
+        // imaginary component (alpha ignored)
+        kappa: TextureId,
     },
 
     // 
