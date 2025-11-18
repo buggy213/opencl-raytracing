@@ -712,10 +712,11 @@ pub mod test_scenes {
     pub fn rough_metal_scene() -> Scene {
         let mut cornell_box = cornell_box();
         
-        let ior_texture = cornell_box.add_constant_texture(Vec4(1.5, 0.0, 0.0, 0.0));
+        let ior_texture = cornell_box.add_constant_texture(Vec4(0.13, 0.43, 1.38, 0.0));
+        let kappa_texture = cornell_box.add_constant_texture(Vec4(4.10, 2.46, 1.91, 0.0));
         let roughness_texture = cornell_box.add_constant_texture(Vec4(0.5, 0.5, 0.0, 0.0));
         let rough_conductor_material = cornell_box.add_material(
-            Material::RoughConductor { eta: ior_texture, roughness: roughness_texture }
+            Material::RoughConductor { eta: ior_texture, kappa: kappa_texture, roughness: roughness_texture }
         );
         
         cornell_box.add_shape_at_position(

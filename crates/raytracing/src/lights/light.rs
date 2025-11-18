@@ -15,6 +15,15 @@ pub enum Light {
 }
 
 impl Light {
+    pub fn is_delta_light(&self) -> bool {
+        match self {
+            Light::PointLight { .. } => true,
+            Light::DiffuseAreaLight { .. } => false,
+        }
+    }
+}
+
+impl Light {
     pub fn from_gltf_punctual_light(light: &gltf::Node) -> Light {
         let light_properties = light.light().unwrap();
         assert!(matches!(light_properties.kind(), gltf::khr_lights_punctual::Kind::Point)); // only point lights for now...

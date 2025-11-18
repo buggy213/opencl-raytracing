@@ -27,7 +27,8 @@ pub enum CpuBsdf {
     },
 
     RoughConductor {
-        eta: Complex,
+        eta: Vec3,
+        kappa: Vec3,
         alpha_x: f32,
         alpha_y: f32,
     }
@@ -49,6 +50,7 @@ impl CpuBsdf {
             CpuBsdf::SmoothConductor { .. } => Vec3::zero(),
             CpuBsdf::RoughConductor { 
                 eta, 
+                kappa,
                 alpha_x, 
                 alpha_y 
             } => {
@@ -56,6 +58,7 @@ impl CpuBsdf {
                     wo,
                     wi,
                     *eta,
+                    *kappa,
                     *alpha_x,
                     *alpha_y
                 )
@@ -156,12 +159,14 @@ impl CpuBsdf {
 
             CpuBsdf::RoughConductor { 
                 eta, 
+                kappa,
                 alpha_x, 
                 alpha_y 
             } => {
                 microfacet::torrance_sparrow_refl_sample(
                     wo, 
                     *eta, 
+                    *kappa,
                     *alpha_x, 
                     *alpha_y
                 )
@@ -208,15 +213,18 @@ impl CpuMaterial for Material {
                 CpuBsdf::SmoothConductor { eta, kappa }
             },
 
-            Material::RoughConductor { eta, roughness } => {
+            Material::RoughConductor { eta, kappa, roughness } => {
                 let eta = textures.sample(*eta, uv.u(), uv.v());
-                let eta = Complex(eta.0, eta.1);
+                let kappa = textures.sample(*kappa, uv.u(), uv.v());
+                let eta = Vec3(eta.0, eta.1, eta.2);
+                let kappa = Vec3(kappa.0, kappa.1, kappa.2);
 
                 let roughness = textures.sample(*roughness, uv.u(), uv.v());
                 let alpha_x = roughness.0.sqrt();
                 let alpha_y = roughness.1.sqrt();
                 CpuBsdf::RoughConductor { 
                     eta, 
+                    kappa,
                     alpha_x, 
                     alpha_y 
                 }
@@ -344,25 +352,27 @@ mod microfacet {
     // an approximation to the masking-shadowing function (shadowing is masking but in the outgoing direction)
     #[allow(non_snake_case, reason = "physics convention")]
     pub(super) fn G(wo: Vec3, wi: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
-        1.0 / (1.0 + lambda(wo, alpha_x, alpha_y) + lambda(wi, alpha_x, alpha_y)    )
+        1.0 / (1.0 + lambda(wo, alpha_x, alpha_y) + lambda(wi, alpha_x, alpha_y))
     }
 
     // PBRT 4ed 9.6.4
     // distribution of normals which are visible from some direction
     // (leads to improved sampling efficiency)
     pub(super) fn visible_distribution(w: Vec3, wm: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
-        let cos_theta = w.z();
+        let cos_theta = w.z().abs();
 
         (G1(w, alpha_x, alpha_y) / cos_theta) * 
         distribution(wm, alpha_x, alpha_y) * 
-        f32::max(0.0, Vec3::dot(w, wm))
+        Vec3::dot(w, wm).abs()
     }
 
     // PBRT 4ed 9.6.4
     // sample from visible normals distribution
     // figure 9.29 visually represents what this is doing
     pub(super) fn sample_wm(w: Vec3, alpha_x: f32, alpha_y: f32) -> Vec3 {
-        let wh = Vec3(alpha_x * w.x(), alpha_y * w.y(), w.z()).unit();
+        let mut wh = Vec3(alpha_x * w.x(), alpha_y * w.y(), w.z()).unit();
+        if wh.z() < 0.0 { wh = -wh; }
+
         let p = sample::sample_unit_disk();
         let t1 = if wh.z() < 0.9999 {
             Vec3::cross(Vec3(0.0, 0.0, 1.0), wh)
@@ -397,45 +407,46 @@ mod microfacet {
     // does *not* account for refraction
 
     // pdf
-    // TODO: must handle the case where wo, wi are both behind the surface as well 
     pub(super) fn torrance_sparrow_refl_pdf(wo: Vec3, wi: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
-        // see TODO
-        assert!(wo.z().is_sign_positive() && wi.z().is_sign_positive());
-        
-        let wm = (wo + wi).unit();
-        visible_distribution(wo, wm, alpha_x, alpha_y) / (4.0 * Vec3::dot(wo, wm))
+        // protect against grazing angle reflections
+        if (wo + wi) == Vec3::zero() { return 0.0; } 
+        let mut wm = (wo + wi).unit();
+        if wm.z() < 0.0 { wm = -wm; }
+
+        visible_distribution(wo, wm, alpha_x, alpha_y) / (4.0 * Vec3::dot(wo, wm).abs())
     }
 
     // more accurately a brdf
-    // TODO: must handle the case where wo, wi are both behind the surface as well 
-    // TODO: wavelength dependence?
     pub(super) fn torrance_sparrow_refl_bsdf(
         wo: Vec3, 
         wi: Vec3,
-        eta: Complex, 
+        eta: Vec3,
+        kappa: Vec3,
         alpha_x: f32, 
         alpha_y: f32, 
     ) -> Vec3 {
-        assert!(wo.z().is_sign_positive() && wi.z().is_sign_positive());
-
+        // protect against grazing angle reflections
+        if (wo + wi) == Vec3::zero() { return Vec3::zero(); }
         let wm = (wo + wi).unit();
         let cos_theta = Vec3::dot(wm, wi);
-        let fresnel = fresnel_complex(
-            cos_theta, 
-            eta
+        let fresnel = Vec3(
+            fresnel_complex(cos_theta.abs(), Complex(eta.0, kappa.0)),
+            fresnel_complex(cos_theta.abs(), Complex(eta.1, kappa.1)),
+            fresnel_complex(cos_theta.abs(), Complex(eta.2, kappa.2))
         );
 
         let brdf = distribution(wm, alpha_x, alpha_y)
         * fresnel
         * G(wo, wi, alpha_x, alpha_y)
         / (4.0 * wo.z() * wi.z());
-
-        Vec3(brdf, brdf, brdf)
+        
+        brdf
     }
 
     pub(super) fn torrance_sparrow_refl_sample(
         wo: Vec3,
-        eta: Complex,
+        eta: Vec3,
+        kappa: Vec3,
         alpha_x: f32,
         alpha_y: f32,
     ) -> BsdfSample {
@@ -458,6 +469,7 @@ mod microfacet {
             wo, 
             wi, 
             eta, 
+            kappa,
             alpha_x, 
             alpha_y
         );
@@ -470,7 +482,6 @@ mod microfacet {
     }
 
     // PBRT 4ed 9.7
-    // 
     pub(super) fn torrance_sparrow_pdf(
         wo: Vec3,
         wi: Vec3,
@@ -494,8 +505,13 @@ mod microfacet {
             wm
         };
 
+        // guard against grazing angles
+        if wi.z() == 0.0 || wo.z() == 0.0 || wm == Vec3::zero() {
+            return 0.0;
+        }
+
         // why is this correct? it "discards backfacing microfacets"
-        // seems a little trickier than this
+        // seems like it should be a little trickier than this
         if Vec3::dot(wm, wi) * wi.z() < 0.0 || Vec3::dot(wm, wo) * wo.z() < 0.0 {
             return 0.0;
         }
@@ -506,11 +522,9 @@ mod microfacet {
         let T = 1.0 - R;
 
         if reflect {
-            todo!("visible_distribution needs to support backfacing w, wm");
             R * visible_distribution(wo, wm, alpha_x, alpha_y) / (4.0 * Vec3::dot(wo, wm).abs())
         }
         else {
-            todo!("visible_distribution needs to support backfacing w, wm");
             let denom = (Vec3::dot(wi, wm) + Vec3::dot(wo, wm) / eta).powi(2);
             let dwm_dwi = Vec3::dot(wi, wm).abs() / denom;
             T * visible_distribution(wo, wm, alpha_x, alpha_y) * dwm_dwi
@@ -518,9 +532,54 @@ mod microfacet {
     }
 
     fn torrance_sparrow_bsdf(
-
+        wo: Vec3,
+        wi: Vec3,
+        eta: f32,
+        alpha_x: f32,
+        alpha_y: f32
     ) -> Vec3 {
-        todo!()
+        let reflect = wo.z() * wi.z() > 0.0;
+        let eta = if !reflect {
+            if wo.z() > 0.0 { eta } else { 1.0 / eta }
+        } else { 
+            1.0 
+        };
+        
+        // "generalized half-direction vector" transform, wm must always face "up" in 
+        // local coordinate frame
+        let wm = wi * eta + wo;
+        let wm = if wm.z() < 0.0 {
+            -wm
+        } else {
+            wm
+        };
+
+        // guard against grazing angles
+        if wi.z() == 0.0 || wo.z() == 0.0 || wm == Vec3::zero() {
+            return Vec3::zero();
+        }
+
+        #[allow(non_snake_case, reason = "physics convention")]
+        let F = fresnel_dielectric(Vec3::dot(wo, wm), eta);
+
+        if reflect {
+            let brdf = distribution(wm, alpha_x, alpha_y)
+            * F
+            * G(wo, wi, alpha_x, alpha_y)
+            / (4.0 * wo.z() * wi.z()).abs();
+
+            Vec3(brdf, brdf, brdf)
+        }
+        else {
+            let denom = wi.z() * wo.z() * (Vec3::dot(wi, wm) + Vec3::dot(wo, wm) / eta).powi(2);
+            let btdf = distribution(wm, alpha_x, alpha_y)
+            * (1.0 - F)
+            * G(wo, wi, alpha_x, alpha_y)
+            * (Vec3::dot(wi, wm) * Vec3::dot(wo, wm) / denom).abs()
+            / (eta * eta);
+
+            Vec3(btdf, btdf, btdf)
+        }
     }
 
     fn torrance_sparrow_sample(
@@ -562,7 +621,13 @@ mod microfacet {
             alpha_y
         );
 
-        let bsdf = torrance_sparrow_bsdf();
+        let bsdf = torrance_sparrow_bsdf(
+            wo,
+            wi,
+            eta,
+            alpha_x,
+            alpha_y
+        );
 
         BsdfSample {
             wi,
@@ -579,7 +644,4 @@ mod gltf_pbr {
     // specular components, so we can evaluate it and sample it as such
 
     // GLTF spec B.3.5
-    fn a() {
-        
-    }
 }

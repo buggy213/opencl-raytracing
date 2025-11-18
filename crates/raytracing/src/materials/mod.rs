@@ -27,6 +27,7 @@ pub enum Material {
     RoughConductor {
         // same interpretation as for SmoothConductor
         eta: TextureId,
+        kappa: TextureId,
 
         // parameterization of Trowbridge-Reitz microfacet distribution
         // R component corresponds to roughness along tangent direction

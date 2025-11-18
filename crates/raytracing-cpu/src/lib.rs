@@ -117,7 +117,14 @@ fn ray_radiance(
             let mut direct_illumination = Vec3::zero();
 
             for light in &context.scene.lights {
-                for _ in 0..raytracer_settings.light_sample_count {
+                let light_samples = if light.is_delta_light() {
+                    1
+                }
+                else {
+                    raytracer_settings.light_sample_count
+                };
+
+                for _ in 0..light_samples {
                     let light_sample = sample_light(light, &context.scene, hit.point);
                     let occluded = occluded(context, traversal_cache, light_sample);
                     if !occluded {
@@ -130,7 +137,7 @@ fn ray_radiance(
                     }
                 }
 
-                direct_illumination /= raytracer_settings.light_sample_count as f32;
+                direct_illumination /= light_samples as f32;
             }
 
             radiance += path_weight * direct_illumination;
