@@ -3,7 +3,7 @@ use std::f32;
 use raytracing::{geometry::{Complex, Vec2, Vec3}, materials::Material};
 use tracing::warn;
 
-use crate::{sample::{self, sample_cosine_hemisphere}, texture::CpuTextures};
+use crate::{sample, texture::CpuTextures};
 
 #[derive(Debug)]
 pub(crate) struct BsdfSample {
@@ -67,7 +67,7 @@ impl CpuBsdf {
         match self {
             CpuBsdf::Diffuse { albedo } => {
                 // cosine-weighted hemisphere sampling
-                let (wi, pdf) = sample_cosine_hemisphere();
+                let (wi, pdf) = sample::sample_cosine_hemisphere();
                 BsdfSample {
                     wi,
                     bsdf: *albedo / f32::consts::PI,
@@ -299,7 +299,7 @@ mod microfacet {
 
     use raytracing::geometry::{Complex, Vec2, Vec3};
 
-    use crate::{materials::{BsdfSample, fresnel_complex}, sample::sample_unit_disk};
+    use crate::{materials::{BsdfSample, fresnel_complex, fresnel_dielectric}, sample};
 
     // PBRT 4ed 9.6.1
     // represents relative differential area of microfacets pointing in a particular direction
@@ -363,7 +363,7 @@ mod microfacet {
     // figure 9.29 visually represents what this is doing
     pub(super) fn sample_wm(w: Vec3, alpha_x: f32, alpha_y: f32) -> Vec3 {
         let wh = Vec3(alpha_x * w.x(), alpha_y * w.y(), w.z()).unit();
-        let p = sample_unit_disk();
+        let p = sample::sample_unit_disk();
         let t1 = if wh.z() < 0.9999 {
             Vec3::cross(Vec3(0.0, 0.0, 1.0), wh)
         }
@@ -443,7 +443,7 @@ mod microfacet {
         let wi = Vec3::reflect(wo, wm);
         
         // pbrt notes that this leads to energy loss
-        if wm.z().signum() != wi.z().signum() {
+        if wm.z() * wi.z() < 0.0 {
             return BsdfSample { wi, bsdf: Vec3::zero(), pdf: 1.0 };
         }
 
@@ -467,5 +467,119 @@ mod microfacet {
             bsdf, 
             pdf 
         }
+    }
+
+    // PBRT 4ed 9.7
+    // 
+    pub(super) fn torrance_sparrow_pdf(
+        wo: Vec3,
+        wi: Vec3,
+        eta: f32,
+        alpha_x: f32,
+        alpha_y: f32,
+    ) -> f32 {
+        let reflect = wo.z() * wi.z() > 0.0;
+        let eta = if !reflect {
+            if wo.z() > 0.0 { eta } else { 1.0 / eta }
+        } else { 
+            1.0 
+        };
+        
+        // "generalized half-direction vector" transform, wm must always face "up" in 
+        // local coordinate frame
+        let wm = wi * eta + wo;
+        let wm = if wm.z() < 0.0 {
+            -wm
+        } else {
+            wm
+        };
+
+        // why is this correct? it "discards backfacing microfacets"
+        // seems a little trickier than this
+        if Vec3::dot(wm, wi) * wi.z() < 0.0 || Vec3::dot(wm, wo) * wo.z() < 0.0 {
+            return 0.0;
+        }
+        
+        #[allow(non_snake_case, reason = "physics convention")]
+        let R = fresnel_dielectric(Vec3::dot(wo, wm), eta);
+        #[allow(non_snake_case, reason = "physics convention")]
+        let T = 1.0 - R;
+
+        if reflect {
+            todo!("visible_distribution needs to support backfacing w, wm");
+            R * visible_distribution(wo, wm, alpha_x, alpha_y) / (4.0 * Vec3::dot(wo, wm).abs())
+        }
+        else {
+            todo!("visible_distribution needs to support backfacing w, wm");
+            let denom = (Vec3::dot(wi, wm) + Vec3::dot(wo, wm) / eta).powi(2);
+            let dwm_dwi = Vec3::dot(wi, wm).abs() / denom;
+            T * visible_distribution(wo, wm, alpha_x, alpha_y) * dwm_dwi
+        }
+    }
+
+    fn torrance_sparrow_bsdf(
+
+    ) -> Vec3 {
+        todo!()
+    }
+
+    fn torrance_sparrow_sample(
+        wo: Vec3,
+        eta: f32,
+        alpha_x: f32,
+        alpha_y: f32,
+    ) -> BsdfSample {
+        let wm = sample_wm(wo, alpha_x, alpha_y);
+         
+        #[allow(non_snake_case, reason = "physics convention")]
+        let R = fresnel_dielectric(Vec3::dot(wo, wm), eta);
+        #[allow(non_snake_case, reason = "physics convention")]
+        let T = 1.0 - R;
+
+        let wi = if sample::sample_uniform() < R {
+            let wi = Vec3::reflect(wo, wm);
+            if wo.z() * wi.z() < 0.0 {
+                return BsdfSample { wi, bsdf: Vec3::zero(), pdf: 1.0 }
+            }
+
+            wi
+        }
+        else {
+            let wi = super::refract(
+                eta, 
+                wo, 
+                wm
+            );
+
+            todo!("deal with backfacing wo, wi")
+        };
+
+        let pdf = torrance_sparrow_pdf(
+            wo, 
+            wi, 
+            eta, 
+            alpha_x, 
+            alpha_y
+        );
+
+        let bsdf = torrance_sparrow_bsdf();
+
+        BsdfSample {
+            wi,
+            bsdf,
+            pdf,
+        }
+    }
+}
+
+
+mod gltf_pbr {
+    // the gltf metallic-roughness material essentially 
+    // describes a parametetric mix material between diffuse and 
+    // specular components, so we can evaluate it and sample it as such
+
+    // GLTF spec B.3.5
+    fn a() {
+        
     }
 }
