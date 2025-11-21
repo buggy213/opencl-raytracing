@@ -22,18 +22,25 @@ pub enum Material {
     // 
     RoughDielectric {
         // same interpretation as for SmoothDielectric
-        eta: TextureId
+        eta: TextureId,
+
+        // parameterization of Trowbridge-Reitz microfacet distribution
+        // R component corresponds to roughness along tangent direction
+        // G component corresponds to roughness along bitangent direction
+        // these are converted into alpha_x, alpha_y by taking the square root
+        roughness: TextureId,
     },
     RoughConductor {
         // same interpretation as for SmoothConductor
         eta: TextureId,
         kappa: TextureId,
 
-        // parameterization of Trowbridge-Reitz microfacet distribution
-        // R component corresponds to roughness along tangent direction
-        // G component corresponds to roughness along bitangent direction
-        // these are converted into alpha_x, alpha_y by taking the square root
+        // same interpretation as for RoughDielectric
         roughness: TextureId
+    },
+
+    GLTFMetallicRoughness {
+
     },
 
 }

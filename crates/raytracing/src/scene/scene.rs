@@ -728,6 +728,23 @@ pub mod test_scenes {
         cornell_box.build()
     }
 
+    pub fn rough_dielectric_scene() -> Scene {
+        let mut cornell_box = cornell_box();
+        
+        let ior_texture = cornell_box.add_constant_texture(Vec4(1.5, 0.0, 0.0, 0.0));
+        let roughness_texture = cornell_box.add_constant_texture(Vec4(0.5, 0.5, 0.0, 0.0));
+        let rough_dielectric_material = cornell_box.add_material(
+            Material::RoughDielectric { eta: ior_texture, roughness: roughness_texture }
+        );
+        cornell_box.add_shape_at_position(
+            Shape::Sphere { center: Vec3::zero(), radius: 0.5 }, 
+            rough_dielectric_material, 
+            Vec3(0.0, 0.0, 0.75)
+        );
+
+        cornell_box.build()
+    }
+
     pub struct TestScene {
         pub name: &'static str,
         pub func: fn() -> Scene
@@ -750,6 +767,10 @@ pub mod test_scenes {
             TestScene {
                 name: "rough_metal",
                 func: rough_metal_scene
+            },
+            TestScene {
+                name: "rough_dielectric",
+                func: rough_dielectric_scene
             }
         ]
     }

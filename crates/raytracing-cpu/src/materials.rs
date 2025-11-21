@@ -31,6 +31,11 @@ pub enum CpuBsdf {
         kappa: Vec3,
         alpha_x: f32,
         alpha_y: f32,
+    },
+    RoughDielectric {
+        eta: f32,
+        alpha_x: f32,
+        alpha_y: f32,
     }
 }
 
@@ -59,6 +64,19 @@ impl CpuBsdf {
                     wi,
                     *eta,
                     *kappa,
+                    *alpha_x,
+                    *alpha_y
+                )
+            }
+            CpuBsdf::RoughDielectric { 
+                eta, 
+                alpha_x, 
+                alpha_y 
+            } => {
+                microfacet::torrance_sparrow_bsdf(
+                    wo,
+                    wi,
+                    *eta,
                     *alpha_x,
                     *alpha_y
                 )
@@ -170,6 +188,19 @@ impl CpuBsdf {
                     *alpha_x, 
                     *alpha_y
                 )
+            },
+
+            CpuBsdf::RoughDielectric { 
+                eta, 
+                alpha_x, 
+                alpha_y 
+            } => {
+                microfacet::torrance_sparrow_sample(
+                    wo, 
+                    *eta, 
+                    *alpha_x, 
+                    *alpha_y
+                )
             }
         }
     }
@@ -181,6 +212,7 @@ impl CpuBsdf {
             CpuBsdf::SmoothDielectric { .. } => true,
             CpuBsdf::SmoothConductor { .. } => true,
             CpuBsdf::RoughConductor { .. } => false,
+            CpuBsdf::RoughDielectric { .. } => false,
         }
     }
 }
@@ -228,6 +260,16 @@ impl CpuMaterial for Material {
                     alpha_x, 
                     alpha_y 
                 }
+            }
+
+            Material::RoughDielectric { eta, roughness } => {
+                let eta = textures.sample(*eta, uv.u(), uv.v()).r();
+
+                let roughness = textures.sample(*roughness, uv.u(), uv.v());
+                let alpha_x = roughness.0.sqrt();
+                let alpha_y = roughness.1.sqrt();
+
+                CpuBsdf::RoughDielectric { eta, alpha_x, alpha_y }
             }
 
             _ => todo!("support new material")
@@ -490,7 +532,7 @@ mod microfacet {
         alpha_y: f32,
     ) -> f32 {
         let reflect = wo.z() * wi.z() > 0.0;
-        let eta = if !reflect {
+        let eta_wm = if !reflect {
             if wo.z() > 0.0 { eta } else { 1.0 / eta }
         } else { 
             1.0 
@@ -498,12 +540,12 @@ mod microfacet {
         
         // "generalized half-direction vector" transform, wm must always face "up" in 
         // local coordinate frame
-        let wm = wi * eta + wo;
-        let wm = if wm.z() < 0.0 {
-            -wm
-        } else {
-            wm
-        };
+        let wm = wi * eta_wm + wo;
+        let mut wm = wm.unit();
+
+        if wm.z() < 0.0 {
+            wm = -wm;
+        }
 
         // guard against grazing angles
         if wi.z() == 0.0 || wo.z() == 0.0 || wm == Vec3::zero() {
@@ -516,8 +558,12 @@ mod microfacet {
             return 0.0;
         }
         
+        // we use absolute value and eta_wm to avoid fresnel_dielectric flipping the interface again
         #[allow(non_snake_case, reason = "physics convention")]
-        let R = fresnel_dielectric(Vec3::dot(wo, wm), eta);
+        let R = fresnel_dielectric(
+            Vec3::dot(wo, wm).abs(), 
+            eta_wm
+        );
         #[allow(non_snake_case, reason = "physics convention")]
         let T = 1.0 - R;
 
@@ -525,13 +571,13 @@ mod microfacet {
             R * visible_distribution(wo, wm, alpha_x, alpha_y) / (4.0 * Vec3::dot(wo, wm).abs())
         }
         else {
-            let denom = (Vec3::dot(wi, wm) + Vec3::dot(wo, wm) / eta).powi(2);
+            let denom = (Vec3::dot(wi, wm) + Vec3::dot(wo, wm) / eta_wm).powi(2);
             let dwm_dwi = Vec3::dot(wi, wm).abs() / denom;
             T * visible_distribution(wo, wm, alpha_x, alpha_y) * dwm_dwi
         }
     }
 
-    fn torrance_sparrow_bsdf(
+    pub(super) fn torrance_sparrow_bsdf(
         wo: Vec3,
         wi: Vec3,
         eta: f32,
@@ -539,7 +585,7 @@ mod microfacet {
         alpha_y: f32
     ) -> Vec3 {
         let reflect = wo.z() * wi.z() > 0.0;
-        let eta = if !reflect {
+        let eta_wm = if !reflect {
             if wo.z() > 0.0 { eta } else { 1.0 / eta }
         } else { 
             1.0 
@@ -547,20 +593,24 @@ mod microfacet {
         
         // "generalized half-direction vector" transform, wm must always face "up" in 
         // local coordinate frame
-        let wm = wi * eta + wo;
-        let wm = if wm.z() < 0.0 {
-            -wm
-        } else {
-            wm
-        };
+        let wm = wi * eta_wm + wo;
+        let mut wm = wm.unit();
+
+        if wm.z() < 0.0 {
+            wm = -wm;
+        }
 
         // guard against grazing angles
         if wi.z() == 0.0 || wo.z() == 0.0 || wm == Vec3::zero() {
             return Vec3::zero();
         }
 
+        // we use absolute value and eta_wm to avoid fresnel_dielectric flipping the interface again
         #[allow(non_snake_case, reason = "physics convention")]
-        let F = fresnel_dielectric(Vec3::dot(wo, wm), eta);
+        let F = fresnel_dielectric(
+            Vec3::dot(wo, wm).abs(), 
+            eta_wm
+        );
 
         if reflect {
             let brdf = distribution(wm, alpha_x, alpha_y)
@@ -571,18 +621,18 @@ mod microfacet {
             Vec3(brdf, brdf, brdf)
         }
         else {
-            let denom = wi.z() * wo.z() * (Vec3::dot(wi, wm) + Vec3::dot(wo, wm) / eta).powi(2);
+            let denom = wi.z() * wo.z() * (Vec3::dot(wi, wm) + Vec3::dot(wo, wm) / eta_wm).powi(2);
             let btdf = distribution(wm, alpha_x, alpha_y)
             * (1.0 - F)
             * G(wo, wi, alpha_x, alpha_y)
             * (Vec3::dot(wi, wm) * Vec3::dot(wo, wm) / denom).abs()
-            / (eta * eta);
+            / (eta_wm * eta_wm);
 
             Vec3(btdf, btdf, btdf)
         }
     }
 
-    fn torrance_sparrow_sample(
+    pub(super) fn torrance_sparrow_sample(
         wo: Vec3,
         eta: f32,
         alpha_x: f32,
@@ -593,7 +643,7 @@ mod microfacet {
         #[allow(non_snake_case, reason = "physics convention")]
         let R = fresnel_dielectric(Vec3::dot(wo, wm), eta);
         #[allow(non_snake_case, reason = "physics convention")]
-        let T = 1.0 - R;
+        let _T = 1.0 - R;
 
         let wi = if sample::sample_uniform() < R {
             let wi = Vec3::reflect(wo, wm);
@@ -610,7 +660,15 @@ mod microfacet {
                 wm
             );
 
-            todo!("deal with backfacing wo, wi")
+            let Some(wi) = wi else {
+                return BsdfSample { wi: Vec3(0.0, 0.0, 1.0), bsdf: Vec3::zero(), pdf: 1.0 }
+            };
+
+            if wo.z() * wi.z() > 0.0 || wi.z() == 0.0 {
+                return BsdfSample { wi, bsdf: Vec3::zero(), pdf: 1.0 }
+            }
+
+            wi
         };
 
         let pdf = torrance_sparrow_pdf(
