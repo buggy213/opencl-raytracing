@@ -335,7 +335,11 @@ fn fresnel_complex(cos_theta_i: f32, eta: Complex) -> f32 {
 
     let sin_theta_2_i = 1.0 - cos_theta_i * cos_theta_i;
     let sin_theta_2_t: Complex = sin_theta_2_i / (eta * eta);
-    let cos_theta_t: Complex = -sin_theta_2_t + 1.0;
+    let cos_theta_2_t: Complex = -sin_theta_2_t + 1.0;
+
+    // not sure if taking principal branch is equivalent to other branch
+    // of complex square root, but it's *probably* correct
+    let cos_theta_t: Complex = cos_theta_2_t.sqrt();
 
     let r_parl = (eta * cos_theta_i - cos_theta_t) / (eta * cos_theta_i + cos_theta_t);
     let r_perp = (cos_theta_i - eta * cos_theta_t) / (cos_theta_i + eta * cos_theta_t);

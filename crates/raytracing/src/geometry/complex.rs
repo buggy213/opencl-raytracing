@@ -188,4 +188,15 @@ impl Complex {
     pub fn to_polar(self) -> (f32, f32) {
         (self.modulus(), f32::atan2(self.1, self.0))
     }
+
+    pub fn from_polar(r: f32, theta: f32) -> Complex {
+        Complex(r * f32::cos(theta), r * f32::sin(theta))
+    }
+
+    // principal branch
+    pub fn sqrt(self) -> Complex {
+        let (r, theta) = self.to_polar();
+
+        Complex::from_polar(r.sqrt(), theta / 2.0)
+    }
 }
