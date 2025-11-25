@@ -703,7 +703,151 @@ mod microfacet {
 mod gltf_pbr {
     // the gltf metallic-roughness material essentially 
     // describes a parametetric mix material between diffuse and 
-    // specular components, so we can evaluate it and sample it as such
+    // specular components. 
+    use std::f32;
 
-    // GLTF spec B.3.5
+    use raytracing::geometry::Vec3;
+
+    use crate::{materials::BsdfSample, sample};
+
+    #[allow(non_snake_case, reason = "gltf spec")]
+    fn D(wm: Vec3, alpha: f32) -> f32 {
+        super::microfacet::distribution(wm, alpha, alpha)
+    }
+
+    #[allow(non_snake_case, reason = "gltf spec")]
+    fn G(wo: Vec3, wi: Vec3, alpha: f32) -> f32 {
+        super::microfacet::G(wo, wi, alpha, alpha)
+    }
+
+    fn specular_brdf(alpha: f32, wo: Vec3, wi: Vec3) -> f32 {
+        let half = if wo + wi == Vec3::zero() {
+            return 0.0;
+        }
+        else {
+            (wo + wi).unit()
+        };
+
+        D(half, alpha) * G(wo, wi, alpha) / (4.0 * wo.z().abs() * wi.z().abs())
+    }
+
+    fn conductor_fresnel(f0: Vec3, bsdf: Vec3, cos_theta: f32) -> Vec3 {
+        bsdf * (f0 + (Vec3(1.0, 1.0, 1.0) - f0) * (1.0 - cos_theta).powi(5))
+    }
+
+    fn fresnel_mix_factor(ior: f32, cos_theta: f32) -> f32 {
+        let f0 = ((1.0 - ior) / (1.0 + ior)).powi(2);
+        let fr = f0 + (1.0 - f0) * (1.0 - cos_theta).powi(5);
+        
+        fr
+    }
+
+    fn fresnel_mix(ior: f32, base: Vec3, layer: Vec3, cos_theta: f32) -> Vec3 {
+        let f = fresnel_mix_factor(ior, cos_theta);
+        f * layer + (1.0 - f) * base
+    }
+
+    pub(super) fn pdf(
+        wo: Vec3,
+        wi: Vec3,
+        metallic: f32,
+        alpha: f32,
+    ) -> f32 {
+        let wm = if wo + wi == Vec3::zero() {
+            return 0.0;
+        } else {
+            (wo + wi).unit()
+        };
+        
+        let dielectric_fresnel_mix = fresnel_mix_factor(1.5, Vec3::dot(wo, wm));
+
+        // there are two 2 cases, corresponding to specular_prob and diffuse_prob 
+        // 1. we sampled wi as a result of dielectric reflection or metallic reflection
+        // 2. we sampled wi as a result of diffuse - this can only happen if z > 0
+        let specular_prob = metallic + (1.0 - metallic) * dielectric_fresnel_mix;
+        let diffuse_prob = 1.0 - specular_prob;
+
+        let specular_pdf = super::microfacet::visible_distribution(wo, wm, alpha, alpha) / (4.0 * Vec3::dot(wo, wm).abs());
+        let diffuse_pdf = wi.z();
+
+        specular_prob * specular_pdf + diffuse_prob * diffuse_pdf
+    }
+
+    // direct transcription of GLTF spec B.3.5
+    pub(super) fn bsdf(
+        wo: Vec3,
+        wi: Vec3,
+        base_color: Vec3,
+        metallic: f32,
+        alpha: f32,
+    ) -> Vec3 {
+        let c_diff = metallic * Vec3::zero() + (1.0 - metallic) * base_color;
+        let f0 = metallic * base_color + (1.0 - metallic) * Vec3(0.04, 0.04, 0.04);
+        
+        let half = if wo + wi == Vec3::zero() {
+            return Vec3::zero();
+        } else {
+            (wo + wi).unit()
+        };
+
+        let fresnel = f0 + (Vec3(1.0, 1.0, 1.0) - f0) * (1.0 - Vec3::dot(wo, half).abs()).powi(5);
+        let f_diffuse = (Vec3(1.0, 1.0, 1.0) - fresnel) * (f32::consts::FRAC_1_PI) * c_diff;
+        let f_specular = fresnel * specular_brdf(alpha, wo, wi);
+
+        f_diffuse + f_specular
+    }
+
+    pub(super) fn sample_f(
+        wo: Vec3,
+        base_color: Vec3,
+        metallic: f32,
+        alpha: f32,
+    ) -> BsdfSample {
+        let wm = super::microfacet::sample_wm(wo, alpha, alpha);
+        let specular_wi = Vec3::reflect(wo, wm);
+        let (diffuse_wi, _) = sample::sample_cosine_hemisphere();
+
+        let dielectric_fresnel_mix = fresnel_mix_factor(1.5, Vec3::dot(wo, wm));
+
+        // we stochastically sample the direction according to mix probabilities
+        // however, our pdf needs to account for all the ways that a direction could've been chosen
+        let wi = if sample::sample_uniform() < metallic {
+            // metal
+            specular_wi
+        }
+        else {
+            // dielectric
+            if sample::sample_uniform() < dielectric_fresnel_mix {
+                // reflection
+                specular_wi
+            }
+            else {
+                // diffuse
+                diffuse_wi
+            }
+        };
+
+        // invalid sample (higher-order scattering event)
+        // don't waste effort computing actual bsdf / pdf
+        if wi.z() < 0.0 {
+            return BsdfSample { wi, bsdf: Vec3::zero(), pdf: 1.0 }
+        }
+
+        let bsdf = bsdf(
+            wo,
+            wi,
+            base_color,
+            metallic,
+            alpha
+        );
+
+        let pdf = pdf(
+            wo,
+            wi,
+            metallic,
+            alpha
+        );
+
+        BsdfSample { wi, bsdf, pdf }
+    }
 }
