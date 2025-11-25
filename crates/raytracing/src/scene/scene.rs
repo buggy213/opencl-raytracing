@@ -232,28 +232,29 @@ impl Scene {
         let mut materials: Vec<Material> = Vec::with_capacity(document.materials().len());
         let mut material_emissions: Vec<Vec3> = Vec::with_capacity(document.materials().len());
         for material in document.materials() {
-            let pbr_params = material.pbr_metallic_roughness();
-            let diffuse_gltf_texture = pbr_params.base_color_texture();
-            let diffuse_factor = pbr_params.base_color_factor();
-            
-            let albedo_texture = if let Some(gltf_tex) = diffuse_gltf_texture {
-                if gltf_tex.tex_coord() != 0 {
-                    let material_name = match material.name() {
-                        Some(name) => Cow::Borrowed(name),
-                        None => match material.index() {
-                            Some(material_id) => Cow::Owned(format!("{}", material_id)),
-                            None => Cow::Borrowed("default")
-                        },
-                    };
+            let material_name = match material.name() {
+                Some(name) => Cow::Borrowed(name),
+                None => match material.index() {
+                    Some(material_id) => Cow::Owned(format!("{}", material_id)),
+                    None => Cow::Borrowed("default")
+                },
+            };
 
-                    warn!("material {} uses non-zero TEXCOORD attribute, not supported yet", material_name);
+            let pbr_params = material.pbr_metallic_roughness();
+            let base_color_tex = pbr_params.base_color_texture();
+            let base_color_fac = pbr_params.base_color_factor();
+            let metallic_roughness_tex = pbr_params.metallic_roughness_texture();
+            
+            let base_color_tex = if let Some(gltf_tex) = base_color_tex {
+                if gltf_tex.tex_coord() != 0 {
+                    warn!("material {} uses non-zero TEXCOORD attribute for base color texture, not supported yet", material_name);
                 }
                 
                 let base_id = TextureId(gltf_tex.texture().index() as u32);
                 
-                if diffuse_factor != [1.0, 1.0, 1.0, 1.0] {
+                if base_color_fac != [1.0, 1.0, 1.0, 1.0] {
                     let factor_id = TextureId(textures.len() as u32);
-                    textures.push(Texture::ConstantTexture { value: diffuse_factor.into() });
+                    textures.push(Texture::ConstantTexture { value: base_color_fac.into() });
                     let scale_id = TextureId(textures.len() as u32);
                     textures.push(Texture::ScaleTexture { a: base_id, b: factor_id });
                     
@@ -266,17 +267,50 @@ impl Scene {
             else {
                 let id = TextureId(textures.len() as u32);
                 textures.push(Texture::ConstantTexture { 
-                    value: diffuse_factor.into() 
+                    value: base_color_fac.into() 
+                });
+
+                id
+            };
+
+            let metallic_roughness_tex = if let Some(gltf_tex) = metallic_roughness_tex {
+                if gltf_tex.tex_coord() != 0 {
+                    warn!("material {} uses non-zero TEXCOORD attribute for metallic-roughness texture, not supported yet", material_name);
+                }
+
+                let metallic_roughness_id = TextureId(gltf_tex.texture().index() as u32);
+                let metallic = pbr_params.metallic_factor();
+                let roughness = pbr_params.roughness_factor();
+
+                if metallic != 1.0 || roughness != 1.0 {
+                    let factor_id = TextureId(textures.len() as u32);
+                    textures.push(Texture::ConstantTexture { value: Vec4(0.0, roughness, metallic, 0.0) });
+                    let scale_id = TextureId(textures.len() as u32);
+                    textures.push(Texture::ScaleTexture { a: metallic_roughness_id, b: factor_id });
+                    
+                    scale_id
+                }
+                else {
+                    metallic_roughness_id
+                }
+
+            } else {
+                let metallic = pbr_params.metallic_factor();
+                let roughness = pbr_params.roughness_factor();
+                let id = TextureId(textures.len() as u32);
+                textures.push(Texture::ConstantTexture { 
+                    value: Vec4(0.0, roughness, metallic, 0.0) 
                 });
 
                 id
             };
             
-            let diffuse = Material::Diffuse { 
-                albedo: albedo_texture
+            let pbr_material = Material::GLTFMetallicRoughness { 
+                base_color: base_color_tex,
+                metallic_roughness: metallic_roughness_tex
             };
 
-            materials.push(diffuse);
+            materials.push(pbr_material);
 
             let emission: Vec3 = material.emissive_factor().into();
             material_emissions.push(emission);
@@ -745,6 +779,40 @@ pub mod test_scenes {
         cornell_box.build()
     }
 
+    fn gltf_sphere_scene(base_color: Vec3, metallic: f32, roughness: f32) -> Scene {
+        let mut cornell_box = cornell_box();
+        
+        let base_color_texture = cornell_box.add_constant_texture(Vec4(base_color.0, base_color.1, base_color.2, 0.0));
+        let metallic_roughness_texture = cornell_box.add_constant_texture(Vec4(0.0, roughness, metallic, 0.0));
+        let gltf_material = cornell_box.add_material(
+            Material::GLTFMetallicRoughness { base_color: base_color_texture, metallic_roughness: metallic_roughness_texture }
+        );
+
+        cornell_box.add_shape_at_position(
+            Shape::Sphere { center: Vec3::zero(), radius: 0.5 }, 
+            gltf_material, 
+            Vec3(0.0, 0.0, 0.75)
+        );
+
+        cornell_box.build()
+    }
+
+    pub fn gltf_rough_metal() -> Scene {
+        gltf_sphere_scene(Vec3(0.5, 0.5, 0.0), 1.0, 0.5)
+    }
+
+    pub fn gltf_rough_nonmetal() -> Scene {
+        gltf_sphere_scene(Vec3(0.5, 0.5, 0.0), 0.0, 0.5)
+    }
+
+    pub fn gltf_smooth_metal() -> Scene {
+        gltf_sphere_scene(Vec3(0.5, 0.5, 0.0), 1.0, 0.0)
+    }
+
+    pub fn gltf_smooth_nonmetal() -> Scene {
+        gltf_sphere_scene(Vec3(0.5, 0.5, 0.0),0.0, 0.0)
+    }
+
     pub struct TestScene {
         pub name: &'static str,
         pub func: fn() -> Scene
@@ -771,7 +839,23 @@ pub mod test_scenes {
             TestScene {
                 name: "rough_dielectric",
                 func: rough_dielectric_scene
-            }
+            },
+            TestScene {
+                name: "gltf_rough_metal",
+                func: gltf_rough_metal
+            },
+            TestScene {
+                name: "gltf_rough_nonmetal",
+                func: gltf_rough_nonmetal
+            },
+            TestScene {
+                name: "gltf_smooth_metal",
+                func: gltf_smooth_metal
+            },
+            TestScene {
+                name: "gltf_smooth_nonmetal",
+                func: gltf_smooth_nonmetal
+            },
         ]
     }
 }

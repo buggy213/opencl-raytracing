@@ -36,6 +36,12 @@ pub enum CpuBsdf {
         eta: f32,
         alpha_x: f32,
         alpha_y: f32,
+    },
+
+    GLTFMetallicRoughness {
+        base_color: Vec3,
+        metallic: f32,
+        alpha: f32,
     }
 }
 
@@ -79,6 +85,19 @@ impl CpuBsdf {
                     *eta,
                     *alpha_x,
                     *alpha_y
+                )
+            },
+            CpuBsdf::GLTFMetallicRoughness { 
+                base_color, 
+                metallic, 
+                alpha 
+            } => {
+                gltf_pbr::bsdf(
+                    wo, 
+                    wi, 
+                    *base_color, 
+                    *metallic, 
+                    *alpha
                 )
             }
         }
@@ -201,6 +220,19 @@ impl CpuBsdf {
                     *alpha_x, 
                     *alpha_y
                 )
+            },
+
+            CpuBsdf::GLTFMetallicRoughness { 
+                base_color, 
+                metallic, 
+                alpha 
+            } => {
+                gltf_pbr::sample_f(
+                    wo, 
+                    *base_color, 
+                    *metallic, 
+                    *alpha
+                )
             }
         }
     }
@@ -213,6 +245,7 @@ impl CpuBsdf {
             CpuBsdf::SmoothConductor { .. } => true,
             CpuBsdf::RoughConductor { .. } => false,
             CpuBsdf::RoughDielectric { .. } => false,
+            CpuBsdf::GLTFMetallicRoughness { .. } => false,
         }
     }
 }
@@ -270,6 +303,19 @@ impl CpuMaterial for Material {
                 let alpha_y = roughness.1.sqrt();
 
                 CpuBsdf::RoughDielectric { eta, alpha_x, alpha_y }
+            }
+
+            Material::GLTFMetallicRoughness { base_color, metallic_roughness } => {
+                let base_color = textures.sample(*base_color, uv.u(), uv.v());
+                let base_color = Vec3(base_color.0, base_color.1, base_color.2);
+
+                let metallic_roughness = textures.sample(*metallic_roughness, uv.u(), uv.v());
+                
+                CpuBsdf::GLTFMetallicRoughness { 
+                    base_color, 
+                    metallic: metallic_roughness.b(), 
+                    alpha: metallic_roughness.g().sqrt() 
+                }
             }
 
             _ => todo!("support new material")

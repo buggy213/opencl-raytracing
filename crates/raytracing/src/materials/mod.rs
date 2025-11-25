@@ -40,7 +40,10 @@ pub enum Material {
     },
 
     GLTFMetallicRoughness {
-
+        // R, G, B are as usual. Alpha is ignored for now
+        base_color: TextureId,
+        // roughness in G channel, metallicness in B channel
+        metallic_roughness: TextureId,
     },
 
 }
