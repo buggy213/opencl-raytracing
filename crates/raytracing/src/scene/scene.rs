@@ -813,6 +813,10 @@ pub mod test_scenes {
         gltf_sphere_scene(Vec3(0.5, 0.5, 0.0),0.0, 0.0)
     }
 
+
+    // TODO: should be a way to plug in RaytracerSettings 
+    // (default sphere scene is meant for normals / bvh / intersection only, it looks black otherwise)
+
     pub struct TestScene {
         pub name: &'static str,
         pub func: fn() -> Scene

@@ -16,6 +16,10 @@ mod materials;
 mod sample;
 mod scene;
 mod texture;
+pub mod utils;
+
+#[cfg(test)]
+mod tests;
 
 #[derive(Debug, Clone)]
 pub(crate) struct CpuRaytracingContext<'scene> {
