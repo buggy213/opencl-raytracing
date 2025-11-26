@@ -5,6 +5,7 @@ use lights::{light_radiance, occluded, sample_light};
 use materials::CpuMaterial;
 use ray::Ray;
 use raytracing::{geometry::{Matrix4x4, Vec3}, scene::{Camera, Scene}};
+use tracing::warn;
 
 use crate::{accel::TraversalCache, scene::CpuAccelerationStructures, texture::CpuTextures};
 
@@ -427,4 +428,52 @@ pub fn render(scene: &Scene, raytracer_settings: RaytracerSettings) -> Vec<Vec3>
 
         radiance_buffer
     }
+}
+
+pub fn render_single_pixel(
+    scene: &Scene, 
+    raytracer_settings: RaytracerSettings,
+    x: u32,
+    y: u32,
+) -> Vec3 {
+    let (x, y) = if x >= scene.camera.raster_width as u32 || y >= scene.camera.raster_height as u32 {
+        let clamped_x = u32::clamp(x, 0, scene.camera.raster_width as u32 - 1);
+        let clamped_y = u32::clamp(y, 0, scene.camera.raster_height as u32 - 1);
+        warn!("out-of-bounds coordinates for `render_single_pixel`, clamping to x = {clamped_x}, y = {clamped_y}");
+
+        (clamped_x, clamped_y)
+    }
+    else {
+        (x, y)
+    };
+
+    // force single threaded, since it's only 1 pixel
+    let single_threaded_settings = RaytracerSettings {
+        num_threads: 1,
+        ..raytracer_settings
+    };
+
+    let cpu_acceleration_structures = scene::prepare_cpu_acceleration_structures(scene);
+    let cpu_raytracing_context = CpuRaytracingContext::new(
+        &scene,
+        &cpu_acceleration_structures
+    );
+
+    let mut traversal_cache = TraversalCache::new(&cpu_raytracing_context);
+    let single_pixel = RenderTile {
+        x0: x as usize,
+        x1: x as usize + 1,
+        y0: y as usize,
+        y1: y as usize + 1,
+    };
+
+    let pixel = render_tile(
+        &cpu_raytracing_context,
+        &mut traversal_cache,
+        single_pixel,
+        &single_threaded_settings
+    )[0];
+
+    
+    pixel
 }

@@ -12,7 +12,7 @@ fn sanity_tests() {
         let scene = (test_scene_descriptor.func)();
 
         let raytracer_settings = RaytracerSettings {
-            max_ray_depth: 5,
+            max_ray_depth: 8,
             light_sample_count: 1,
             samples_per_pixel: 32,
             accumulate_bounces: true,

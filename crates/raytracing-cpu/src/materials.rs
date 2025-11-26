@@ -677,7 +677,7 @@ mod microfacet {
             return Vec3::zero();
         }
 
-        // also need to discard backfacing microfacets here
+        // also need to discard backfacing microfacets here 
         if Vec3::dot(wm, wi) * wi.z() < 0.0 || Vec3::dot(wm, wo) * wo.z() < 0.0 {
             return Vec3::zero();
         }
