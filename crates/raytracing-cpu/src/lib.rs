@@ -106,14 +106,14 @@ fn ray_radiance(
         let wo = w2o.apply_vector(-ray.direction);
 
         depth += 1;
-        specular_bounce = bsdf.is_delta_bsdf();
+        let delta_bsdf = bsdf.is_delta_bsdf();
         if depth > raytracer_settings.max_ray_depth {
             break;
         }
         
         // direct illumination
         let add_direct_illumination = raytracer_settings.accumulate_bounces || raytracer_settings.max_ray_depth == depth;
-        if !specular_bounce && add_direct_illumination {     
+        if !delta_bsdf && add_direct_illumination {     
             let mut direct_illumination = Vec3::zero();
 
             for light in &context.scene.lights {
@@ -149,6 +149,14 @@ fn ray_radiance(
         let bsdf_sample = bsdf.sample_bsdf(wo);
         let cos_theta = bsdf_sample.wi.z().abs();
         path_weight *= bsdf_sample.bsdf * cos_theta / bsdf_sample.pdf;
+
+        specular_bounce = bsdf_sample.specular;
+        
+        // if we sampled a bsdf value of zero, terminate this ray
+        // TODO: use russian roulette termination condition
+        if path_weight == Vec3::zero() {
+            break;
+        }
 
         let world_dir = o2w.apply_vector(bsdf_sample.wi);
         let new_ray = Ray {

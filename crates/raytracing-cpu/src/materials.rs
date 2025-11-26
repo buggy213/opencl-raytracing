@@ -9,7 +9,11 @@ use crate::{sample, texture::CpuTextures};
 pub(crate) struct BsdfSample {
     pub(crate) wi: Vec3,
     pub(crate) bsdf: Vec3,
-    pub(crate) pdf: f32
+    pub(crate) pdf: f32,
+
+    // tracks whether this sample represents a specular component of 
+    // bsdf; only gltf material returns both true / false at the moment
+    pub(crate) specular: bool,
 }
 
 // Corresponds to `Material` evaluated at a specific point
@@ -112,6 +116,7 @@ impl CpuBsdf {
                     wi,
                     bsdf: *albedo / f32::consts::PI,
                     pdf,
+                    specular: false,
                 }
             },
 
@@ -137,18 +142,23 @@ impl CpuBsdf {
                         wi: reflection_dir,
                         bsdf: Vec3(f, f, f),
                         pdf,
+                        specular: true,
                     }
                 }
                 else {
                     let refract_dir = refract(*eta, wo, normal);
                     let Some(refract_dir) = refract_dir else {
-                        warn!("encountered total internal reflection after sampling 
-                            refraction direction, this should not be possible");
+                        warn!(
+                            "encountered total internal reflection after sampling \
+                            refraction direction, this should not be possible as \
+                            fresnel_dielectric should return 1.0"
+                        );
                         
                         return BsdfSample {
                             wi: wo,
                             bsdf: Vec3::zero(),
                             pdf: 1.0,
+                            specular: true,
                         }
                     };
 
@@ -170,7 +180,8 @@ impl CpuBsdf {
                     BsdfSample {
                         wi: refract_dir,
                         bsdf: Vec3(f, f, f),
-                        pdf
+                        pdf,
+                        specular: true,
                     }
                 };
 
@@ -189,8 +200,9 @@ impl CpuBsdf {
                 let pdf = 1.0;
                 BsdfSample {
                     wi: reflection_dir,
-                    bsdf: f, // TODO: wavelength-dependence
-                    pdf 
+                    bsdf: f,
+                    pdf,
+                    specular: true
                 }
             },
 
@@ -310,11 +322,14 @@ impl CpuMaterial for Material {
                 let base_color = Vec3(base_color.0, base_color.1, base_color.2);
 
                 let metallic_roughness = textures.sample(*metallic_roughness, uv.u(), uv.v());
+                let metallic = metallic_roughness.b().clamp(0.0, 1.0);
+                let roughness = metallic_roughness.g().clamp(0.0, 1.0);
+                let alpha = roughness * roughness;
                 
                 CpuBsdf::GLTFMetallicRoughness { 
                     base_color, 
-                    metallic: metallic_roughness.b(), 
-                    alpha: metallic_roughness.g().sqrt() 
+                    metallic, 
+                    alpha
                 }
             }
 
@@ -398,6 +413,7 @@ mod microfacet {
     use std::f32;
 
     use raytracing::geometry::{Complex, Vec2, Vec3};
+    use tracing::warn;
 
     use crate::{materials::{BsdfSample, fresnel_complex, fresnel_dielectric}, sample};
 
@@ -545,9 +561,12 @@ mod microfacet {
         let wm = sample_wm(wo, alpha_x, alpha_y);
         let wi = Vec3::reflect(wo, wm);
         
-        // pbrt notes that this leads to energy loss
-        if wm.z() * wi.z() < 0.0 {
-            return BsdfSample { wi, bsdf: Vec3::zero(), pdf: 1.0 };
+        // this represents the case that the ray bounces deeper into
+        // the microsurface; we discard these samples because we only
+        // account for first-order scattering events in microfacet model
+        // pbrt notes that this leads to energy loss and is thus not fully physical
+        if wo.z() * wi.z() < 0.0 {
+            return BsdfSample { wi, bsdf: Vec3::zero(), pdf: 1.0, specular: false };
         }
 
         let pdf = torrance_sparrow_refl_pdf(
@@ -569,7 +588,8 @@ mod microfacet {
         BsdfSample { 
             wi, 
             bsdf, 
-            pdf 
+            pdf,
+            specular: false
         }
     }
 
@@ -602,8 +622,10 @@ mod microfacet {
             return 0.0;
         }
 
-        // why is this correct? it "discards backfacing microfacets"
-        // seems like it should be a little trickier than this
+        // wm is always in the upper hemisphere
+        // if wi is in the upper hemisphere, it's backfacing if wm ⋅ wi < 0
+        // if it's in the lower hemisphere, then it's backfacing if -wm ⋅ wi < 0
+        // this condition discards backfacing microfacets, because we would never sample them
         if Vec3::dot(wm, wi) * wi.z() < 0.0 || Vec3::dot(wm, wo) * wo.z() < 0.0 {
             return 0.0;
         }
@@ -655,6 +677,11 @@ mod microfacet {
             return Vec3::zero();
         }
 
+        // also need to discard backfacing microfacets here
+        if Vec3::dot(wm, wi) * wi.z() < 0.0 || Vec3::dot(wm, wo) * wo.z() < 0.0 {
+            return Vec3::zero();
+        }
+
         // we use absolute value and eta_wm to avoid fresnel_dielectric flipping the interface again
         #[allow(non_snake_case, reason = "physics convention")]
         let F = fresnel_dielectric(
@@ -697,8 +724,10 @@ mod microfacet {
 
         let wi = if sample::sample_uniform() < R {
             let wi = Vec3::reflect(wo, wm);
+
+            // see analogous comment in `torrance_sparrow_refl_sample`
             if wo.z() * wi.z() < 0.0 {
-                return BsdfSample { wi, bsdf: Vec3::zero(), pdf: 1.0 }
+                return BsdfSample { wi, bsdf: Vec3::zero(), pdf: 1.0, specular: false, }
             }
 
             wi
@@ -711,11 +740,22 @@ mod microfacet {
             );
 
             let Some(wi) = wi else {
-                return BsdfSample { wi: Vec3(0.0, 0.0, 1.0), bsdf: Vec3::zero(), pdf: 1.0 }
+                warn!(
+                    "encountered total internal reflection after sampling \
+                    refraction direction, this should not be possible as \
+                    fresnel_dielectric should return 1.0"
+                );
+
+                return BsdfSample { wi: Vec3(0.0, 0.0, 1.0), bsdf: Vec3::zero(), pdf: 1.0, specular: false, }
             };
 
             if wo.z() * wi.z() > 0.0 || wi.z() == 0.0 {
-                return BsdfSample { wi, bsdf: Vec3::zero(), pdf: 1.0 }
+                warn!(
+                    "weird floating point things happened; wi doesn't represent \
+                    a valid transmission direction"
+                );
+
+                return BsdfSample { wi, bsdf: Vec3::zero(), pdf: 1.0, specular: false, }
             }
 
             wi
@@ -741,6 +781,7 @@ mod microfacet {
             wi,
             bsdf,
             pdf,
+            specular: false,
         }
     }
 }
@@ -749,7 +790,17 @@ mod microfacet {
 mod gltf_pbr {
     // the gltf metallic-roughness material essentially 
     // describes a parametetric mix material between diffuse and 
-    // specular components. 
+    // specular components.
+
+    // note: the spec notes that their sample implementation 
+    // violates energy conservation and reciprocity; thus using it
+    // is actually in violation of GLTF spec (since it requires offline
+    // physically-based renderers, which this project certainly is, to
+    // have a physically plausible bsdf). however, they also leave
+    // what the correct behavior is totally unspecified so...
+
+    // roughness near 0 is treated as a special case to avoid
+    // numerical problems 
     use std::f32;
 
     use raytracing::geometry::Vec3;
@@ -799,6 +850,20 @@ mod gltf_pbr {
         metallic: f32,
         alpha: f32,
     ) -> f32 {
+        if alpha < 1.0e-4 {
+            // the material is effectively smooth, so the specular component is a delta
+            // thus, we only need to consider the diffuse component, since it should be impossible
+            // to call pdf with exactly the mirror direction of wo
+            // (sample_f needs to ensure it handles effectively smooth case also, or else return wrong pdf)
+            let dielectric_fresnel_mix = fresnel_mix_factor(1.5, wo.z());
+            let specular_prob = metallic + (1.0 - metallic) * dielectric_fresnel_mix;
+            let diffuse_prob = 1.0 - specular_prob;
+
+            let diffuse_pdf = wi.z();
+
+            return diffuse_prob * diffuse_pdf;
+        }
+
         let wm = if wo + wi == Vec3::zero() {
             return 0.0;
         } else {
@@ -827,6 +892,13 @@ mod gltf_pbr {
         metallic: f32,
         alpha: f32,
     ) -> Vec3 {
+        if alpha < 1.0e-4 {
+            // effectively smooth case; see comment in `gltf_pbr::pdf`
+            let dielectric_fresnel_mix = fresnel_mix_factor(1.5, wo.z());
+            let diffuse_factor = (1.0 - metallic) * (1.0 - dielectric_fresnel_mix);
+            return diffuse_factor * base_color * f32::consts::FRAC_1_PI;
+        }
+
         let c_diff = metallic * Vec3::zero() + (1.0 - metallic) * base_color;
         let f0 = metallic * base_color + (1.0 - metallic) * Vec3(0.04, 0.04, 0.04);
         
@@ -849,6 +921,34 @@ mod gltf_pbr {
         metallic: f32,
         alpha: f32,
     ) -> BsdfSample {
+        if alpha < 1.0e-4 {
+            // effectively smooth case
+            // we need to stochastically return the specular component or the diffuse component
+            let dielectric_fresnel_mix = fresnel_mix_factor(1.5, wo.z());
+            let specular_prob = metallic + (1.0 - metallic) * dielectric_fresnel_mix;
+            
+            if sample::sample_uniform() < specular_prob {
+                // specular_brdf reduces to 1.0 across all wavelengths in the case that it's fully smooth
+                let metal_component = metallic * conductor_fresnel(base_color, Vec3(1.0, 1.0, 1.0), wo.z());
+                let dielectric_specular_component = (1.0 - metallic) * dielectric_fresnel_mix * Vec3(1.0, 1.0, 1.0);
+                return BsdfSample { 
+                    wi: Vec3(-wo.0, -wo.1, wo.2), 
+                    bsdf: metal_component + dielectric_specular_component, 
+                    pdf: specular_prob, // includes delta
+                    specular: true,
+                }
+            }
+            else {
+                let (wi, wi_pdf) = sample::sample_cosine_hemisphere();
+                return BsdfSample { 
+                    wi, 
+                    bsdf: (1.0 - specular_prob) * base_color * f32::consts::FRAC_1_PI, 
+                    pdf: (1.0 - specular_prob) * wi_pdf, 
+                    specular: false, 
+                }
+            }
+        }
+
         let wm = super::microfacet::sample_wm(wo, alpha, alpha);
         let specular_wi = Vec3::reflect(wo, wm);
         let (diffuse_wi, _) = sample::sample_cosine_hemisphere();
@@ -876,7 +976,7 @@ mod gltf_pbr {
         // invalid sample (higher-order scattering event)
         // don't waste effort computing actual bsdf / pdf
         if wi.z() < 0.0 {
-            return BsdfSample { wi, bsdf: Vec3::zero(), pdf: 1.0 }
+            return BsdfSample { wi, bsdf: Vec3::zero(), pdf: 1.0, specular: false, }
         }
 
         let bsdf = bsdf(
@@ -894,6 +994,6 @@ mod gltf_pbr {
             alpha
         );
 
-        BsdfSample { wi, bsdf, pdf }
+        BsdfSample { wi, bsdf, pdf, specular: false }
     }
 }
