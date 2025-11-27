@@ -43,10 +43,12 @@ impl Vec3 {
     }
 
     pub fn normalize(u: &mut Vec3) {
+        debug_assert!(u.length() != 0.0);
         *u /= u.length()
     }
 
     pub fn normalized(u: Vec3) -> Vec3 {
+        debug_assert!(u.length() != 0.0);
         u / u.length()
     }
 
