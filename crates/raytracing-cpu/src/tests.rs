@@ -23,6 +23,6 @@ fn sanity_tests() {
         };
 
         let output_radiance = crate::render(&scene, raytracer_settings);
-        crate::utils::save_png(&output_radiance, &scene, Path::new(&filename));
+        crate::utils::save_png(&output_radiance, 1000.0, &scene, Path::new(&filename));
     }
 }

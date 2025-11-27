@@ -4,7 +4,7 @@ use std::{fs::File, path::Path};
 
 use raytracing::{geometry::Vec3, scene::Scene};
 
-pub fn save_png(radiance: &[Vec3], scene: &Scene, output_path: &Path) {
+pub fn save_png(radiance: &[Vec3], exposure: f32, scene: &Scene, output_path: &Path) {
     let width = scene.camera.raster_width;
     let height = scene.camera.raster_height;
 
@@ -12,6 +12,8 @@ pub fn save_png(radiance: &[Vec3], scene: &Scene, output_path: &Path) {
     let mut encoder = png::Encoder::new(file, width as u32, height as u32);
     encoder.set_color(png::ColorType::Rgb);
     encoder.set_depth(png::BitDepth::Eight);
+
+    // radiance values we put in are linear; png encoder will do gamma correction for us
     encoder.set_source_gamma(png::ScaledFloat::new(1.0));
 
     let mut writer = encoder
@@ -19,9 +21,9 @@ pub fn save_png(radiance: &[Vec3], scene: &Scene, output_path: &Path) {
         .expect("failed to write PNG header");
 
     let image_data: Vec<u8> = radiance.iter().flat_map(|v| {
-        let r = (v.x() / 1000.0 * 255.0).clamp(0.0, 255.0) as u8;
-        let g = (v.y() / 1000.0 * 255.0).clamp(0.0, 255.0) as u8;
-        let b = (v.z() / 1000.0 * 255.0).clamp(0.0, 255.0) as u8;
+        let r = (v.x() / exposure * 255.0).clamp(0.0, 255.0) as u8;
+        let g = (v.y() / exposure * 255.0).clamp(0.0, 255.0) as u8;
+        let b = (v.z() / exposure * 255.0).clamp(0.0, 255.0) as u8;
         [r, g, b]
     }).collect();
 

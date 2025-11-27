@@ -100,5 +100,12 @@ fn main() {
         cli_args.output.as_ref().unwrap_or(&PathBuf::from("test.png"))
     );
 
-    raytracing_cpu::utils::save_png(&output, &scene, &output_file);
+    let exposure = if raytracer_settings.debug_normals {
+        1.0
+    }
+    else {
+        1000.0
+    };
+
+    raytracing_cpu::utils::save_png(&output, exposure, &scene, &output_file);
 }
