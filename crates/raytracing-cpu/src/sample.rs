@@ -1,9 +1,30 @@
-use std::f32;
+use std::{cell::RefCell, f32};
 
+use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 use raytracing::geometry::{Vec2, Vec3};
 
+// TODO: this should really be replaced with proper "dependency injection" of 
+// sampler, like pbrt
+thread_local! {
+    pub(crate) static RNG: RefCell<rand_chacha::ChaCha8Rng> = RefCell::new(ChaCha8Rng::seed_from_u64(0))
+}
+
+pub fn set_seed(seed: u64) {
+    RNG.with_borrow_mut(|rng| {
+        *rng = ChaCha8Rng::seed_from_u64(seed);
+    })
+}
+
 pub(crate) fn sample_uniform() -> f32 {
-    rand::random_range(0.0 .. 1.0)
+    if cfg!(debug_assertions) {
+        RNG.with_borrow_mut(|rng| {
+            (rng.next_u32() as f64 / u32::MAX as f64) as f32
+        })
+    }
+    else {
+        rand::random_range(0.0 .. 1.0)
+    }
 }
 
 pub(crate) fn sample_uniform2() -> Vec2 {

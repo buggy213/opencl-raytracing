@@ -15,6 +15,7 @@ mod geometry;
 mod lights;
 mod materials;
 mod sample;
+pub use sample::set_seed;
 mod scene;
 mod texture;
 pub mod utils;
@@ -337,7 +338,7 @@ pub fn render(scene: &Scene, raytracer_settings: RaytracerSettings) -> Vec<Vec3>
         raytracer_settings.num_threads == 1
     };
 
-    if single_threaded {
+    let radiance = if single_threaded {
         let mut traversal_cache = TraversalCache::new(&cpu_raytracing_context);
         let full_screen = RenderTile {
             x0: 0,
@@ -427,7 +428,52 @@ pub fn render(scene: &Scene, raytracer_settings: RaytracerSettings) -> Vec<Vec3>
         });
 
         radiance_buffer
+    };
+
+    // TODO: maybe generalize this / make it parameterizable or something
+    // check for NaNs and warn, even in release builds (should be quick)
+    {
+        let mut warns = 0;
+        let mut idx = 0;
+
+        let mut warn = |msg: String| {
+            if warns < 10 {
+                warn!(msg);    
+            }
+            warns += 1
+        };
+
+        for j in 0..scene.camera.raster_height {
+            for i in 0..scene.camera.raster_width {
+                let v = radiance[idx];
+                idx += 1;
+
+                match v.0.classify() {
+                    std::num::FpCategory::Nan => warn(format!("R component of ({i}, {j}) is NaN")),
+                    std::num::FpCategory::Infinite => warn(format!("R component of ({i}, {j}) is infty")),
+                    _ => ()
+                }
+
+                match v.1.classify() {
+                    std::num::FpCategory::Nan => warn(format!("G component of ({i}, {j}) is NaN")),
+                    std::num::FpCategory::Infinite => warn(format!("G component of ({i}, {j}) is infty")),
+                    _ => ()
+                }
+
+                match v.2.classify() {
+                    std::num::FpCategory::Nan => warn(format!("B component of ({i}, {j}) is NaN")),
+                    std::num::FpCategory::Infinite => warn(format!("B component of ({i}, {j}) is infty")),
+                    _ => ()
+                }
+            }
+        }
+
+        if warns != 0 {
+            warn!("encountered {warns} NaN and infty values in radiance buffer")
+        }
     }
+
+    radiance
 }
 
 pub fn render_single_pixel(

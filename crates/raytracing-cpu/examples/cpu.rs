@@ -79,9 +79,10 @@ fn main() {
     };
 
     if let RenderCommand::Pixel { x, y } = render_command {
-        for _ in 0..128 {
-            
+        for i in 0..128 {
+            raytracing_cpu::set_seed(i);
             let pixel_radiance = render_single_pixel(&scene, raytracer_settings, x, y);
+            dbg!(i);
             dbg!(pixel_radiance);
         }
 
