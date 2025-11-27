@@ -160,8 +160,12 @@ fn ray_radiance(
         
         // if we sampled a bsdf value of zero, terminate this ray
         // TODO: use russian roulette termination condition
-        if path_weight == Vec3::zero() {
+        if bsdf_sample.bsdf == Vec3::zero() {
             break;
+        }
+
+        if cfg!(debug_assertions) && bsdf_sample.pdf == 0.0 {
+            warn!("pdf of 0.0 encountered");
         }
 
         let world_dir = o2w.apply_vector(bsdf_sample.wi);

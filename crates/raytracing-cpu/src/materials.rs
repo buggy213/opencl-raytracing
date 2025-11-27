@@ -630,11 +630,10 @@ mod microfacet {
             return 0.0;
         }
         
-        // we use absolute value and eta_wm to avoid fresnel_dielectric flipping the interface again
         #[allow(non_snake_case, reason = "physics convention")]
         let R = fresnel_dielectric(
-            Vec3::dot(wo, wm).abs(), 
-            eta_wm
+            Vec3::dot(wo, wm), 
+            eta
         );
         #[allow(non_snake_case, reason = "physics convention")]
         let T = 1.0 - R;
@@ -682,11 +681,10 @@ mod microfacet {
             return Vec3::zero();
         }
 
-        // we use absolute value and eta_wm to avoid fresnel_dielectric flipping the interface again
         #[allow(non_snake_case, reason = "physics convention")]
         let F = fresnel_dielectric(
-            Vec3::dot(wo, wm).abs(), 
-            eta_wm
+            Vec3::dot(wo, wm), 
+            eta
         );
 
         if reflect {
