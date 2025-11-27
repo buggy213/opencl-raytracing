@@ -1,16 +1,19 @@
 use std::path::{Path, PathBuf};
 
 use clap::Parser;
+
 use raytracing::scene::Scene;
-use raytracing_cpu::{render, RaytracerSettings};
+use raytracing_cpu::{RaytracerSettings, render, render_single_pixel};
 use raytracing::scene::test_scenes;
 
-#[derive(Debug, Parser)]
+#[derive(Debug, clap::Parser)]
 struct CommandLineArguments {
+    #[command(flatten)]
+    input: InputScene,
+
     #[arg(short, long)]
-    input: Option<PathBuf>,
-    #[arg(long)]
-    scene: Option<String>,
+    output: Option<PathBuf>,
+
     #[arg(short = 't', long, default_value_t = 1)]
     num_threads: u32,
     #[arg(short = 'd', long, default_value_t = 1)]
@@ -19,16 +22,38 @@ struct CommandLineArguments {
     spp: u32,
     #[arg(short, long, default_value_t = 1)]
     light_samples: u32,
+
+    #[command(subcommand)]
+    render_command: Option<RenderCommand>
+}
+
+#[derive(Debug, clap::Args)]
+#[group(required = true, multiple = false)]
+struct InputScene {
+    #[arg(long)]
+    scene_path: Option<PathBuf>,
+    #[arg(long)]
+    scene_name: Option<String>,
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum RenderCommand {
+    Full,
+    Normals,
+    Pixel {
+        x: u32,
+        y: u32
+    }
 }
 
 fn main() {
     tracing_subscriber::fmt::init();
 
     let cli_args = CommandLineArguments::parse();
-    let scene = if let Some(filename) = cli_args.input {
+    let scene = if let Some(filename) = cli_args.input.scene_path {
         Scene::from_gltf_file(&filename)
             .expect("failed to load scene")
-    } else if let Some(name) = cli_args.scene {
+    } else if let Some(name) = cli_args.input.scene_name {
         let scene_func = test_scenes::all_test_scenes()
             .iter()
             .find(|s| s.name == name)
@@ -37,10 +62,10 @@ fn main() {
 
         scene_func()
     } else {
-        let default_scene = PathBuf::from("scenes/cbbunny.glb");
-        Scene::from_gltf_file(&default_scene)
-            .expect("failed to load scene")
+        unreachable!("clap should prevent this");
     };
+
+    let render_command = cli_args.render_command.unwrap_or(RenderCommand::Full);
 
     let raytracer_settings = RaytracerSettings {
         max_ray_depth: cli_args.ray_depth,
@@ -50,15 +75,29 @@ fn main() {
 
         num_threads: cli_args.num_threads,
 
-        debug_normals: false,
+        debug_normals: matches!(render_command, RenderCommand::Normals),
     };
 
+    if let RenderCommand::Pixel { x, y } = render_command {
+        for _ in 0..128 {
+            
+            let pixel_radiance = render_single_pixel(&scene, raytracer_settings, x, y);
+            dbg!(pixel_radiance);
+        }
+
+        return;
+    }
+    
     let mut output = render(&scene, raytracer_settings);
     
     if raytracer_settings.debug_normals {
         raytracing_cpu::utils::normals_to_rgb(&mut output);
     }
 
-    let output_path = Path::new("scenes/output/test.png");
-    raytracing_cpu::utils::save_png(&output, &scene, output_path);
+    let output_folder = Path::new("scenes/output");
+    let output_file = output_folder.join(
+        cli_args.output.as_ref().unwrap_or(&PathBuf::from("test.png"))
+    );
+
+    raytracing_cpu::utils::save_png(&output, &scene, &output_file);
 }
