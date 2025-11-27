@@ -73,7 +73,7 @@ pub(crate) fn traverse_bvh(
     let CpuRaytracingContext { 
         scene, 
         acceleration_structures,
-        cpu_textures: _
+        ..
     } = context;
 
     let stack: &mut Vec<TraversalStackEntry> = &mut traversal_cache.stack;

@@ -5,10 +5,17 @@ use crate::{geometry::{Transform, Vec3}, scene::BasicPrimitiveIndex};
 pub enum Light {
     PointLight {
         position: Vec3,
-        intensity: Vec3
+        intensity: Vec3,
+    },
+    DirectionLight {
+        // oriented *towards* direction that radiant energy is flowing
+        direction: Vec3,
+        radiance: Vec3,
     },
     DiffuseAreaLight {
         prim_id: BasicPrimitiveIndex,
+        
+        // uniform directional distribution
         radiance: Vec3,
         transform: Transform,
     }
@@ -18,6 +25,7 @@ impl Light {
     pub fn is_delta_light(&self) -> bool {
         match self {
             Light::PointLight { .. } => true,
+            Light::DirectionLight { .. } => true,
             Light::DiffuseAreaLight { .. } => false,
         }
     }

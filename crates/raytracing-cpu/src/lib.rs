@@ -4,7 +4,7 @@ use accel::{traverse_bvh};
 use lights::{light_radiance, occluded, sample_light};
 use materials::CpuMaterial;
 use ray::Ray;
-use raytracing::{geometry::{Matrix4x4, Vec3}, scene::{Camera, Scene}};
+use raytracing::{geometry::{AABB, Matrix4x4, Vec3}, scene::{Camera, Scene}};
 use tracing::warn;
 
 use crate::{accel::TraversalCache, scene::CpuAccelerationStructures, texture::CpuTextures};
@@ -24,10 +24,22 @@ pub mod utils;
 mod tests;
 
 #[derive(Debug, Clone)]
+pub(crate) struct SceneBounds {
+    bounding_box: AABB,
+    center: Vec3,
+    radius: f32,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct CpuRaytracingContext<'scene> {
     pub(crate) scene: &'scene Scene,
     pub(crate) acceleration_structures: &'scene CpuAccelerationStructures,
     pub(crate) cpu_textures: CpuTextures<'scene>,
+    
+    // scene bounds not calculated for target-independent scene description
+    // since it's easy to calculate it alongside the BVH (? maybe not for gpu backends)
+    // but we need it for directional lights
+    pub(crate) scene_bounds: SceneBounds,
 }
 
 impl<'scene> CpuRaytracingContext<'scene> {
@@ -35,10 +47,21 @@ impl<'scene> CpuRaytracingContext<'scene> {
         scene: &'scene Scene, 
         acceleration_structures: &'scene CpuAccelerationStructures
     ) -> CpuRaytracingContext<'scene> {
+        let root_index = acceleration_structures.root_bvh_index();
+        let root_bounding_box = acceleration_structures.bvhs[root_index].bounds();
+        let root_bounds_center = root_bounding_box.center();
+        let root_bounds_radius = root_bounding_box.radius();
+
         CpuRaytracingContext { 
             scene, 
             acceleration_structures,
-            cpu_textures: CpuTextures::new(scene)
+            cpu_textures: CpuTextures::new(scene),
+
+            scene_bounds: SceneBounds { 
+                bounding_box: root_bounding_box, 
+                center: root_bounds_center, 
+                radius: root_bounds_radius 
+            },
         }
     }
 }
@@ -131,7 +154,7 @@ fn ray_radiance(
                 };
 
                 for _ in 0..light_samples {
-                    let light_sample = sample_light(light, &context.scene, hit.point);
+                    let light_sample = sample_light(context, light, hit.point);
                     let occluded = occluded(context, traversal_cache, light_sample);
                     if !occluded {
                         let wi = w2o.apply_vector(-light_sample.shadow_ray.direction); // shadow ray from light to hit point, we want other way

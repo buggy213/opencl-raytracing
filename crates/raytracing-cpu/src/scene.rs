@@ -1,4 +1,4 @@
-use raytracing::{accel::bvh2::{BVH2Builder, DepthFirstLinearizedBVH}, geometry::Transform, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
+use raytracing::{accel::bvh2::{BVH2Builder, DepthFirstLinearizedBVH}, geometry::{AABB, Transform}, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
 
 // CPU-backend specific acceleration structures
 #[derive(Debug)]

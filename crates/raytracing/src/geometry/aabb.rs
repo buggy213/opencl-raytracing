@@ -24,6 +24,16 @@ macro_rules! from_points {
 }
 
 impl AABB {
+    pub fn center(&self) -> Vec3 {
+        (self.maximum + self.minimum) / 2.0
+    }
+
+    pub fn radius(&self) -> f32 {
+        (self.maximum - self.center()).length()
+    }
+}
+
+impl AABB {
     pub fn new(minimum: Vec3, maximum: Vec3) -> AABB {
         AABB { minimum, maximum }
     }

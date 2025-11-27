@@ -10,8 +10,8 @@ pub(crate) struct LightSample {
 }
 
 pub(crate) fn sample_light(
+    context: &CpuRaytracingContext,
     light: &Light, 
-    scene: &Scene, 
     point: Vec3 // world-space
 ) -> LightSample {
     match light {
@@ -23,7 +23,22 @@ pub(crate) fn sample_light(
                 radiance: *intensity / d2,
                 shadow_ray: Ray { origin: *position, direction: dir / d, debug: false },
                 distance: d,
-                pdf: 1.0 // technically delta
+                pdf: 1.0 // contains delta
+            }
+        },
+        Light::DirectionLight { direction, radiance } => {
+            let scene_diameter = context.scene_bounds.radius * 2.0;
+            let light_origin = point - (*direction) * scene_diameter;
+            
+            LightSample {
+                radiance: *radiance,
+                shadow_ray: Ray {
+                    origin: light_origin,
+                    direction: direction.unit(),
+                    debug: false
+                },
+                distance: scene_diameter,
+                pdf: 1.0, // contains delta
             }
         },
         Light::DiffuseAreaLight { prim_id, radiance, transform } => {
@@ -31,7 +46,7 @@ pub(crate) fn sample_light(
             // for now, we do this in a pretty naive way
             // TODO: pbrt appears to have every triangle be a separate emitter
             // this might make implementing light sampling easier but still seems overkill? 
-            let emitter = &scene.get_basic_primitive(*prim_id).shape;
+            let emitter = &context.scene.get_basic_primitive(*prim_id).shape;
             let emitter = match emitter {
                 Shape::TriangleMesh(mesh) => mesh,
                 Shape::Sphere { .. } => todo!(),
@@ -99,8 +114,10 @@ pub(crate) fn sample_light(
 
 pub(crate) fn light_radiance(light: &Light, _hit_point: Vec3) -> Vec3 {
     match light {
-        Light::PointLight { .. } => {
-            Vec3::zero() // delta lights cannot be intersected
+        Light::PointLight { .. }
+        | Light::DirectionLight { .. } => {
+            // delta lights cannot be intersected
+            Vec3::zero() 
         },
         Light::DiffuseAreaLight { radiance, .. } => {
             *radiance
