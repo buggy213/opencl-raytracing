@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use clap::Parser;
 
-use raytracing::scene::Scene;
+use raytracing::scene;
 use raytracing_cpu::{RaytracerSettings, render, render_single_pixel};
 use raytracing::scene::test_scenes;
 
@@ -51,7 +51,7 @@ fn main() {
 
     let cli_args = CommandLineArguments::parse();
     let scene = if let Some(filename) = cli_args.input.scene_path {
-        Scene::from_gltf_file(&filename)
+        scene::scene_from_gltf_file(&filename)
             .expect("failed to load scene")
     } else if let Some(name) = cli_args.input.scene_name {
         let scene_func = test_scenes::all_test_scenes()

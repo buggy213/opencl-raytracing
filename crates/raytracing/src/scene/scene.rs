@@ -1,8 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, ops::Range, path::Path};
-
-use tracing::warn;
-
-use crate::{geometry::{Matrix4x4, Mesh, Shape, Transform, Vec3, Vec4}, lights::Light, materials::{FilterMode, Image, ImageId, Material, Texture, TextureId, TextureSampler, WrapMode}, scene::primitive::{AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex, MaterialIndex, Primitive, PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex}};
+use crate::{geometry::{Shape, Transform, Vec3, Vec4}, lights::Light, materials::{Image, Material, Texture, TextureId}, scene::primitive::{AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex, MaterialIndex, Primitive, PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex}};
 
 use super::camera::Camera;
 
@@ -20,8 +16,6 @@ pub struct Scene {
     pub textures: Vec<Texture>,
     pub images: Vec<Image>,
 }
-
-const HEIGHT: usize = 600;
 
 // Accessors for primitives
 impl From<PrimitiveIndex> for usize {
@@ -164,8 +158,16 @@ impl Scene {
     }
 }
 
-impl Scene {
-    pub fn from_gltf_file(filepath: &Path) -> anyhow::Result<Scene> {
+pub(super) mod gltf {
+    use std::{borrow::Cow, collections::HashMap, ops::Range, path::Path};
+
+    use tracing::warn;
+
+    use crate::{geometry::{Matrix4x4, Mesh, Shape, Transform, Vec3, Vec4}, lights::Light, materials::{FilterMode, Image, ImageId, Material, Texture, TextureId, TextureSampler, WrapMode}, scene::{Camera, Scene, primitive::{AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex, Primitive, PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex}}};
+
+    const HEIGHT: usize = 600;
+
+    pub fn scene_from_gltf_file(filepath: &Path) -> anyhow::Result<Scene> {
         let (document, buffers, image_data) = gltf::import(filepath)?;
         let scene_gltf = document.default_scene().unwrap();
         let mut camera: Option<Camera> = None;  
@@ -392,9 +394,11 @@ impl Scene {
                 }
             }
 
-            if node.light().is_some() {
-                let punctual_light = Light::from_gltf_punctual_light(&node);
-                lights.push(punctual_light);
+            if let Some(light) = node.light() {
+                let punctual_light = Light::from_gltf_punctual_light(&node, &light);
+                if let Some(punctual_light) = punctual_light {
+                    lights.push(punctual_light);
+                }
             }
         }
 
@@ -414,6 +418,7 @@ impl Scene {
             images
         })
     }
+
 }
 
 struct SceneBuilder {

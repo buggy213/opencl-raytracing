@@ -81,7 +81,7 @@ struct RaytracerResult {
 }
 
 fn raytrace_scene(path: &Path, settings: RaytracerSettings) -> RaytracerResult {
-    let scene = raytracing::scene::Scene::from_gltf_file(path).expect("failed to load scene");
+    let scene = raytracing::scene::scene_from_gltf_file(path).expect("failed to load scene");
     let output = raytracing_cpu::render(
         &scene, 
         settings

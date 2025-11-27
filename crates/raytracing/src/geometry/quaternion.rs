@@ -2,6 +2,7 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssi
 
 use crate::geometry::{Matrix4x4, Transform, Vec3};
 
+// https://www.3dgep.com/understanding-quaternions
 #[derive(Debug, Clone, Copy)]
 pub struct Quaternion(pub f32, pub Vec3);
 

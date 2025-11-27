@@ -1,4 +1,6 @@
-use crate::{geometry::{Transform, Vec3}, scene::BasicPrimitiveIndex};
+use tracing::warn;
+
+use crate::{geometry::{Quaternion, Transform, Vec3}, scene::BasicPrimitiveIndex};
 
 #[derive(Debug)]
 #[repr(C)]
@@ -10,6 +12,8 @@ pub enum Light {
     DirectionLight {
         // oriented *towards* direction that radiant energy is flowing
         direction: Vec3,
+
+        // irradiance, implicitly multiplied by δ(direction), gives units of radiance
         radiance: Vec3,
     },
     DiffuseAreaLight {
@@ -32,13 +36,43 @@ impl Light {
 }
 
 impl Light {
-    pub fn from_gltf_punctual_light(light: &gltf::Node) -> Light {
-        let light_properties = light.light().unwrap();
-        assert!(matches!(light_properties.kind(), gltf::khr_lights_punctual::Kind::Point)); // only point lights for now...
-        let intensity: Vec3 = <[f32; 3] as Into<Vec3>>::into(light_properties.color()) * light_properties.intensity();
-        let (light_position, _, _) = light.transform().decomposed(); // T * R * S
+    pub fn from_gltf_punctual_light(light_node: &gltf::Node, light: &gltf::khr_lights_punctual::Light) -> Option<Light> {
+        if light.range().is_some() {
+            warn!("`range` property of light not supported");
+        }
 
-        Light::PointLight { position: light_position.into(), intensity }
+        match light.kind() {
+            gltf::khr_lights_punctual::Kind::Directional => {
+                let color: Vec3 = light.color().into();
+                let radiance = color * light.intensity();
+                
+                // from GLTF spec: "untransformed light points down the -Z axis"
+                let (_, rotation, _) = light_node.transform().decomposed();
+                let rotation: Quaternion = Quaternion(rotation[3], Vec3(rotation[0], rotation[1], rotation[2]));
+
+                let direction = rotation.rotate(Vec3(0.0, 0.0, -1.0));
+                
+                Some(Light::DirectionLight { 
+                    direction, 
+                    radiance 
+                })
+            },
+            gltf::khr_lights_punctual::Kind::Point => {
+                let color: Vec3 = light.color().into();
+                let intensity = color * light.intensity();
+                let (position, _, _) = light_node.transform().decomposed();
+
+                Some(Light::PointLight { 
+                    position: position.into(), 
+                    intensity 
+                })
+            },
+            gltf::khr_lights_punctual::Kind::Spot { .. } => {
+                warn!("gltf spot light not implemented");
+                
+                None
+            }
+        }
     }
 
     pub fn from_emissive_geometry(prim_id: BasicPrimitiveIndex, radiance: Vec3, transform: Transform) -> Light {
