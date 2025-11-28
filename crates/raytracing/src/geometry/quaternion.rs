@@ -107,7 +107,7 @@ impl Mul<Quaternion> for Quaternion {
 
     fn mul(self, rhs: Quaternion) -> Self::Output {
         Quaternion(
-            self.0 + rhs.0 - Vec3::dot(self.1, rhs.1),
+            self.0 * rhs.0 - Vec3::dot(self.1, rhs.1),
             self.0 * rhs.1 + rhs.0 * self.1 + Vec3::cross(self.1, rhs.1)
         )
     }
@@ -137,8 +137,9 @@ impl Quaternion {
     }
 
     pub fn normalize(&mut self) {
-        self.0 /= self.norm();
-        self.1 /= self.norm();
+        let norm = self.norm();
+        self.0 /= norm;
+        self.1 /= norm;
     }
 
     pub fn inverse(self) -> Quaternion {
@@ -244,6 +245,7 @@ impl Quaternion {
 }
 
 impl Quaternion {
+    // where x is half-angle encoded unit quaternion
     pub fn rotate(self, x: Vec3) -> Vec3 {
         let conjugation = self * Quaternion(0.0, x) * self.inverse();
         conjugation.pure()
@@ -276,5 +278,214 @@ impl From<Quaternion> for Transform {
             forward: rotation_matrix,
             inverse,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::geometry::Vec3;
+
+    const EPSILON: f32 = 1e-5;
+
+    fn assert_approx_eq(a: f32, b: f32) {
+        assert!((a - b).abs() < EPSILON, "Expected {} ≈ {}, difference: {}", a, b, (a - b).abs());
+    }
+
+    fn assert_vec3_approx_eq(a: Vec3, b: Vec3) {
+        assert_approx_eq(a.x(), b.x());
+        assert_approx_eq(a.y(), b.y());
+        assert_approx_eq(a.z(), b.z());
+    }
+
+    // Helper to create a unit quaternion from axis-angle representation
+    fn quaternion_from_axis_angle(axis: Vec3, angle: f32) -> Quaternion {
+        let axis = axis.unit();
+        let half_angle = angle / 2.0;
+        Quaternion(f32::cos(half_angle), axis * f32::sin(half_angle))
+    }
+
+    #[test]
+    fn test_quaternion_multiplication_basic() {
+        // Test basic quaternion multiplication: (1,0,0,0) * (1,0,0,0) = (1,0,0,0)
+        let q1 = Quaternion(1.0, Vec3(0.0, 0.0, 0.0));
+        let q2 = Quaternion(1.0, Vec3(0.0, 0.0, 0.0));
+        let result = q1 * q2;
+        assert_approx_eq(result.real(), 1.0);
+        assert_vec3_approx_eq(result.pure(), Vec3(0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn test_quaternion_multiplication_identity() {
+        // Test that (w, x, y, z) * (1, 0, 0, 0) = (w, x, y, z)
+        let q = Quaternion(0.5, Vec3(0.3, 0.4, 0.5));
+        let identity = Quaternion(1.0, Vec3(0.0, 0.0, 0.0));
+        let result = q * identity;
+        assert_approx_eq(result.real(), q.real());
+        assert_vec3_approx_eq(result.pure(), q.pure());
+    }
+
+    #[test]
+    fn test_quaternion_norm() {
+        // Test norm calculation
+        let q = Quaternion(3.0, Vec3(4.0, 0.0, 0.0));
+        assert_approx_eq(q.norm(), 5.0);
+        assert_approx_eq(q.norm2(), 25.0);
+    }
+
+    #[test]
+    fn test_quaternion_normalize() {
+        // Test normalization
+        let mut q = Quaternion(3.0, Vec3(4.0, 0.0, 0.0));
+        q.normalize();
+        assert_approx_eq(q.norm(), 1.0);
+        
+        let q2 = Quaternion(3.0, Vec3(4.0, 0.0, 0.0));
+        let normalized = q2.normalized();
+        assert_approx_eq(normalized.norm(), 1.0);
+    }
+
+    #[test]
+    fn test_quaternion_inverse() {
+        // Test inverse: q * q^-1 = 1
+        let q = Quaternion(0.6, Vec3(0.8, 0.0, 0.0));
+        let inv = q.inverse();
+        let product = q * inv;
+        // Should be approximately (1, 0, 0, 0)
+        assert_approx_eq(product.real(), 1.0);
+        assert_approx_eq(product.pure().x(), 0.0);
+        assert_approx_eq(product.pure().y(), 0.0);
+        assert_approx_eq(product.pure().z(), 0.0);
+    }
+
+    #[test]
+    fn test_quaternion_rotate_preserves_length() {
+        // rotating a unit vector should preserve its length
+        let axis = Vec3(1.0, 1.0, 1.0).unit();
+        let angle = std::f32::consts::PI / 4.0;
+        let q = quaternion_from_axis_angle(axis, angle);
+        
+        let test_vectors = vec![
+            Vec3(1.0, 0.0, 0.0),
+            Vec3(0.0, 1.0, 0.0),
+            Vec3(0.0, 0.0, 1.0),
+            Vec3(1.0, 1.0, 1.0).unit(),
+            Vec3(1.0, 2.0, 3.0).unit(),
+        ];
+        
+        for v in test_vectors {
+            let original_length = v.length();
+            let rotated = q.rotate(v);
+            let rotated_length = rotated.length();
+            assert_approx_eq(original_length, rotated_length);
+        }
+    }
+
+    #[test]
+    fn test_quaternion_rotate_90_degrees_x_axis() {
+        // Rotate 90 degrees around x-axis
+        let q = quaternion_from_axis_angle(Vec3(1.0, 0.0, 0.0), std::f32::consts::PI / 2.0);
+        
+        // Rotate y-axis should give z-axis
+        let y_axis = Vec3(0.0, 1.0, 0.0);
+        let rotated = q.rotate(y_axis);
+        assert_vec3_approx_eq(rotated, Vec3(0.0, 0.0, 1.0));
+        
+        // Rotate z-axis should give -y-axis
+        let z_axis = Vec3(0.0, 0.0, 1.0);
+        let rotated = q.rotate(z_axis);
+        assert_vec3_approx_eq(rotated, Vec3(0.0, -1.0, 0.0));
+    }
+
+    #[test]
+    fn test_quaternion_rotate_180_degrees() {
+        // Rotate 180 degrees around y-axis
+        let q = quaternion_from_axis_angle(Vec3(0.0, 1.0, 0.0), std::f32::consts::PI);
+        
+        // Rotate x-axis should give -x-axis
+        let x_axis = Vec3(1.0, 0.0, 0.0);
+        let rotated = q.rotate(x_axis);
+        assert_vec3_approx_eq(rotated, Vec3(-1.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn test_quaternion_rotate_identity() {
+        // Identity rotation (0 degrees) should not change the vector
+        let q = quaternion_from_axis_angle(Vec3(1.0, 0.0, 0.0), 0.0);
+        
+        let v = Vec3(1.0, 2.0, 3.0);
+        let rotated = q.rotate(v);
+        assert_vec3_approx_eq(rotated, v);
+    }
+
+    #[test]
+    fn test_quaternion_rotate_composition() {
+        // Rotating by q1 then q2 should be equivalent to rotating by q2 * q1
+        let axis1 = Vec3(1.0, 0.0, 0.0);
+        let axis2 = Vec3(0.0, 1.0, 0.0);
+        let q1 = quaternion_from_axis_angle(axis1, std::f32::consts::PI / 4.0).normalized();
+        let q2 = quaternion_from_axis_angle(axis2, std::f32::consts::PI / 4.0).normalized();
+        
+        let v = Vec3(1.0, 0.0, 0.0);
+        let rotated1 = q1.rotate(v);
+        let rotated2 = q2.rotate(rotated1);
+        
+        let q_composed = q2 * q1;
+        let rotated_composed = q_composed.rotate(v);
+        
+        assert_vec3_approx_eq(rotated2, rotated_composed);
+    }
+
+    #[test]
+    fn test_quaternion_dot_product() {
+        let q1 = Quaternion(1.0, Vec3(2.0, 3.0, 4.0));
+        let q2 = Quaternion(5.0, Vec3(6.0, 7.0, 8.0));
+        let dot = Quaternion::dot(q1, q2);
+        let expected = 1.0 * 5.0 + 2.0 * 6.0 + 3.0 * 7.0 + 4.0 * 8.0;
+        assert_approx_eq(dot, expected);
+    }
+
+    #[test]
+    fn test_quaternion_arithmetic() {
+        let q1 = Quaternion(1.0, Vec3(2.0, 3.0, 4.0));
+        let q2 = Quaternion(5.0, Vec3(6.0, 7.0, 8.0));
+        
+        // Addition
+        let sum = q1 + q2;
+        assert_approx_eq(sum.real(), 6.0);
+        assert_vec3_approx_eq(sum.pure(), Vec3(8.0, 10.0, 12.0));
+        
+        // Subtraction
+        let diff = q2 - q1;
+        assert_approx_eq(diff.real(), 4.0);
+        assert_vec3_approx_eq(diff.pure(), Vec3(4.0, 4.0, 4.0));
+        
+        // Scalar multiplication
+        let scaled = q1 * 2.0;
+        assert_approx_eq(scaled.real(), 2.0);
+        assert_vec3_approx_eq(scaled.pure(), Vec3(4.0, 6.0, 8.0));
+        
+        // Scalar division
+        let divided = scaled / 2.0;
+        assert_approx_eq(divided.real(), q1.real());
+        assert_vec3_approx_eq(divided.pure(), q1.pure());
+    }
+
+    #[test]
+    fn test_quaternion_negation() {
+        let q = Quaternion(1.0, Vec3(2.0, 3.0, 4.0));
+        let neg = -q;
+        assert_approx_eq(neg.real(), -1.0);
+        assert_vec3_approx_eq(neg.pure(), Vec3(-2.0, -3.0, -4.0));
+    }
+
+    #[test]
+    fn test_quaternion_from_array() {
+        let arr = [1.0, 2.0, 3.0, 4.0];
+        let q: Quaternion = arr.into();
+        assert_approx_eq(q.real(), 1.0);
+        assert_approx_eq(q.pure().x(), 2.0);
+        assert_approx_eq(q.pure().y(), 3.0);
+        assert_approx_eq(q.pure().z(), 4.0);
     }
 }
