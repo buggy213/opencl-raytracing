@@ -128,6 +128,7 @@ message("OPTIX_INCLUDE_DIR = " "${OPTIX_INCLUDE_DIR}")
 # host code
 set(HOST_SOURCE
   test.cpp
+  scene.cu
 )
 
 # device code
@@ -139,6 +140,17 @@ set(DEVICE_SOURCE
 add_library(raytracing_optix SHARED
   ${HOST_SOURCE}
   ${DEVICE_SOURCE}
+)
+
+target_include_directories(raytracing_optix
+  PRIVATE ${OPTIX_INCLUDE_DIR}
+)
+
+# these preprocessor definitions ensure correct visibility of symbols
+# in generated shared library
+target_compile_definitions(raytracing_optix
+  PRIVATE -DSHARED_LIBRARY
+  PRIVATE -DBUILDING_SHARED_LIBRARY
 )
 
 set_target_properties(raytracing_optix PROPERTIES CUDA_ARCHITECTURES "86")

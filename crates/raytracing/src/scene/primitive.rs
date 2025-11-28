@@ -1,7 +1,7 @@
 //! Primitives are the basic unit of rendering, a convention adopted from PBRT
 //! There are three essential types of primitive, mirroring the design of PBRT
 //! 1. BasicPrimitive
-//!     - Contains material, area light, and shape
+//!     - Contains material, (optionally) area light description, and shape
 //! 2. TransformPrimitive
 //!     - Contains index to different primitive, as well as a transformation matrix
 //! 3. AggregatePrimitive
@@ -32,6 +32,9 @@
 //!     - primID is the underlying index for shape included in BasicPrimitive 
 //!     (note that transform primitives are folded away) during construction
 //!     - primID is index into an array of BVHs if that descendant is another AggregatePrimitive
+//! 
+//! # Mapping onto OptiX
+//! - See `scene.rs` within raytracing-optix crate
 
 use crate::geometry::{Transform, Shape};
 
