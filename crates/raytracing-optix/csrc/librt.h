@@ -1,9 +1,13 @@
 #pragma once
 
+#include <optix_types.h>
+
 #include "lib.h"
 
-struct SceneAccessors {
-    
-};
+RT_API void prepareOptixAccelerationStructures(
+    OptixDeviceContext context,
+    void* scene
+);
 
 RT_API void render();
+
