@@ -231,6 +231,14 @@ pub struct CpuBackendSettings {
     pub num_threads: u32 
 }
 
+impl Default for CpuBackendSettings {
+    fn default() -> Self {
+        Self { 
+            num_threads: num_cpus::get() as u32
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 struct RenderTile {
     x0: usize,

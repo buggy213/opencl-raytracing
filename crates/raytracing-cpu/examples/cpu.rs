@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::{num::NonZero, path::{Path, PathBuf}};
 
 use clap::Parser;
 
@@ -14,14 +14,14 @@ struct CommandLineArguments {
     #[arg(short, long)]
     output: Option<PathBuf>,
 
-    #[arg(short = 't', long, default_value_t = 1)]
-    num_threads: u32,
-    #[arg(short = 'd', long, default_value_t = 1)]
-    ray_depth: u32,
-    #[arg(short, long, default_value_t = 1)]
-    spp: u32,
-    #[arg(short, long, default_value_t = 1)]
-    light_samples: u32,
+    #[arg(short = 't', long)]
+    num_threads: Option<u32>,
+    #[arg(short = 'd', long)]
+    ray_depth: Option<u32>,
+    #[arg(short, long)]
+    spp: Option<u32>,
+    #[arg(short, long)]
+    light_samples: Option<u32>,
 
     #[command(subcommand)]
     render_command: Option<RenderCommand>
@@ -66,19 +66,16 @@ fn main() {
     };
 
     let render_command = cli_args.render_command.unwrap_or(RenderCommand::Full);
+    
+    let mut raytracer_settings = RaytracerSettings::default();
+    raytracer_settings.max_ray_depth = cli_args.ray_depth.unwrap_or(raytracer_settings.max_ray_depth);
+    raytracer_settings.light_sample_count = cli_args.ray_depth.unwrap_or(raytracer_settings.light_sample_count);
+    raytracer_settings.samples_per_pixel = cli_args.ray_depth.unwrap_or(raytracer_settings.samples_per_pixel);
+    raytracer_settings.accumulate_bounces = true;
+    raytracer_settings.debug_normals = matches!(render_command, RenderCommand::Normals);
 
-    let raytracer_settings = RaytracerSettings {
-        max_ray_depth: cli_args.ray_depth,
-        light_sample_count: cli_args.light_samples,
-        samples_per_pixel: cli_args.spp,
-        accumulate_bounces: true,
-
-        debug_normals: matches!(render_command, RenderCommand::Normals),
-    };
-
-    let backend_settings = CpuBackendSettings {
-        num_threads: cli_args.num_threads
-    };
+    let mut backend_settings = CpuBackendSettings::default();
+    backend_settings.num_threads = cli_args.num_threads.unwrap_or(backend_settings.num_threads);
 
     if let RenderCommand::Pixel { x, y } = render_command {
         for i in 0..8 {
