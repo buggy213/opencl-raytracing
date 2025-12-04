@@ -2,7 +2,8 @@ use std::{borrow::Cow, path::{Path, PathBuf}};
 
 use bytemuck::NoUninit;
 use raytracing::geometry::Vec3;
-use raytracing_cpu::RaytracerSettings;
+use raytracing::settings::RaytracerSettings;
+use raytracing_cpu::CpuBackendSettings;
 use wgpu::{util::DeviceExt, TextureFormat};
 use winit::dpi::LogicalSize;
 
@@ -80,11 +81,12 @@ struct RaytracerResult {
     raster_size: (u32, u32)
 }
 
-fn raytrace_scene(path: &Path, settings: RaytracerSettings) -> RaytracerResult {
+fn raytrace_scene(path: &Path, settings: RaytracerSettings, backend_settings: CpuBackendSettings) -> RaytracerResult {
     let scene = raytracing::scene::scene_from_gltf_file(path).expect("failed to load scene");
     let output = raytracing_cpu::render(
         &scene, 
-        settings
+        settings,
+        backend_settings
     );
     
     RaytracerResult { 
@@ -621,18 +623,21 @@ impl RenderOutputView {
         // If the user requested a render, we need to update the radiance buffer
         // For now, just blocks the entire viewer until raytracing is done
         if self.gui_state.render_scene_requested {
-            let params = RaytracerSettings { 
+            let settings = RaytracerSettings { 
                 max_ray_depth: self.gui_state.max_ray_depth,
                 samples_per_pixel: self.gui_state.spp,
                 light_sample_count: self.gui_state.light_samples,
                 accumulate_bounces: self.gui_state.accumulate_bounces,
 
-                num_threads: self.gui_state.num_threads,
-
                 debug_normals: self.gui_state.debug_normals,
             };
+
+            let backend_settings = CpuBackendSettings {
+                num_threads: self.gui_state.num_threads
+            };
+
             let RaytracerResult { radiance, raster_size } = 
-                raytrace_scene(&self.gui_state.scenes[self.gui_state.selected_scene], params);
+                raytrace_scene(&self.gui_state.scenes[self.gui_state.selected_scene], settings, backend_settings);
             self.render_output = radiance;
 
             self.resize(raster_size.into(), device);

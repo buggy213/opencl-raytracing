@@ -4,7 +4,7 @@ use accel::{traverse_bvh};
 use lights::{light_radiance, occluded, sample_light};
 use materials::CpuMaterial;
 use ray::Ray;
-use raytracing::{geometry::{AABB, Matrix4x4, Vec3}, scene::{Camera, Scene}};
+use raytracing::{geometry::{AABB, Matrix4x4, Vec3}, scene::{Camera, Scene}, settings::RaytracerSettings};
 use tracing::warn;
 
 use crate::{accel::TraversalCache, scene::CpuAccelerationStructures, texture::CpuTextures};
@@ -227,15 +227,8 @@ fn first_hit_normals(
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct RaytracerSettings {
-    pub max_ray_depth: u32,
-    pub light_sample_count: u32,
-    pub samples_per_pixel: u32,
-    pub accumulate_bounces: bool,
-
-    pub num_threads: u32,
-
-    pub debug_normals: bool,
+pub struct CpuBackendSettings {
+    pub num_threads: u32 
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -347,7 +340,11 @@ fn merge_tile(
     }
 }
 
-pub fn render(scene: &Scene, raytracer_settings: RaytracerSettings) -> Vec<Vec3> {
+pub fn render(
+    scene: &Scene, 
+    raytracer_settings: RaytracerSettings, 
+    backend_settings: CpuBackendSettings
+) -> Vec<Vec3> {
     let width = scene.camera.raster_width;
     let height = scene.camera.raster_height;
 
@@ -362,7 +359,7 @@ pub fn render(scene: &Scene, raytracer_settings: RaytracerSettings) -> Vec<Vec3>
         // debug normals is very cheap, so just keep it single threaded
         true
     } else {
-        raytracer_settings.num_threads == 1
+        backend_settings.num_threads == 1
     };
 
     let radiance = if single_threaded {
@@ -426,7 +423,7 @@ pub fn render(scene: &Scene, raytracer_settings: RaytracerSettings) -> Vec<Vec3>
         }
         
         std::thread::scope(|scope| {
-            for _ in 0..raytracer_settings.num_threads {
+            for _ in 0..backend_settings.num_threads {
                 let thread_work_queue_handle = Arc::clone(&work_queue);
                 let thread_result_channel_tx = result_channel_tx.clone();
                 scope.spawn(|| {
@@ -520,12 +517,6 @@ pub fn render_single_pixel(
         (x, y)
     };
 
-    // force single threaded, since it's only 1 pixel
-    let single_threaded_settings = RaytracerSettings {
-        num_threads: 1,
-        ..raytracer_settings
-    };
-
     let cpu_acceleration_structures = scene::prepare_cpu_acceleration_structures(scene);
     let cpu_raytracing_context = CpuRaytracingContext::new(
         &scene,
@@ -544,7 +535,7 @@ pub fn render_single_pixel(
         &cpu_raytracing_context,
         &mut traversal_cache,
         single_pixel,
-        &single_threaded_settings
+        &raytracer_settings
     )[0];
 
     

@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::RaytracerSettings;
+use crate::{CpuBackendSettings, RaytracerSettings};
 
 #[test]
 fn sanity_tests() {
@@ -17,12 +17,14 @@ fn sanity_tests() {
             samples_per_pixel: 32,
             accumulate_bounces: true,
     
-            num_threads: 16,
-    
             debug_normals: false,
         };
 
-        let output_radiance = crate::render(&scene, raytracer_settings);
+        let backend_settings = CpuBackendSettings {
+            num_threads: 16
+        };
+
+        let output_radiance = crate::render(&scene, raytracer_settings, backend_settings);
         crate::utils::save_png(&output_radiance, 1000.0, &scene, Path::new(&filename));
     }
 }

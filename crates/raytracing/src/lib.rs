@@ -4,3 +4,5 @@ pub mod macros;
 pub mod scene;
 pub mod lights;
 pub mod materials;
+
+pub mod settings;

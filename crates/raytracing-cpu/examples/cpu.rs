@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 
 use clap::Parser;
 
-use raytracing::scene;
-use raytracing_cpu::{RaytracerSettings, render, render_single_pixel};
+use raytracing::{scene, settings::RaytracerSettings};
+use raytracing_cpu::{CpuBackendSettings, render, render_single_pixel};
 use raytracing::scene::test_scenes;
 
 #[derive(Debug, clap::Parser)]
@@ -73,9 +73,11 @@ fn main() {
         samples_per_pixel: cli_args.spp,
         accumulate_bounces: true,
 
-        num_threads: cli_args.num_threads,
-
         debug_normals: matches!(render_command, RenderCommand::Normals),
+    };
+
+    let backend_settings = CpuBackendSettings {
+        num_threads: cli_args.num_threads
     };
 
     if let RenderCommand::Pixel { x, y } = render_command {
@@ -89,7 +91,7 @@ fn main() {
         return;
     }
     
-    let mut output = render(&scene, raytracer_settings);
+    let mut output = render(&scene, raytracer_settings, backend_settings);
     
     if raytracer_settings.debug_normals {
         raytracing_cpu::utils::normals_to_rgb(&mut output);
