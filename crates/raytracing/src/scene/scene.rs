@@ -543,7 +543,7 @@ pub mod test_scenes {
     use crate::{
         geometry::{Mesh, Shape, Vec3, Vec3u, Vec4}, 
         materials::Material, 
-        scene::Scene
+        scene::Scene, settings::RaytracerSettings
     };
 
     use super::SceneBuilder;
@@ -819,51 +819,65 @@ pub mod test_scenes {
     }
 
 
-    // TODO: should be a way to plug in RaytracerSettings 
-    // (default sphere scene is meant for normals / bvh / intersection only, it looks black otherwise)
+    fn debug_normals_settings() -> RaytracerSettings {
+        RaytracerSettings {
+            debug_normals: true,
+            ..Default::default() 
+        }
+    }
 
     pub struct TestScene {
         pub name: &'static str,
-        pub func: fn() -> Scene
+        pub scene_func: fn() -> Scene,
+        pub settings_func: fn() -> RaytracerSettings,
     }
 
     pub const fn all_test_scenes() -> &'static [TestScene] {
         &[
             TestScene {
                 name: "sphere",
-                func: sphere_scene
+                scene_func: sphere_scene,
+                settings_func: debug_normals_settings
             },
             TestScene {
                 name: "dielectric",
-                func: dielectric_scene
+                scene_func: dielectric_scene,
+                settings_func: RaytracerSettings::default
             },
             TestScene {
                 name: "metal",
-                func: metal_scene
+                scene_func: metal_scene,
+                settings_func: RaytracerSettings::default
             },
             TestScene {
                 name: "rough_metal",
-                func: rough_metal_scene
+                scene_func: rough_metal_scene,
+                settings_func: RaytracerSettings::default
             },
             TestScene {
                 name: "rough_dielectric",
-                func: rough_dielectric_scene
+                scene_func: rough_dielectric_scene,
+                settings_func: RaytracerSettings::default
             },
             TestScene {
                 name: "gltf_rough_metal",
-                func: gltf_rough_metal
+                scene_func: gltf_rough_metal,
+                settings_func: RaytracerSettings::default
             },
             TestScene {
                 name: "gltf_rough_nonmetal",
-                func: gltf_rough_nonmetal
+                scene_func: gltf_rough_nonmetal,
+                settings_func: RaytracerSettings::default
             },
             TestScene {
                 name: "gltf_smooth_metal",
-                func: gltf_smooth_metal
+                scene_func: gltf_smooth_metal,
+                settings_func: RaytracerSettings::default
             },
             TestScene {
                 name: "gltf_smooth_nonmetal",
-                func: gltf_smooth_nonmetal
+                scene_func: gltf_smooth_nonmetal,
+                settings_func: RaytracerSettings::default
             },
         ]
     }

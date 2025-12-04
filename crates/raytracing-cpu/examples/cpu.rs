@@ -58,7 +58,7 @@ fn main() {
             .iter()
             .find(|s| s.name == name)
             .expect("failed to find scene")
-            .func;
+            .scene_func;
 
         scene_func()
     } else {

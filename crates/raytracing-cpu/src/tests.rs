@@ -1,6 +1,6 @@
-use std::path::Path;
+use std::{num::NonZero, path::Path};
 
-use crate::{CpuBackendSettings, RaytracerSettings};
+use crate::{CpuBackendSettings};
 
 #[test]
 fn sanity_tests() {
@@ -9,16 +9,8 @@ fn sanity_tests() {
 
     for test_scene_descriptor in raytracing::scene::test_scenes::all_test_scenes() {
         let filename = format!("test_output/{}.png", test_scene_descriptor.name);
-        let scene = (test_scene_descriptor.func)();
-
-        let raytracer_settings = RaytracerSettings {
-            max_ray_depth: 8,
-            light_sample_count: 1,
-            samples_per_pixel: 32,
-            accumulate_bounces: true,
-    
-            debug_normals: false,
-        };
+        let scene = (test_scene_descriptor.scene_func)();
+        let raytracer_settings = (test_scene_descriptor.settings_func)();
 
         let backend_settings = CpuBackendSettings {
             num_threads: 16

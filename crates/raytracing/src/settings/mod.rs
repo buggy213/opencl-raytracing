@@ -7,3 +7,16 @@ pub struct RaytracerSettings {
 
     pub debug_normals: bool,
 }
+
+impl Default for RaytracerSettings {
+    fn default() -> Self {
+        Self { 
+            max_ray_depth: 8, 
+            light_sample_count: 4, 
+            samples_per_pixel: 32, 
+            accumulate_bounces: true, 
+            
+            debug_normals: false
+        }
+    }
+}
