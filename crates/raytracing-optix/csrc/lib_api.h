@@ -1,8 +1,9 @@
 #pragma once
 
+#include "shared_lib.h"
 #include <optix_types.h>
 
-#include "lib.h"
+RT_API OptixDeviceContext initOptix();
 
 RT_API void prepareOptixAccelerationStructures(
     OptixDeviceContext context,
@@ -10,4 +11,3 @@ RT_API void prepareOptixAccelerationStructures(
 );
 
 RT_API void render();
-

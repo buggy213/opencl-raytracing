@@ -9,6 +9,7 @@
 use raytracing::{geometry::Vec3, scene::Scene};
 
 mod scene;
+mod optix;
 
 unsafe extern "C" {
     unsafe fn test();

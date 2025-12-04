@@ -1,25 +1,23 @@
 #pragma once
 
-#if defined _WIN32
-    #define DLL_IMPORT __declspec(dllimport)
-    #define DLL_EXPORT __declspec(dllexport)
-    #define DLL_LOCAL
-#else
-    #define DLL_IMPORT __attribute__((visibility("default")))
-    #define DLL_EXPORT __attribute__((visibility("default")))
-    #define DLL_LOCAL __attribute__((visibility("hidden")))
-#endif
+#include <cstdio>
+#include <optix_stubs.h>
+#include <optix_types.h>
 
+inline void cudaAssert(cudaError code, const char *file, int line, bool abort = true) {
+    if (code != cudaSuccess) {
+        fprintf(stderr, "CUDA error %s at %s:%d", cudaGetErrorName(code), file, line);
+        if (abort) {
+            exit(code);
+        }
+    }
+}
+#define CUDA_CHECK(code) { cudaAssert((code), __FILE__, __LINE__); }
 
-#ifdef SHARED_LIBARY
-    #ifdef BUILDING_SHARED_LIBRARY
-        // we are being built as a shared library
-        #define RT_API DLL_EXPORT
-    #else
-        // we are using this symbol from a shared library
-        #define RT_API DLL_IMPORT
-    #endif
-#else
-    // we are being built or using this header as part of a static library, so visibility is unimportant
-    #define RT_API
-#endif
+inline void optixAssert(OptixResult code, const char *file, int line, bool abort = true) {
+    if (code != OPTIX_SUCCESS) {
+        fprintf(stderr, "OptiX error %s at %s:%d", optixGetErrorName(code), file, line);
+    }
+}
+
+#define OPTIX_CHECK(code) { optixAssert((code), __FILE__, __LINE__); }

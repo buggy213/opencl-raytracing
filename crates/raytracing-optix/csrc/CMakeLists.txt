@@ -125,22 +125,27 @@ find_package(OptiX90)
 set(OPTIX_INCLUDE_DIR "${OPTIX90_INCLUDE_DIR}")
 message("OPTIX_INCLUDE_DIR = " "${OPTIX_INCLUDE_DIR}")
 
-# host code
-set(HOST_SOURCE
-  test.cpp
+set(CU_SOURCE
+  lib.cu
   scene.cu
 )
 
-# device code
-set(DEVICE_SOURCE
-  test1.cu
+set(CPP_SOURCE
+  optix_function_table.cpp
+)
+
+set(API_HEADERS
+  lib_api.h
+  shared_lib.h
 )
 
 # create library
 add_library(raytracing_optix SHARED
-  ${HOST_SOURCE}
-  ${DEVICE_SOURCE}
+  ${CU_SOURCE}
+  ${CPP_SOURCE}
 )
+
+set_target_properties(raytracing_optix PROPERTIES PUBLIC_HEADER "${API_HEADERS}")
 
 target_include_directories(raytracing_optix
   PRIVATE ${OPTIX_INCLUDE_DIR}
@@ -153,10 +158,11 @@ target_compile_definitions(raytracing_optix
   PRIVATE -DBUILDING_SHARED_LIBRARY
 )
 
+set_target_properties(raytracing_optix PROPERTIES CUDA_VISIBILITY_PRESET hidden)
+
 set_target_properties(raytracing_optix PROPERTIES CUDA_ARCHITECTURES "86")
 
 install(TARGETS raytracing_optix
-  ARCHIVE DESTINATION "."
   LIBRARY DESTINATION "."
-  RUNTIME DESTINATION "."
+  PUBLIC_HEADER DESTINATION "."
 )
