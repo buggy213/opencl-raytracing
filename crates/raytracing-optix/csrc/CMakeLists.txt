@@ -128,10 +128,7 @@ message("OPTIX_INCLUDE_DIR = " "${OPTIX_INCLUDE_DIR}")
 set(CU_SOURCE
   lib.cu
   scene.cu
-)
-
-set(CPP_SOURCE
-  optix_function_table.cpp
+  optix_function_table.cu
 )
 
 set(API_HEADERS
@@ -142,7 +139,6 @@ set(API_HEADERS
 # create library
 add_library(raytracing_optix SHARED
   ${CU_SOURCE}
-  ${CPP_SOURCE}
 )
 
 set_target_properties(raytracing_optix PROPERTIES PUBLIC_HEADER "${API_HEADERS}")
