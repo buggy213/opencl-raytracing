@@ -12,6 +12,7 @@ inline void cudaAssert(cudaError code, const char *file, int line, bool abort = 
         }
     }
 }
+
 #define CUDA_CHECK(code) { cudaAssert((code), __FILE__, __LINE__); }
 
 inline void optixAssert(OptixResult code, const char *file, int line, bool abort = true) {

@@ -1,5 +1,12 @@
 #pragma once
 
+// only need 'extern "C"' when compiler is treating it as C++
+#ifdef __cplusplus
+    #define EXTERN_C extern "C"
+#else
+    #define EXTERN_C
+#endif
+
 #if defined _WIN32
     #define DLL_IMPORT __declspec(dllimport)
     #define DLL_EXPORT __declspec(dllexport)
@@ -14,12 +21,12 @@
 #ifdef SHARED_LIBARY
     #ifdef BUILDING_SHARED_LIBRARY
         // we are being built as a shared library
-        #define RT_API DLL_EXPORT
+        #define RT_API EXTERN_C DLL_EXPORT
     #else
         // we are using this symbol from a shared library
-        #define RT_API DLL_IMPORT
+        #define RT_API EXTERN_C DLL_IMPORT
     #endif
 #else
     // we are being built or using this header as part of a static library, so visibility is unimportant
-    #define RT_API
+    #define RT_API EXTERN_C
 #endif

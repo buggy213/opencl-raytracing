@@ -7,8 +7,8 @@
 #include <vector>
 
 // TODO: can probably optimize by using separate streams for every IAS, and adding synchronization between them
-__host__ void makeSphereGAS(
-    OptixDeviceContext context,
+__host__ std::pair<OptixTraversableHandle, CUdeviceptr> makeSphereGAS(
+    OptixDeviceContext ctx,
     const float *center,
     float radius
 ) {
@@ -39,7 +39,7 @@ __host__ void makeSphereGAS(
     sphereBuildInput.radiusBuffers = (CUdeviceptr*)(&d_radius);
 
     OptixAccelBufferSizes bufferSizes;
-    optixAccelComputeMemoryUsage(context, &accelOptions, &buildInput, 1, &bufferSizes);
+    optixAccelComputeMemoryUsage(ctx, &accelOptions, &buildInput, 1, &bufferSizes);
 
     void *d_output;
     void *d_temp;
@@ -51,7 +51,7 @@ __host__ void makeSphereGAS(
 
     OptixTraversableHandle output;
     optixAccelBuild(
-        context,
+        ctx,
         (CUstream)stream,
         &accelOptions,
         &buildInput,
@@ -73,14 +73,17 @@ __host__ void makeSphereGAS(
 
     // we need to return d_output and output together
     // since d_output backs the TraversableHandle
+    return std::make_pair(
+        output, (CUdeviceptr)d_output
+    );
 }
 
-__host__ void makeMeshGAS(
-    OptixDeviceContext context,
-    const float* vertices,
-    size_t verticesLen,
-    const unsigned int* tris,
-    size_t trisLen,
+__host__ std::pair<OptixTraversableHandle, CUdeviceptr> makeMeshGAS(
+    OptixDeviceContext ctx,
+    const float* vertices, /* packed */
+    size_t verticesLen, /* number of float3's */
+    const unsigned int* tris, /* packed */
+    size_t trisLen, /* number of uint3's */
     const float* transform /* 4x4 row-major */
 ) {
     OptixAccelBuildOptions accelOptions;
@@ -122,7 +125,7 @@ __host__ void makeMeshGAS(
     triangleBuildInput.preTransform = (CUdeviceptr)d_transform;
 
     OptixAccelBufferSizes bufferSizes;
-    optixAccelComputeMemoryUsage(context, &accelOptions, &buildInput, 1, &bufferSizes);
+    optixAccelComputeMemoryUsage(ctx, &accelOptions, &buildInput, 1, &bufferSizes);
 
     void *d_output;
     void *d_temp;
@@ -134,7 +137,7 @@ __host__ void makeMeshGAS(
 
     OptixTraversableHandle output;
     optixAccelBuild(
-        context,
+        ctx,
         (CUstream)stream,
         &accelOptions,
         &buildInput,
@@ -157,10 +160,13 @@ __host__ void makeMeshGAS(
 
     // we need to return d_output and output together
     // since d_output backs the TraversableHandle
+    return std::make_pair(
+        output, (CUdeviceptr)d_output
+    );
 }
 
-__host__ void makeIAS(
-    OptixDeviceContext context,
+__host__ std::pair<OptixTraversableHandle, CUdeviceptr> makeIAS(
+    OptixDeviceContext ctx,
     const OptixTraversableHandle* traversableHandles,
     size_t traversableHandlesLen
 ) {
@@ -197,7 +203,7 @@ __host__ void makeIAS(
     instanceBuildInput.numInstances = traversableHandlesLen;
 
     OptixAccelBufferSizes bufferSizes;
-    optixAccelComputeMemoryUsage(context, &accelOptions, &buildInput, 1, &bufferSizes);
+    optixAccelComputeMemoryUsage(ctx, &accelOptions, &buildInput, 1, &bufferSizes);
 
     void *d_output;
     void *d_temp;
@@ -209,7 +215,7 @@ __host__ void makeIAS(
 
     OptixTraversableHandle output;
     optixAccelBuild(
-        context,
+        ctx,
         (CUstream)stream,
         &accelOptions,
         &buildInput,
@@ -233,4 +239,7 @@ __host__ void makeIAS(
 
     // we need to return d_output and output together
     // since d_output backs the TraversableHandle
+    return std::make_pair(
+        output, (CUdeviceptr)d_output
+    );
 }

@@ -11,14 +11,6 @@ use raytracing::{geometry::Vec3, scene::Scene};
 mod scene;
 mod optix;
 
-unsafe extern "C" {
-    unsafe fn test();
-}
-
-pub fn test_rs() {
-    unsafe { test(); }
-}
-
 // TODO: common raytracer settings should be factored out of cpu and gpu backends
 pub fn render(scene: &Scene, /* raytracer_settings: RaytracerSettings */) -> &[Vec3] {
     todo!()

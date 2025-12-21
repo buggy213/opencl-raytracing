@@ -155,6 +155,8 @@ target_compile_definitions(raytracing_optix
 )
 
 set_target_properties(raytracing_optix PROPERTIES CUDA_VISIBILITY_PRESET hidden)
+set_target_properties(raytracing_optix PROPERTIES CXX_VISIBILITY_PRESET hidden)
+set_target_properties(raytracing_optix PROPERTIES C_VISIBILITY_PRESET hidden)
 
 set_target_properties(raytracing_optix PROPERTIES CUDA_ARCHITECTURES "86")
 

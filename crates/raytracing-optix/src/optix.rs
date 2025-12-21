@@ -1,11 +1,22 @@
-#[repr(C)]
-struct OptixDeviceContextInner {
-    _data: (),
-    _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>
+#![allow(non_upper_case_globals)]
+#![allow(non_camel_case_types)]
+#![allow(non_snake_case)]
+#![allow(dead_code)]
+mod detail {
+    include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 
-#[repr(C)]
-pub(crate) struct OptixDeviceContext(*mut OptixDeviceContextInner);
+pub(crate) use detail::{
+    Vec3,
 
-#[repr(C)]
-pub(crate) struct OptixTraversableHandle(usize);
+    OptixTraversableHandle,
+    CUdeviceptr,
+
+    OptixDeviceContext,
+    initOptix,
+    destroyOptix,
+
+    OptixAccelerationStructure,
+    makeSphereAccelerationStructure,
+    makeMeshAccelerationStructure,
+};
