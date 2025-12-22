@@ -1,24 +1,25 @@
 #pragma once
 
+#include "lib_types.h"
 #include "optix_types.h"
 
-std::pair<OptixTraversableHandle, CUdeviceptr> makeSphereGAS(
+OptixAccelerationStructure makeSphereGAS(
     OptixDeviceContext ctx,
-    const float *center,
+    Vec3 center,
     float radius
 );
 
-std::pair<OptixTraversableHandle, CUdeviceptr> makeMeshGAS(
+OptixAccelerationStructure makeMeshGAS(
     OptixDeviceContext ctx,
-    const float* vertices, /* packed */
+    const Vec3* vertices, /* packed */
     size_t verticesLen, /* number of float3's */
-    const unsigned int* tris, /* packed */
-    size_t trisLen, /* number of uint3's */
-    const float* transform /* 4x4 row-major */
+    const Vec3u* tris, /* packed */
+    size_t trisLen /* number of uint3's */
 );
 
-std::pair<OptixTraversableHandle, CUdeviceptr> makeIAS(
+OptixAccelerationStructure makeIAS(
     OptixDeviceContext ctx,
-    const OptixTraversableHandle* traversableHandles,
-    size_t traversableHandlesLen
+    const OptixAccelerationStructure* instances,
+    const Matrix4x4* transforms,
+    size_t len
 );

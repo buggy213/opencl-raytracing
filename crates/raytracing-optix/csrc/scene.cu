@@ -6,10 +6,12 @@
 
 #include <vector>
 
+#include "lib_types.h"
+
 // TODO: can probably optimize by using separate streams for every IAS, and adding synchronization between them
-__host__ std::pair<OptixTraversableHandle, CUdeviceptr> makeSphereGAS(
+__host__ OptixAccelerationStructure makeSphereGAS(
     OptixDeviceContext ctx,
-    const float *center,
+    Vec3 center,
     float radius
 ) {
     OptixAccelBuildOptions accelOptions;
@@ -26,7 +28,7 @@ __host__ std::pair<OptixTraversableHandle, CUdeviceptr> makeSphereGAS(
     void* d_radius;
     cudaMalloc(&d_center, sizeof(float) * 3);
     cudaMalloc(&d_radius, sizeof(float));
-    cudaMemcpy(d_center, center, sizeof(float) * 3, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_center, &center, sizeof(float) * 3, cudaMemcpyHostToDevice);
     cudaMemcpy(d_radius, &radius, sizeof(float), cudaMemcpyHostToDevice);
 
     buildInput.type = OPTIX_BUILD_INPUT_TYPE_SPHERES;
@@ -73,18 +75,18 @@ __host__ std::pair<OptixTraversableHandle, CUdeviceptr> makeSphereGAS(
 
     // we need to return d_output and output together
     // since d_output backs the TraversableHandle
-    return std::make_pair(
-        output, (CUdeviceptr)d_output
-    );
+    return OptixAccelerationStructure {
+        .data = (CUdeviceptr)d_output,
+        .handle = output
+    };
 }
 
-__host__ std::pair<OptixTraversableHandle, CUdeviceptr> makeMeshGAS(
+__host__ OptixAccelerationStructure makeMeshGAS(
     OptixDeviceContext ctx,
-    const float* vertices, /* packed */
+    const Vec3* vertices, /* packed */
     size_t verticesLen, /* number of float3's */
     const unsigned int* tris, /* packed */
-    size_t trisLen, /* number of uint3's */
-    const float* transform /* 4x4 row-major */
+    size_t trisLen /* number of uint3's */
 ) {
     OptixAccelBuildOptions accelOptions;
     OptixBuildInput buildInput;
@@ -98,15 +100,11 @@ __host__ std::pair<OptixTraversableHandle, CUdeviceptr> makeMeshGAS(
 
     void* d_vertices;
     void* d_tris;
-    // we only copy the first 12 elements (since it's assumed transform is affine)
-    void* d_transform;
 
     cudaMalloc(&d_vertices, sizeof(float) * verticesLen * 3);
     cudaMalloc(&d_tris, sizeof(unsigned int) * trisLen * 3);
-    cudaMalloc(&d_transform, sizeof(float) * 12);
     cudaMemcpy(d_vertices, vertices, sizeof(float) * verticesLen * 3, cudaMemcpyHostToDevice);
     cudaMemcpy(d_tris, tris, sizeof(unsigned int) * trisLen * 3, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_transform, transform, sizeof(float) * 12, cudaMemcpyHostToDevice);
 
     buildInput.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
     OptixBuildInputTriangleArray& triangleBuildInput = buildInput.triangleArray;
@@ -122,7 +120,7 @@ __host__ std::pair<OptixTraversableHandle, CUdeviceptr> makeMeshGAS(
     triangleBuildInput.numIndexTriplets = trisLen;
     triangleBuildInput.indexFormat = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
     triangleBuildInput.indexStrideInBytes = sizeof(unsigned int) * 3;
-    triangleBuildInput.preTransform = (CUdeviceptr)d_transform;
+    triangleBuildInput.preTransform = 0;
 
     OptixAccelBufferSizes bufferSizes;
     optixAccelComputeMemoryUsage(ctx, &accelOptions, &buildInput, 1, &bufferSizes);
@@ -155,37 +153,43 @@ __host__ std::pair<OptixTraversableHandle, CUdeviceptr> makeMeshGAS(
     cudaStreamDestroy(stream);
     cudaFree(d_vertices);
     cudaFree(d_tris);
-    cudaFree(d_transform);
     cudaFree(d_temp);
 
     // we need to return d_output and output together
     // since d_output backs the TraversableHandle
-    return std::make_pair(
-        output, (CUdeviceptr)d_output
-    );
+    return OptixAccelerationStructure {
+        .data = (CUdeviceptr)d_output,
+        .handle = output
+    };
 }
 
-__host__ std::pair<OptixTraversableHandle, CUdeviceptr> makeIAS(
+__host__ OptixAccelerationStructure makeIAS(
     OptixDeviceContext ctx,
-    const OptixTraversableHandle* traversableHandles,
-    size_t traversableHandlesLen
+    const OptixAccelerationStructure* instances,
+    const Matrix4x4* transforms,
+    size_t len
 ) {
-    std::vector<OptixInstance> instances;
-    instances.reserve(traversableHandlesLen);
+    std::vector<OptixInstance> instanceBuffer;
+    instanceBuffer.reserve(len);
 
-    for (size_t i = 0; i < traversableHandlesLen; i += 1) {
+    for (size_t i = 0; i < len; i += 1) {
         OptixInstance instance;
         instance.instanceId = 0; /* we don't use this field, even if there is instancing happening */
         instance.visibilityMask = 255;
         instance.sbtOffset = 0;
         instance.flags = OPTIX_INSTANCE_FLAG_NONE;
-        instance.traversableHandle = traversableHandles[i];
-        instances.push_back(instance);
+        instance.traversableHandle = instances[i].handle;
+        memcpy(
+            instance.transform,
+            transforms[i].m,
+            sizeof(float) * 12
+        );
+        instanceBuffer.push_back(instance);
     }
 
     void* d_instances;
-    cudaMalloc(&d_instances, sizeof(OptixInstance) * traversableHandlesLen);
-    cudaMemcpy(d_instances, instances.data(), sizeof(OptixInstance) * traversableHandlesLen, cudaMemcpyHostToDevice);
+    cudaMalloc(&d_instances, sizeof(OptixInstance) * len);
+    cudaMemcpy(d_instances, instanceBuffer.data(), sizeof(OptixInstance) * len, cudaMemcpyHostToDevice);
 
     OptixAccelBuildOptions accelOptions;
     OptixBuildInput buildInput;
@@ -200,7 +204,7 @@ __host__ std::pair<OptixTraversableHandle, CUdeviceptr> makeIAS(
     buildInput.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
     OptixBuildInputInstanceArray& instanceBuildInput = buildInput.instanceArray;
     instanceBuildInput.instances = (CUdeviceptr)d_instances;
-    instanceBuildInput.numInstances = traversableHandlesLen;
+    instanceBuildInput.numInstances = len;
 
     OptixAccelBufferSizes bufferSizes;
     optixAccelComputeMemoryUsage(ctx, &accelOptions, &buildInput, 1, &bufferSizes);
@@ -239,7 +243,8 @@ __host__ std::pair<OptixTraversableHandle, CUdeviceptr> makeIAS(
 
     // we need to return d_output and output together
     // since d_output backs the TraversableHandle
-    return std::make_pair(
-        output, (CUdeviceptr)d_output
-    );
+    return OptixAccelerationStructure {
+        .data = (CUdeviceptr)d_output,
+        .handle = output
+    };
 }

@@ -126,13 +126,14 @@ set(OPTIX_INCLUDE_DIR "${OPTIX90_INCLUDE_DIR}")
 message("OPTIX_INCLUDE_DIR = " "${OPTIX_INCLUDE_DIR}")
 
 set(CU_SOURCE
-  lib.cu
+        lib.cu
   scene.cu
   optix_function_table.cu
 )
 
 set(API_HEADERS
   lib_api.h
+  lib_types.h
   shared_lib.h
 )
 

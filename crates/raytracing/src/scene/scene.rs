@@ -99,6 +99,12 @@ impl<'scene> Iterator for DirectDescendantsIter<'scene> {
     }
 }
 
+impl <'scene> ExactSizeIterator for DirectDescendantsIter<'scene> {
+    fn len(&self) -> usize {
+        self.scene.get_aggregate_primitive(self.aggregate_primitive_index).children.len()
+    }
+}
+
 impl<'scene> Iterator for DescendantsIter<'scene> {
     type Item = (PrimitiveIndex, Transform);
 
@@ -112,6 +118,12 @@ impl<'scene> Iterator for DescendantsIter<'scene> {
         self.index += 1;
 
         Some(result)
+    }
+}
+
+impl <'scene> ExactSizeIterator for DescendantsIter<'scene> {
+    fn len(&self) -> usize {
+        self.scene.get_aggregate_primitive(self.aggregate_primitive_index).children.len()
     }
 }
 

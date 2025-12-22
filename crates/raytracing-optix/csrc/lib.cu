@@ -1,4 +1,4 @@
-#include "lib.h"
+#include "util.h"
 
 #include <array>
 
@@ -24,54 +24,39 @@ RT_API __host__ void destroyOptix(OptixDeviceContext ctx) {
 }
 
 RT_API __host__ OptixAccelerationStructure makeSphereAccelerationStructure(
-    OptixDeviceContext ctx,
-    Vec3 center,
-    float radius
+    const OptixDeviceContext ctx,
+    const Vec3 center,
+    const float radius
 ) {
-    std::array<float, 3> centerArray {center.x, center.y, center.z};
-    auto sphereGAS = makeSphereGAS(ctx, centerArray.data(), radius);
-    return OptixAccelerationStructure {
-        .data = sphereGAS.second,
-        .handle = sphereGAS.first,
-    };
+    return makeSphereGAS(ctx, center, radius);
 }
 
 RT_API __host__ OptixAccelerationStructure makeMeshAccelerationStructure(
     OptixDeviceContext ctx,
-    const float* vertices, /* packed */
+    const struct Vec3* vertices, /* packed */
     size_t verticesLen, /* number of float3's */
-    const unsigned int* tris, /* packed */
-    size_t trisLen, /* number of uint3's */
-    const float* transform /* 4x4 row-major */
+    const struct Vec3u* tris, /* packed */
+    size_t trisLen /* number of uint3's */
 ) {
-    auto meshGAS = makeMeshGAS(
+    return makeMeshGAS(
         ctx,
         vertices,
         verticesLen,
         tris,
-        trisLen,
-        transform
+        trisLen
     );
-
-    return OptixAccelerationStructure {
-        .data = meshGAS.second,
-        .handle = meshGAS.first,
-    };
 }
 
 RT_API __host__ OptixAccelerationStructure makeInstanceAccelerationStructure(
     OptixDeviceContext ctx,
-    const OptixTraversableHandle* traversableHandles,
-    size_t traversableHandlesLen
+    const OptixAccelerationStructure* instances,
+    const struct Matrix4x4* transforms,
+    size_t len
 ) {
-    auto IAS = makeIAS(
+    return makeIAS(
         ctx,
-        traversableHandles,
-        traversableHandlesLen
+        instances,
+        transforms,
+        len
     );
-
-    return OptixAccelerationStructure {
-        .data = IAS.second,
-        .handle = IAS.first
-    };
 }

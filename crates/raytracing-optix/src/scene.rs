@@ -4,45 +4,31 @@
 
 use raytracing::{geometry::{Shape, Transform}, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
 
-use crate::optix::{self, OptixTraversableHandle};
+use crate::optix::{self, OptixAccelerationStructure};
 
 fn make_leaf_geometry_as(
     ctx: optix::OptixDeviceContext, 
-    transform: &Transform,
     shape: &Shape
-) {
+) -> OptixAccelerationStructure {
     match shape {
         Shape::TriangleMesh(mesh) => {
-            let vertices = mesh.vertices.as_ptr();
+            let vertices = mesh.vertices.as_ptr() as *const optix::Vec3;
             let verticesLen = mesh.vertices.len();
 
-            let tris = mesh.tris.as_ptr();
+            let tris = mesh.tris.as_ptr() as *const optix::Vec3u;
             let trisLen = mesh.tris.len();
-
-            // ensure that vertices / tris are in correct format for zero-copy transfer to C++
-            const {
-                assert!(std::mem::size_of::<raytracing::geometry::Vec3>() == 3 * std::mem::size_of::<f32>());
-                assert!(std::mem::align_of::<raytracing::geometry::Vec3>() == std::mem::align_of::<f32>());
-                assert!(std::mem::size_of::<raytracing::geometry::Vec3u>() == 3 * std::mem::size_of::<u32>());
-                assert!(std::mem::align_of::<raytracing::geometry::Vec3u>() == std::mem::align_of::<u32>());
-            }
-
-            let vertices = vertices as *const f32;
-            let tris = tris as *const u32;        
-            let transform = transform.forward.data.as_ptr() as *const f32;
 
             // SAFETY: verticesLen and trisLen are valid lengths for vertices / tris, 
             // and transform is valid pointer to 4x4 row-major matrix of floats
-            let mesh_as = unsafe {
+            unsafe {
                 optix::makeMeshAccelerationStructure(
                     ctx, 
                     vertices, 
                     verticesLen, 
                     tris, 
-                    trisLen, 
-                    transform
+                    trisLen
                 )
-            };
+            }
         },
         Shape::Sphere { center, radius } => {
             let center = optix::Vec3 {
@@ -52,70 +38,79 @@ fn make_leaf_geometry_as(
             };
 
             // SAFETY: makeSphereAccelerationStructure has no real safety requirements
-            let sphere_as = unsafe { 
+            unsafe { 
                 optix::makeSphereAccelerationStructure(ctx, center, *radius) 
-            };
+            }
         },
     }
-    todo!()
+}
+
+fn make_instance_as(
+    ctx: optix::OptixDeviceContext,
+    instances: &[OptixAccelerationStructure],
+    transforms: &[optix::Matrix4x4],
+) -> OptixAccelerationStructure {
+    assert!(instances.len() == transforms.len());
+    
+    // SAFETY: instances and transforms are valid pointers to arrays of OptixAccelerationStructure and Matrix4x4
+    // and instances.len() == transforms.len()
+    unsafe {
+        optix::makeInstanceAccelerationStructure(
+            ctx,
+            instances.as_ptr(),
+            transforms.as_ptr(),
+            instances.len()
+        )
+    }
 }
 
 
 pub(crate) fn prepare_optix_acceleration_structures(
     ctx: optix::OptixDeviceContext,
     scene: &Scene
-) {
-    let mut bvhs: Vec<OptixTraversableHandle> = Vec::new();
-    let mut bvh_transforms: Vec<Transform> = Vec::new();
+) -> OptixAccelerationStructure { 
     fn recursive_helper(
         ctx: optix::OptixDeviceContext,
-        transform: Transform,
-        bvhs: &mut Vec<OptixTraversableHandle>,
-        bvh_transforms: &mut Vec<Transform>,
         scene: &Scene, 
         aggregate_primitive_index: AggregatePrimitiveIndex
-    ) -> usize {
-        let bvh_index = bvhs.len();
-        
+    ) -> OptixAccelerationStructure {
+
         let descendants = scene.descendants_iter(aggregate_primitive_index);
-        for (geom_index, (primitive_index, child_transform)) in descendants.enumerate() {
+        let mut descendant_acceleration_structures: Vec<OptixAccelerationStructure> = Vec::with_capacity(descendants.len());
+        let mut descendant_transforms: Vec<optix::Matrix4x4> = Vec::with_capacity(descendants.len());
+
+        for (primitive_index, child_transform) in descendants {
+            descendant_transforms.push(child_transform.forward.into());
+            
             match scene.get_primitive(primitive_index) {
                 Primitive::Basic(basic) => {
-                    // bvh_builder.add_shape(&basic.shape, &child_transform, geom_index as u32);
-                    
+                    let leaf_gas = make_leaf_geometry_as(ctx, &basic.shape);
+                    descendant_acceleration_structures.push(leaf_gas);
                 }
                 Primitive::Aggregate(_) => {
-                    let aggregate_index = primitive_index.try_into().unwrap();
-                    let sub_bvh_index = recursive_helper(
+                    let aggregate_index = primitive_index.try_into().expect("this should be an aggregate index");
+                    let child_ias = recursive_helper(
                         ctx,
-                        child_transform.compose(transform.clone()),
-                        bvhs, 
-                        bvh_transforms,
-                        scene, 
+                        scene,
                         aggregate_index
                     );
 
-                    // let bounds = bvhs[sub_bvh_index].bounds();
-                    // bvh_builder.add_sub_bvh(bounds, &child_transform, geom_index as u32, sub_bvh_index as u32);
+                    descendant_acceleration_structures.push(child_ias);
                 }
-                Primitive::Transform(_) => unreachable!("descendants iterator should flatten transforms")
+                Primitive::Transform(_) => unreachable!("DescendantsIter should flatten transforms")
             }
         }
 
-        bvhs.push(todo!());
-        bvh_transforms.push(transform.clone());
-
-        bvh_index
+        make_instance_as(
+            ctx, 
+            &descendant_acceleration_structures, 
+            &descendant_transforms
+        )
     }
 
     recursive_helper(
         ctx,
-        Transform::identity(), 
-        &mut bvhs, 
-        &mut bvh_transforms, 
-        scene, 
+        scene,
         scene.root_index()
-    );
-
-    todo!()
+    )
 }
