@@ -1,4 +1,4 @@
-use raytracing::{geometry::{Shape, Vec3}, lights::Light, scene::Scene};
+use raytracing::{geometry::{Shape, Vec3}, lights::Light};
 use crate::{CpuRaytracingContext, accel::TraversalCache, ray::Ray, sample::sample_uniform2, traverse_bvh};
 
 #[derive(Clone, Copy, Debug)]

@@ -2,7 +2,7 @@
 //! that calls specific C++ in order to generate hierarchy of Geometry-AS / Instance-AS for OptiX.
 //! We do it this way to avoid having to make the whole scene description #[repr(C)]
 
-use raytracing::{geometry::{Shape, Transform}, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
+use raytracing::{geometry::Shape, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
 
 use crate::optix::{self, OptixAccelerationStructure};
 
@@ -13,9 +13,11 @@ fn make_leaf_geometry_as(
     match shape {
         Shape::TriangleMesh(mesh) => {
             let vertices = mesh.vertices.as_ptr() as *const optix::Vec3;
+            #[allow(non_snake_case, reason = "match C++ API")]
             let verticesLen = mesh.vertices.len();
 
             let tris = mesh.tris.as_ptr() as *const optix::Vec3u;
+            #[allow(non_snake_case, reason = "match C++ API")]
             let trisLen = mesh.tris.len();
 
             // SAFETY: verticesLen and trisLen are valid lengths for vertices / tris, 

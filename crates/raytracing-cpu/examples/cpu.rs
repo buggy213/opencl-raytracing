@@ -1,4 +1,4 @@
-use std::{num::NonZero, path::{Path, PathBuf}};
+use std::path::{Path, PathBuf};
 
 use clap::Parser;
 
