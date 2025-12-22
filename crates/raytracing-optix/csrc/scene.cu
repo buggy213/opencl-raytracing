@@ -85,7 +85,7 @@ __host__ OptixAccelerationStructure makeMeshGAS(
     OptixDeviceContext ctx,
     const Vec3* vertices, /* packed */
     size_t verticesLen, /* number of float3's */
-    const unsigned int* tris, /* packed */
+    const Vec3u* tris, /* packed */
     size_t trisLen /* number of uint3's */
 ) {
     OptixAccelBuildOptions accelOptions;
@@ -101,10 +101,10 @@ __host__ OptixAccelerationStructure makeMeshGAS(
     void* d_vertices;
     void* d_tris;
 
-    cudaMalloc(&d_vertices, sizeof(float) * verticesLen * 3);
-    cudaMalloc(&d_tris, sizeof(unsigned int) * trisLen * 3);
-    cudaMemcpy(d_vertices, vertices, sizeof(float) * verticesLen * 3, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_tris, tris, sizeof(unsigned int) * trisLen * 3, cudaMemcpyHostToDevice);
+    cudaMalloc(&d_vertices, sizeof(Vec3) * verticesLen);
+    cudaMalloc(&d_tris, sizeof(Vec3u) * trisLen);
+    cudaMemcpy(d_vertices, vertices, sizeof(Vec3) * verticesLen, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_tris, tris, sizeof(Vec3u) * trisLen, cudaMemcpyHostToDevice);
 
     buildInput.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
     OptixBuildInputTriangleArray& triangleBuildInput = buildInput.triangleArray;

@@ -18,7 +18,7 @@
 #endif
 
 
-#ifdef SHARED_LIBARY
+#ifdef SHARED_LIBRARY
     #ifdef BUILDING_SHARED_LIBRARY
         // we are being built as a shared library
         #define RT_API EXTERN_C DLL_EXPORT
