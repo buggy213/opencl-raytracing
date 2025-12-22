@@ -79,7 +79,6 @@ fn generate_ray(camera: &Camera, x: u32, y: u32) -> Ray {
     Ray {
         origin: ray_o,
         direction: ray_d,
-        debug: false
     }
 }
 
@@ -195,7 +194,6 @@ fn ray_radiance(
         let new_ray = Ray {
             origin: hit.point + world_dir * 0.0001,
             direction: world_dir,
-            debug: ray.debug
         };
 
         ray = new_ray;

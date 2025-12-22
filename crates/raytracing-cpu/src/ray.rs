@@ -4,7 +4,6 @@ use raytracing::geometry::{Transform, Vec3};
 pub struct Ray {
     pub origin: Vec3,
     pub direction: Vec3,
-    pub debug: bool,
 }
 
 impl Ray {
@@ -16,7 +15,6 @@ impl Ray {
         Ray {
             origin: transform.apply_point(ray.origin),
             direction: transform.apply_vector(ray.direction),
-            debug: ray.debug
         }
     }
 }

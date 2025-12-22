@@ -21,7 +21,7 @@ pub(crate) fn sample_light(
             let d2 = d * d;
             LightSample {
                 radiance: *intensity / d2,
-                shadow_ray: Ray { origin: *position, direction: dir / d, debug: false },
+                shadow_ray: Ray { origin: *position, direction: dir / d, },
                 distance: d,
                 pdf: 1.0 // contains delta
             }
@@ -35,7 +35,6 @@ pub(crate) fn sample_light(
                 shadow_ray: Ray {
                     origin: light_origin,
                     direction: direction.unit(),
-                    debug: false
                 },
                 distance: scene_diameter,
                 pdf: 1.0, // contains delta
@@ -83,7 +82,7 @@ pub(crate) fn sample_light(
             let p_world = transform.apply_point(p_local);
             let dir_world = point - p_world;
             let d = dir_world.length();
-            let shadow_ray = Ray { origin: p_world, direction: dir_world / d, debug: false };
+            let shadow_ray = Ray { origin: p_world, direction: dir_world / d, };
             
             // no backface emission
             let n0 = emitter.normals[tri.0 as usize];
