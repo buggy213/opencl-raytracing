@@ -7,7 +7,7 @@ use ray::Ray;
 use raytracing::{geometry::{AABB, Matrix4x4, Vec3}, scene::{Camera, Scene}, settings::RaytracerSettings};
 use tracing::warn;
 
-use crate::{accel::TraversalCache, scene::CpuAccelerationStructures, texture::CpuTextures};
+use crate::{accel::TraversalCache, ray::RayDifferentials, scene::CpuAccelerationStructures, texture::CpuTextures};
 
 mod ray;
 mod accel;
@@ -66,9 +66,14 @@ impl<'scene> CpuRaytracingContext<'scene> {
     }
 }
 
-fn generate_ray(camera: &Camera, x: u32, y: u32) -> Ray {
-    let x_disp = 0.0;
-    let y_disp = 0.0;
+fn generate_ray(
+    camera: &Camera, 
+    x: u32, 
+    y: u32,
+    spp: u32,
+) -> (Ray, RayDifferentials) {
+    let x_disp = sample::sample_uniform();
+    let y_disp = sample::sample_uniform();
 
     let raster_loc = Vec3((x as f32) + x_disp, (y as f32) + y_disp, 0.0);
     let camera_space_loc = camera.world_to_raster.apply_inverse_point(raster_loc);
@@ -76,19 +81,46 @@ fn generate_ray(camera: &Camera, x: u32, y: u32) -> Ray {
     let ray_o = camera.camera_position.into();
     let ray_d = Vec3::normalized(camera_space_loc - ray_o);
 
-    Ray {
+    let ray = Ray {
         origin: ray_o,
         direction: ray_d,
-    }
+    };
+
+    let x_raster_loc = Vec3(raster_loc.0 + 1.0, raster_loc.1, raster_loc.2);
+    let y_raster_loc = Vec3(raster_loc.0, raster_loc.1 + 1.0, raster_loc.2);
+    let x_camera_space_loc = camera.world_to_raster.apply_inverse_point(x_raster_loc);
+    let y_camera_space_loc = camera.world_to_raster.apply_inverse_point(y_raster_loc);
+    
+    // we want to scale ray differentials to account for the supersampling that is already done when spp > 1
+    // this makes the "effective" texture footprint smaller, though only up to a point
+    let scale = f32::max(0.125, f32::sqrt(1.0 / spp as f32));
+    let x_direction = {
+        let dir = x_camera_space_loc - ray_o;
+        Vec3::normalized(ray_d + (dir - ray_d) * scale)
+    };
+    let y_direction = {
+        let dir = y_camera_space_loc - ray_o;
+        Vec3::normalized(ray_d + (dir - ray_d) * scale) 
+    };
+
+    let ray_differentials = RayDifferentials {
+        x_origin: ray_o,
+        y_origin: ray_o,
+        x_direction,
+        y_direction
+    };
+
+    (ray, ray_differentials)
 }
 
 fn ray_radiance(
-    ray: Ray, 
+    camera_ray: Ray, 
+    camera_ray_differentials: RayDifferentials,
     context: &CpuRaytracingContext,
     traversal_cache: &mut TraversalCache,
     raytracer_settings: &RaytracerSettings
 ) -> Vec3 {
-    let mut ray = ray;
+    let mut ray = camera_ray;
     let mut depth = 0;
 
     // initial bounce is "specular" (i.e. it needs to sample zero bounce radiance)
@@ -299,19 +331,31 @@ fn render_tile(
             let mut radiance = Vec3(0.0, 0.0, 0.0);
             
             if raytracer_settings.debug_normals {
-                let ray = generate_ray(&context.scene.camera, (tile.x0 + i) as u32, (tile.y0 + j) as u32);
+                let (camera_ray, _) = generate_ray(
+                    &context.scene.camera, 
+                    (tile.x0 + i) as u32, 
+                    (tile.y0 + j) as u32, 
+                    1
+                );
+
                 radiance = first_hit_normals(
-                    ray, 
+                    camera_ray, 
                     context,
                     traversal_cache,
                 );
             }
             else {
                 for _ in 0..raytracer_settings.samples_per_pixel {
-                    let ray = generate_ray(&context.scene.camera, (tile.x0 + i) as u32, (tile.y0 + j) as u32);
+                    let (camera_ray, camera_ray_differentials) = generate_ray(
+                        &context.scene.camera, 
+                        (tile.x0 + i) as u32, 
+                        (tile.y0 + j) as u32,
+                        raytracer_settings.samples_per_pixel,
+                    );
 
                     radiance += ray_radiance(
-                        ray, 
+                        camera_ray,
+                        camera_ray_differentials,
                         context,
                         traversal_cache, 
                         raytracer_settings

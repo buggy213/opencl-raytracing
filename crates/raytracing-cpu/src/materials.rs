@@ -1,9 +1,9 @@
 use std::f32;
 
-use raytracing::{geometry::{Complex, Vec2, Vec3}, materials::Material};
+use raytracing::{geometry::{Complex, Vec2, Vec3}, materials::Material, scene};
 use tracing::warn;
 
-use crate::{sample, texture::CpuTextures};
+use crate::{accel, ray::RayDifferentials, sample, texture::CpuTextures};
 
 #[derive(Debug)]
 pub(crate) struct BsdfSample {
@@ -259,6 +259,114 @@ impl CpuBsdf {
             CpuBsdf::RoughDielectric { .. } => false,
             CpuBsdf::GLTFMetallicRoughness { .. } => false,
         }
+    }
+}
+
+// we use dpdu / dpdv from parametric intersection tests with either:
+// 1. camera ray differentials for primary rays
+// 2. fake camera ray differentials for non-primary rays
+// in order to compute estimates on the texture-space footprint of a single ray
+// so that the appropriate mip-level can be sampled for antialiasing purposes
+// references:
+// - pbrt 4ed 10.1
+// - YKL's "Mipmapping with Bidirectional Techniques" article
+pub(crate) struct MaterialEvalContext {
+    pub(crate) uv: Vec2,
+
+    pub(crate) dudx: f32,
+    pub(crate) dudy: f32,
+    pub(crate) dvdx: f32,
+    pub(crate) dvdy: f32,
+}
+
+impl MaterialEvalContext {
+    // computes d{u,v}/d{x,y} from dp/d{x,y} and dp/d{u,v}
+    // using the chain rule and least-squares
+    fn new(
+        hit_info: &accel::HitInfo,
+        dpdx: Vec3,
+        dpdy: Vec3,
+    ) -> Self {
+        let dpdu = hit_info.dpdu;
+        let dpdv = hit_info.dpdv;
+        
+        let ata00 = Vec3::dot(dpdu, dpdu);
+        let ata11 = Vec3::dot(dpdv, dpdv);
+        let ata01 = Vec3::dot(dpdu, dpdv);
+
+        let det = ata00 * ata11 - ata01 * ata01;
+        let inv_det = 1.0 / det;
+        
+        let atb0x = Vec3::dot(dpdu, dpdx);
+        let atb1x = Vec3::dot(dpdv, dpdx);
+        let atb0y = Vec3::dot(dpdu, dpdy);
+        let atb1y = Vec3::dot(dpdv, dpdy);
+
+        let dudx = inv_det * (ata11 * atb0x - ata01 * atb1x);
+        let dudy = inv_det * (ata00 * atb1x - ata01 * atb0x);
+        let dvdx = inv_det * (ata11 * atb0y - ata01 * atb1y);
+        let dvdy = inv_det * (ata00 * atb1y - ata01 * atb0y);
+
+        // clamp to reasonable values: if d{u,v}/d{x,y} is 0,
+        // it should just revert to point sampling which is always "safe"
+        let clamp = |v: f32| {
+            if f32::is_finite(v) { 
+                f32::clamp(v, -1.0e-8, 1.0e8) 
+            } 
+            else { 
+                0.0 
+            }
+        };
+
+        let dudx = clamp(dudx);
+        let dudy = clamp(dudy);
+        let dvdx = clamp(dvdx);
+        let dvdy = clamp(dvdy);
+
+        MaterialEvalContext { 
+            uv: hit_info.uv, 
+            dudx, 
+            dudy, 
+            dvdx, 
+            dvdy 
+        }
+    }
+
+    pub(crate) fn new_from_ray_differentials(
+        hit_info: &accel::HitInfo,
+        ray_differentials: RayDifferentials,
+    ) -> Self {
+        // hit_info.point + hit_info.normal defines a plane, which we intersect
+        // x and y ray differentials against
+        let n = hit_info.normal;
+        let p = hit_info.point;
+        let rx_o = ray_differentials.x_origin;
+        let rx_d = ray_differentials.x_direction;
+        let ry_o = ray_differentials.y_origin;
+        let ry_d = ray_differentials.y_direction;
+
+        let d = -Vec3::dot(n, p);
+        let tx = -(Vec3::dot(n, rx_o) + d) / Vec3::dot(n, rx_d);
+        let ty = -(Vec3::dot(n, ry_o) + d) / Vec3::dot(n, ry_d);
+        
+        let px = rx_o + tx * rx_d;
+        let py = ry_o + ty * ry_d;
+
+        let dpdx = px - hit_info.point;
+        let dpdy = py - hit_info.point;
+
+        MaterialEvalContext::new(hit_info, dpdx, dpdy)
+    }
+
+    pub(crate) fn new_from_camera(
+        hit_info: &accel::HitInfo,
+        camera: &scene::Camera,
+        spp: u32,
+    ) -> Self {
+        let dpdx = todo!();
+        let dpdy = todo!();
+        
+        MaterialEvalContext::new(hit_info, dpdx, dpdy)
     }
 }
 

@@ -17,6 +17,9 @@ pub(crate) struct HitInfo {
     pub(crate) normal: Vec3,
     // TODO: add tangent vector
 
+    pub(crate) dpdu: Vec3,
+    pub(crate) dpdv: Vec3,
+
     pub(crate) material_idx: u32,
     pub(crate) light_idx: Option<u32>,
 }
@@ -156,11 +159,17 @@ pub(crate) fn traverse_bvh(
                             let global_point = local_to_root_transform.apply_point(intersect_result.point);
                             let global_normal = local_to_root_transform.apply_normal(intersect_result.normal).unit();
 
+                            let global_dpdu = local_to_root_transform.apply_vector(intersect_result.dpdu);
+                            let global_dpdv = local_to_root_transform.apply_vector(intersect_result.dpdv);
+
                             hit_info = Some(HitInfo { 
                                 t: global_t, 
                                 uv: intersect_result.uv, // TODO: uvs 
                                 point: global_point, 
                                 normal: global_normal, 
+                                dpdu: global_dpdu,
+                                dpdv: global_dpdv,
+
                                 material_idx: basic_primitive.material, 
                                 light_idx: basic_primitive.area_light 
                             });

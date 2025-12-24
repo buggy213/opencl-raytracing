@@ -41,8 +41,10 @@ pub(crate) struct IntersectResult {
     pub(crate) uv: Vec2,
     pub(crate) point: Vec3,
     pub(crate) normal: Vec3,
-    
     // TODO: add tangent vector
+
+    pub(crate) dpdu: Vec3,
+    pub(crate) dpdv: Vec3,
 }
 
 pub(crate) fn intersect_shape(
@@ -75,12 +77,17 @@ pub(crate) fn intersect_shape(
 
     let w_point = o2w_transform.apply_point(o_intersection_result.point);
     let w_normal = o2w_transform.apply_normal(o_intersection_result.normal).unit();
+    let w_dpdu = o2w_transform.apply_vector(o_intersection_result.dpdu);
+    let w_dpdv = o2w_transform.apply_vector(o_intersection_result.dpdv);
 
     let w_intersection_result = IntersectResult {
         t: o_intersection_result.t,
         uv: o_intersection_result.uv,
         point: w_point,
         normal: w_normal,
+
+        dpdu: w_dpdu,
+        dpdv: w_dpdv
     };
 
     Some(w_intersection_result)
@@ -136,14 +143,31 @@ fn ray_sphere_intersect(
     let theta = f32::acos(r_cos_theta / radius);
     let r_sin_theta_cos_phi = point.x();
     let cos_phi = r_sin_theta_cos_phi / (radius * f32::sin(theta));
+    let r_sin_theta_sin_phi = point.y();
+    let sin_phi = r_sin_theta_sin_phi / (radius * f32::sin(theta));
+
     let phi = if point.y() > 0.0 {
         f32::acos(cos_phi)
     } else {
         2.0 * f32::consts::PI - f32::acos(cos_phi)
     };
+    
     let uv = Vec2(
         phi / (2.0 * f32::consts::PI),
         theta / f32::consts::PI 
+    );
+
+    let dpdu = Vec3(
+        -2.0 * f32::consts::PI * point.y(),
+        2.0 * f32::consts::PI * point.x(),
+        0.0
+    );
+
+    let sin_theta = f32::sin(theta);
+    let dpdv = f32::consts::PI * Vec3(
+        point.z() * cos_phi,
+        point.z() * sin_phi,
+        -radius * sin_theta
     );
 
     let result = IntersectResult {
@@ -151,6 +175,9 @@ fn ray_sphere_intersect(
         uv,
         point,
         normal: (point - center) / radius,
+
+        dpdu,
+        dpdv,
     };
     
     Some(result)
@@ -170,25 +197,51 @@ fn ray_mesh_intersect(
     let n1 = mesh.normals[i1 as usize];
     let n2 = mesh.normals[i2 as usize];
 
-    
     let (t, u, v) = ray_triangle_intersect(p0, p1, p2, o_ray, t_min, t_max)?;
 
     let w = 1.0 - u - v;
     let n = Vec3::normalized(w * n0 + u * n1 + v * n2);
-    let uv = if mesh.uvs.is_empty() {
-        Vec2::zero()    
-    } else {
-        let uv0 = mesh.uvs[i0 as usize];
-        let uv1 = mesh.uvs[i1 as usize];
-        let uv2 = mesh.uvs[i2 as usize];
-        w * uv0 + u * uv1 + v * uv2
+    let (uv, dpdu, dpdv) = {
+        let (uv0, uv1, uv2) = if mesh.uvs.is_empty() {
+            // if uvs are not provided, then using these values as uv coords 
+            // is fine since it won't be used to access textures
+            (Vec2(0.0, 0.0), Vec2(1.0, 0.0), Vec2(0.0, 1.0))
+        } else {
+            (mesh.uvs[i0 as usize], mesh.uvs[i1 as usize], mesh.uvs[i2 as usize])
+        };
+
+        let uv = w * uv0 + u * uv1 + v * uv2;
+        
+        // see pbrt 4ed equation 6.7 and surrounding text
+        let duv02 = uv0 - uv2;
+        let duv12 = uv1 - uv2;
+        let dp02 = p0 - p2;
+        let dp12 = p1 - p2;
+        let determinant = duv02.u() * duv12.v() - duv02.v() - duv12.u();
+
+        let degenerate_uv = f32::abs(determinant) < 1.0e-9;
+        
+        if degenerate_uv {
+            todo!("handle this case")
+        }
+        else {
+            let inv_det = 1.0 / determinant;
+
+            let dpdu = inv_det * (duv12.v() * dp02 - duv02.v() * dp12);
+            let dpdv = inv_det * (duv02.u() * dp12 - duv12.u() * dp02);
+
+            (uv, dpdu, dpdv)
+        }
     };
     
     Some(IntersectResult {
         t,
         uv,
         point: o_ray.at(t),
-        normal: n
+        normal: n,
+
+        dpdu,
+        dpdv,
     })
 }
 
