@@ -78,10 +78,9 @@ fn main() {
     backend_settings.num_threads = cli_args.num_threads.unwrap_or(backend_settings.num_threads);
 
     if let RenderCommand::Pixel { x, y } = render_command {
-        for i in 0..8 {
+        for i in 0..1 {
             raytracing_cpu::set_seed(i);
             let pixel_radiance = render_single_pixel(&scene, raytracer_settings, x, y);
-            dbg!(i);
             dbg!(pixel_radiance);
         }
 

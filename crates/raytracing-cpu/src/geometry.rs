@@ -6,7 +6,7 @@ use crate::ray::Ray;
 
 // from a *normalized* z, produce some x and y s.t. {x,y,z} is a valid right-handed coordinate system
 pub(crate) fn make_orthonormal_basis(z: Vec3) -> (Vec3, Vec3) {
-    let a = if z.2 < 0.8 {
+    let a = if f32::abs(z.2) < 0.8 {
         Vec3(0.0, 0.0, 1.0)
     }
     else {
