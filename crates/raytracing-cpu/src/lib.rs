@@ -161,11 +161,11 @@ fn ray_radiance(
 
         let material = &context.scene.materials[hit.material_idx as usize];
         let bsdf = material.get_bsdf(hit.uv, &context.cpu_textures);
-        let w2o = {
+        let o2w = {
             let (x, y) = geometry::make_orthonormal_basis(hit.normal);
             Matrix4x4::create_from_basis(x, y, hit.normal)
         };
-        let o2w = w2o.transposed();
+        let w2o = o2w.transposed();
         let wo = w2o.apply_vector(-ray.direction);
 
         depth += 1;
