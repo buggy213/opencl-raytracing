@@ -69,8 +69,8 @@ fn main() {
     
     let mut raytracer_settings = RaytracerSettings::default();
     raytracer_settings.max_ray_depth = cli_args.ray_depth.unwrap_or(raytracer_settings.max_ray_depth);
-    raytracer_settings.light_sample_count = cli_args.ray_depth.unwrap_or(raytracer_settings.light_sample_count);
-    raytracer_settings.samples_per_pixel = cli_args.ray_depth.unwrap_or(raytracer_settings.samples_per_pixel);
+    raytracer_settings.light_sample_count = cli_args.light_samples.unwrap_or(raytracer_settings.light_sample_count);
+    raytracer_settings.samples_per_pixel = cli_args.spp.unwrap_or(raytracer_settings.samples_per_pixel);
     raytracer_settings.accumulate_bounces = true;
     raytracer_settings.debug_normals = matches!(render_command, RenderCommand::Normals);
 

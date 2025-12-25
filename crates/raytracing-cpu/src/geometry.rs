@@ -4,6 +4,31 @@ use raytracing::geometry::{AABB, Mesh, Shape, Transform, Vec2, Vec3, Vec3u};
 
 use crate::ray::Ray;
 
+// from a *normalized* z, produce some x and y s.t. {x,y,z} is a valid right-handed coordinate system
+pub(crate) fn make_orthonormal_basis(z: Vec3) -> (Vec3, Vec3) {
+    let a = if z.2 < 0.8 {
+        Vec3(0.0, 0.0, 1.0)
+    }
+    else {
+        Vec3(0.0, 1.0, 0.0)
+    };
+
+    let x = Vec3::cross(a, z).unit();
+    let y = Vec3::cross(z, x);
+
+    (x, y)
+}
+
+#[test]
+fn test_make_orthonormal_basis() {
+    let z = Vec3(0.262, -0.151, 0.370).unit();
+    let (x, y) = make_orthonormal_basis(z);
+    assert!(f32::abs(1.0 - x.length()) < 1.0e-8);
+    assert!(f32::abs(1.0 - y.length()) < 1.0e-8);
+    let x_cross_y = Vec3::cross(x, y);
+    assert!((z - x_cross_y).length() < 1.0e-6)
+}
+
 // return range of t at which ray intersects an AABB (possibly including negative values of t), 
 // or None if no intersection
 pub(crate) fn intersect_aabb(
@@ -222,7 +247,7 @@ fn ray_mesh_intersect(
         let degenerate_uv = f32::abs(determinant) < 1.0e-9;
         
         if degenerate_uv {
-            todo!("handle this case")
+            (uv, Vec3::zero(), Vec3::zero())
         }
         else {
             let inv_det = 1.0 / determinant;
