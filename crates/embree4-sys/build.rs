@@ -8,9 +8,6 @@ fn main() {
         let embree_lib_dir = embree_dir.join("lib");
         println!("cargo::rerun-if-env-changed=EMBREE_DIR");
 
-        // pass lib folder which is being linked against to dependencies
-        println!("cargo::metadata=lib={}", embree_lib_dir.display());
-
         // Tell cargo to tell rustc to link the embree4
         // shared library.
         println!("cargo::rustc-link-search=native={}", embree_lib_dir.display());
@@ -42,6 +39,13 @@ fn main() {
 
             // this makes cargo add OUT_DIR to PATH so that dynamic linker can find it there
             println!("cargo::rustc-link-search=native={}", out_path.display());
+        }
+        else if cfg!(target_os = "linux") {
+            // unfortunately, theres not really a good way to ensure that 
+            // loader will find the correct thing at runtime. I might try to add
+            // RPATH $ORIGIN later, but for now just use LD_LIBRARY_PATH
+
+            // see: https://github.com/rust-lang/cargo/issues/5077#issuecomment-1284482987     
         }
         
         // Tell cargo to invalidate the built crate whenever the wrapper changes
