@@ -91,6 +91,13 @@ pub enum Texture {
         value: Vec4
     },
 
+    // useful for aliasing test scenes
+    // value is (u > 0.5) != (v > 0.5) ? color1 : color2 
+    CheckerTexture {
+        color1: Vec4,
+        color2: Vec4,
+    },
+
     // "Derived" textures
 
     // output = a * b at each point

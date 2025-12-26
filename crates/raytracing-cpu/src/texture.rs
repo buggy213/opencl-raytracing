@@ -84,6 +84,14 @@ impl CpuTextures<'_> {
                 Self::sample_image_texture(image, u, v, *sampler)
             },
             Texture::ConstantTexture { value } => *value,
+            Texture::CheckerTexture { color1, color2 } => {
+                if (u > 0.5) != (v > 0.5) {
+                    *color1
+                }
+                else {
+                    *color2
+                }
+            }
             Texture::ScaleTexture { a, b } => {
                 let a_val = self.sample(*a, u, v);
                 let b_val = self.sample(*b, u, v);
