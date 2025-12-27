@@ -30,6 +30,21 @@ pub fn save_png(radiance: &[Vec3], exposure: f32, scene: &Scene, output_path: &P
     writer.write_image_data(&image_data).expect("failed to write PNG data");
 }
 
+pub fn save_openexr(radiance: &[Vec3], scene: &Scene, output_path: &Path) {
+    let width = scene.camera.raster_width;
+    let height = scene.camera.raster_height;
+
+    exr::prelude::write_rgb_file(
+        output_path, 
+        width, 
+        height, 
+        |x, y| {
+            let rad_at_xy = radiance[y * width + x];
+            (rad_at_xy.0, rad_at_xy.1, rad_at_xy.2)
+        }
+    ).expect("writing exr failed");
+}
+
 pub fn normals_to_rgb(normals: &mut [Vec3]) {
     for normal in normals {
         *normal += Vec3(1.0, 1.0, 1.0);

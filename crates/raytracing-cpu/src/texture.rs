@@ -85,6 +85,9 @@ impl CpuTextures<'_> {
             },
             Texture::ConstantTexture { value } => *value,
             Texture::CheckerTexture { color1, color2 } => {
+                // "repeat" texture wrapping is natural for checkered textures
+                let u = u - f32::floor(u);
+                let v = v - f32::floor(v);
                 if (u > 0.5) != (v > 0.5) {
                     *color1
                 }

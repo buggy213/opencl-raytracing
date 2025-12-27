@@ -1086,7 +1086,13 @@ pub mod test_scenes {
             TestScene {
                 name: "checkered_plane",
                 scene_func: checkered_plane_scene,
-                settings_func: RaytracerSettings::default
+                // deliberately only 1 spp to exhibit aliasing
+                settings_func: || { 
+                    RaytracerSettings { 
+                        samples_per_pixel: 1,
+                        ..Default::default()
+                    } 
+                }
             },
             TestScene {
                 name: "dielectric",
