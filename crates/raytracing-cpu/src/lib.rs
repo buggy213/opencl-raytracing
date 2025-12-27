@@ -40,6 +40,9 @@ pub(crate) struct CpuRaytracingContext<'scene> {
     // since it's easy to calculate it alongside the BVH (? maybe not for gpu backends)
     // but we need it for directional lights
     pub(crate) scene_bounds: SceneBounds,
+
+    // maybe this should be calculated as part of target-independent scene description...
+    pub(crate) min_differentials: RayDifferentials,
 }
 
 impl<'scene> CpuRaytracingContext<'scene> {
@@ -52,6 +55,8 @@ impl<'scene> CpuRaytracingContext<'scene> {
         let root_bounds_center = root_bounding_box.center();
         let root_bounds_radius = root_bounding_box.radius();
 
+        let min_differentials = minimum_differentials(&scene.camera);
+
         CpuRaytracingContext { 
             scene, 
             acceleration_structures,
@@ -62,7 +67,44 @@ impl<'scene> CpuRaytracingContext<'scene> {
                 center: root_bounds_center, 
                 radius: root_bounds_radius 
             },
+
+            min_differentials
         }
+    }
+}
+
+// finds the minimum ray differentials across all pixels for a given camera
+// for pinhole perspective camera + orthographic camera, can actually get an analytic result
+// once we support realistic cameras, this is no longer sufficient
+fn minimum_differentials(camera: &Camera) -> RayDifferentials {
+    match camera.camera_type {
+        raytracing::scene::CameraType::Orthographic { .. } => {
+            // for orthographic cameras, all rays are parallel and their origins are equally spaced
+            let dx = camera.world_to_raster.apply_inverse_point(Vec3(1.0, 0.0, 0.0));
+            let dy = camera.world_to_raster.apply_inverse_point(Vec3(0.0, 1.0, 0.0));
+            RayDifferentials { 
+                x_origin: dx, 
+                y_origin: dy, 
+                x_direction: Vec3::zero(), 
+                y_direction: Vec3::zero() 
+            }
+        },
+        raytracing::scene::CameraType::Perspective { .. } => {
+            // for perspective cameras, all rays originate from the pinhole,
+            // and "direction" differential is guaranteed to be constant if primary 
+            // camera rays were unnormalized
+            let center_x = (camera.raster_width as f32) / 2.0;
+            let center_y = (camera.raster_height as f32) / 2.0;
+            let center = camera.world_to_raster.apply_inverse_point(Vec3(center_x, center_y, 0.0));
+            let dx = camera.world_to_raster.apply_inverse_point(Vec3(center_x + 1.0, center_y, 0.0));
+            let dy = camera.world_to_raster.apply_inverse_point(Vec3(center_x, center_y + 1.0, 0.0));
+            RayDifferentials { 
+                x_origin: Vec3::zero(), 
+                y_origin: Vec3::zero(), 
+                x_direction: dx - center, 
+                y_direction: dy - center, 
+            }
+        },
     }
 }
 
@@ -110,15 +152,18 @@ fn generate_ray(
     
     // we want to scale ray differentials to account for the supersampling that is already done when spp > 1
     // this makes the "effective" texture footprint smaller, though only up to a point
+    // note that i don't think this is exactly what pbrt does since pbrt doesn't require 
+    // primary camera rays to be normalized, but it should be similar enough
+    // TODO: do we need primary camera rays to be normalized???
     let scale = f32::max(0.125, f32::sqrt(1.0 / spp as f32));
     let scaled_x = ray.direction + (ray_x.direction - ray.direction) * scale;
     let scaled_y = ray.direction + (ray_y.direction - ray.direction) * scale;
 
     let ray_differentials = RayDifferentials {
-        x_origin: ray_x.origin,
-        y_origin: ray_y.origin,
-        x_direction: scaled_x.unit(),
-        y_direction: scaled_y.unit(),
+        x_origin: ray_x.origin - ray.origin,
+        y_origin: ray_y.origin - ray.origin,
+        x_direction: scaled_x.unit() - ray.direction,
+        y_direction: scaled_y.unit() - ray.direction,
     };
 
     (ray, ray_differentials)

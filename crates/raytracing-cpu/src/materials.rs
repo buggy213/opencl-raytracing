@@ -3,7 +3,7 @@ use std::f32;
 use raytracing::{geometry::{Complex, Vec2, Vec3}, materials::Material, scene};
 use tracing::warn;
 
-use crate::{accel, ray::RayDifferentials, sample, texture::CpuTextures};
+use crate::{accel, ray::{Ray, RayDifferentials}, sample, texture::CpuTextures};
 
 #[derive(Debug)]
 pub(crate) struct BsdfSample {
@@ -333,17 +333,18 @@ impl MaterialEvalContext {
     }
 
     pub(crate) fn new_from_ray_differentials(
-        hit_info: &accel::HitInfo,
-        ray_differentials: RayDifferentials,
+        hit_info: &accel::HitInfo, // world-space
+        ray: Ray,
+        ray_differentials: RayDifferentials, // world-space
     ) -> Self {
         // hit_info.point + hit_info.normal defines a plane, which we intersect
         // x and y ray differentials against
         let n = hit_info.normal;
         let p = hit_info.point;
-        let rx_o = ray_differentials.x_origin;
-        let rx_d = ray_differentials.x_direction;
-        let ry_o = ray_differentials.y_origin;
-        let ry_d = ray_differentials.y_direction;
+        let rx_o = ray.origin + ray_differentials.x_origin;
+        let rx_d = ray.direction + ray_differentials.x_direction;
+        let ry_o = ray.origin + ray_differentials.y_origin;
+        let ry_d = ray.direction + ray_differentials.y_direction;
 
         let d = -Vec3::dot(n, p);
         let tx = -(Vec3::dot(n, rx_o) + d) / Vec3::dot(n, rx_d);
@@ -361,6 +362,7 @@ impl MaterialEvalContext {
     pub(crate) fn new_from_camera(
         hit_info: &accel::HitInfo,
         camera: &scene::Camera,
+        min_ray_differentials: &RayDifferentials,
         spp: u32,
     ) -> Self {
         let dpdx = todo!();
