@@ -1,3 +1,5 @@
+#![feature(float_erf)]
+
 use std::sync::{Arc, Mutex};
 
 use accel::{traverse_bvh};
@@ -7,7 +9,7 @@ use ray::Ray;
 use raytracing::{geometry::{AABB, Matrix4x4, Vec3}, scene::{Camera, Scene}, settings::RaytracerSettings};
 use tracing::warn;
 
-use crate::{accel::TraversalCache, ray::RayDifferentials, scene::CpuAccelerationStructures, texture::CpuTextures};
+use crate::{accel::TraversalCache, materials::MaterialEvalContext, ray::RayDifferentials, scene::CpuAccelerationStructures, texture::CpuTextures};
 
 mod ray;
 mod accel;
@@ -216,7 +218,20 @@ fn ray_radiance(
         }
 
         let material = &context.scene.materials[hit.material_idx as usize];
-        let bsdf = material.get_bsdf(hit.uv, &context.cpu_textures);
+        let material_eval_ctx = if depth == 0 {
+            // TODO: add setting for primary ray antialiasing
+            MaterialEvalContext::new_from_ray_differentials(
+                &hit, 
+                ray, 
+                camera_ray_differentials
+            )
+        }
+        else {
+            // TODO: add setting for and implement secondary ray antialiasing
+            MaterialEvalContext::new_without_antialiasing(&hit)
+        };
+
+        let bsdf = material.get_bsdf(&material_eval_ctx, &context.cpu_textures);
         let o2w = {
             let (x, y) = geometry::make_orthonormal_basis(hit.normal);
             Matrix4x4::create_from_basis(x, y, hit.normal)

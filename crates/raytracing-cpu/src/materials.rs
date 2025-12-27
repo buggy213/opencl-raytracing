@@ -270,6 +270,7 @@ impl CpuBsdf {
 // references:
 // - pbrt 4ed 10.1
 // - YKL's "Mipmapping with Bidirectional Techniques" article
+#[derive(Debug, Clone)]
 pub(crate) struct MaterialEvalContext {
     pub(crate) uv: Vec2,
 
@@ -311,7 +312,7 @@ impl MaterialEvalContext {
         // it should just revert to point sampling which is always "safe"
         let clamp = |v: f32| {
             if f32::is_finite(v) { 
-                f32::clamp(v, -1.0e-8, 1.0e8) 
+                f32::clamp(v, -1.0e8, 1.0e8) 
             } 
             else { 
                 0.0 
@@ -330,6 +331,12 @@ impl MaterialEvalContext {
             dvdx, 
             dvdy 
         }
+    }
+
+    pub(crate) fn new_without_antialiasing(
+        hit_info: &accel::HitInfo
+    ) -> Self {
+        MaterialEvalContext { uv: hit_info.uv, dudx: 0.0, dudy: 0.0, dvdx: 0.0, dvdy: 0.0 }
     }
 
     pub(crate) fn new_from_ray_differentials(
@@ -374,26 +381,27 @@ impl MaterialEvalContext {
 
 pub(crate) trait CpuMaterial {
     // evaluate the material at a specific shading point to get a bsdf
-    fn get_bsdf(&self, uv: Vec2, textures: &CpuTextures) -> CpuBsdf;
+    fn get_bsdf(&self, eval_ctx: &MaterialEvalContext, textures: &CpuTextures) -> CpuBsdf;
 }
 
 impl CpuMaterial for Material {
-    fn get_bsdf(&self, uv: Vec2, textures: &CpuTextures) -> CpuBsdf {
+    fn get_bsdf(&self, eval_ctx: &MaterialEvalContext, textures: &CpuTextures) -> CpuBsdf {
+        let uv = eval_ctx.uv;
         match self {
             Material::Diffuse { albedo } => {
-                let albedo = textures.sample(*albedo, uv.u(), uv.v());
+                let albedo = textures.sample(*albedo, eval_ctx);
                 let albedo = Vec3(albedo.r(), albedo.g(), albedo.b());
                 
                 CpuBsdf::Diffuse { albedo }
             },
             Material::SmoothDielectric { eta } => {
-                let eta = textures.sample(*eta, uv.u(), uv.v()).r();
+                let eta = textures.sample(*eta, eval_ctx).r();
 
                 CpuBsdf::SmoothDielectric { eta }
             },
             Material::SmoothConductor { eta, kappa } => {
-                let eta = textures.sample(*eta, uv.u(), uv.v());
-                let kappa = textures.sample(*kappa, uv.u(), uv.v());
+                let eta = textures.sample(*eta, eval_ctx);
+                let kappa = textures.sample(*kappa, eval_ctx);
                 let eta = Vec3(eta.r(), eta.g(), eta.b());
                 let kappa = Vec3(kappa.r(), kappa.g(), kappa.b());
 
@@ -401,12 +409,12 @@ impl CpuMaterial for Material {
             },
 
             Material::RoughConductor { eta, kappa, roughness } => {
-                let eta = textures.sample(*eta, uv.u(), uv.v());
-                let kappa = textures.sample(*kappa, uv.u(), uv.v());
+                let eta = textures.sample(*eta, eval_ctx);
+                let kappa = textures.sample(*kappa, eval_ctx);
                 let eta = Vec3(eta.0, eta.1, eta.2);
                 let kappa = Vec3(kappa.0, kappa.1, kappa.2);
 
-                let roughness = textures.sample(*roughness, uv.u(), uv.v());
+                let roughness = textures.sample(*roughness, eval_ctx);
                 let alpha_x = roughness.0.sqrt();
                 let alpha_y = roughness.1.sqrt();
                 CpuBsdf::RoughConductor { 
@@ -418,9 +426,9 @@ impl CpuMaterial for Material {
             }
 
             Material::RoughDielectric { eta, roughness } => {
-                let eta = textures.sample(*eta, uv.u(), uv.v()).r();
+                let eta = textures.sample(*eta, eval_ctx).r();
 
-                let roughness = textures.sample(*roughness, uv.u(), uv.v());
+                let roughness = textures.sample(*roughness, eval_ctx);
                 let alpha_x = roughness.0.sqrt();
                 let alpha_y = roughness.1.sqrt();
 
@@ -428,10 +436,10 @@ impl CpuMaterial for Material {
             }
 
             Material::GLTFMetallicRoughness { base_color, metallic_roughness } => {
-                let base_color = textures.sample(*base_color, uv.u(), uv.v());
+                let base_color = textures.sample(*base_color, eval_ctx);
                 let base_color = Vec3(base_color.0, base_color.1, base_color.2);
 
-                let metallic_roughness = textures.sample(*metallic_roughness, uv.u(), uv.v());
+                let metallic_roughness = textures.sample(*metallic_roughness, eval_ctx);
                 let metallic = metallic_roughness.b().clamp(0.0, 1.0);
                 let roughness = metallic_roughness.g().clamp(0.0, 1.0);
                 let alpha = roughness * roughness;
