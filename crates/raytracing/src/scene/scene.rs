@@ -461,15 +461,19 @@ impl SceneBuilder {
         self.camera = Some(camera);
     }
 
+    fn add_texture(&mut self, tex: Texture) -> TextureId {
+        let texture_id = TextureId(self.textures.len() as u32);
+        self.textures.push(tex);
+
+        texture_id
+    }
+
     fn add_constant_texture(
         &mut self,
         value: Vec4
     ) -> TextureId {
-        let const_texture_id = TextureId(self.textures.len() as u32);
         let const_texture = Texture::ConstantTexture { value };
-        self.textures.push(const_texture);
-
-        const_texture_id
+        self.add_texture(const_texture)
     }
 
     fn add_material(
@@ -508,13 +512,17 @@ impl SceneBuilder {
         self.primitive_idxs.push(transform_primitive_idx.into());
     }
 
+    fn add_light(&mut self, light: Light) {
+        self.lights.push(light);
+    }
+
     fn add_point_light(
         &mut self,
         position: Vec3,
         intensity: Vec3
     ) {
         let point_light = Light::PointLight { position, intensity };
-        self.lights.push(point_light);
+        self.add_light(point_light);
     }
 
     fn build(mut self) -> Scene {
@@ -539,9 +547,7 @@ impl SceneBuilder {
 
 pub mod test_scenes {
     use crate::{
-        geometry::{Mesh, Shape, Vec3, Vec3u, Vec4}, 
-        materials::Material, 
-        scene::{Camera, Scene}, settings::RaytracerSettings
+        geometry::{Mesh, Shape, Vec2, Vec3, Vec3u, Vec4}, lights::Light, materials::{Material, Texture}, scene::{Camera, Scene}, settings::RaytracerSettings
     };
 
     use super::SceneBuilder;
@@ -770,6 +776,74 @@ pub mod test_scenes {
 
         scene_builder.add_camera(camera);
         
+        scene_builder.build()
+    }
+
+    pub fn checkered_plane_scene() -> Scene {
+        let mut scene_builder = SceneBuilder::new();
+
+        let plane = {
+            let mut plane = make_plane(
+                Vec3(-100.0, -100.0, 0.1), 
+                Vec3(100.0, -100.0, 0.1), 
+                Vec3(100.0, 100.0, 0.1), 
+                Vec3(-100.0, 100.0, 0.1),
+                Vec3(0.0, 0.0, 1.0)
+            );
+
+            plane.uvs = vec![
+                Vec2(-500.0, -500.0),
+                Vec2(500.0, -500.0),
+                Vec2(500.0, 500.0),
+                Vec2(-500.0, 500.0),
+            ];
+
+            plane
+        };
+        let plane_shape = Shape::TriangleMesh(plane);
+
+        let checker_tex = Texture::CheckerTexture { 
+            color1: Vec4(0.0, 0.0, 0.0, 1.0), 
+            color2: Vec4(1.0, 1.0, 1.0, 1.0) 
+        };
+        let checker_tex_id = scene_builder.add_texture(checker_tex);
+        let checker_material = Material::Diffuse { 
+            albedo: checker_tex_id 
+        };
+        
+        let checker_material_id = scene_builder.add_material(checker_material);
+
+        scene_builder.add_shape_at_position(
+            plane_shape, 
+            checker_material_id, 
+            Vec3::zero()
+        );
+
+        // light from straight up
+        let sun = Light::DirectionLight { 
+            direction: Vec3(0.0, 0.0, -1.0), 
+            radiance: Vec3(1000.0, 1000.0, 1000.0) 
+        };
+        scene_builder.add_light(sun);
+
+        // angle below +y axis
+        let y_angle = (10.0_f32).to_radians();
+        let lookat_dist = 1.0;
+
+        let camera = Camera::lookat_camera_perspective(
+            Vec3(0.0, 0.0, 0.22), 
+            Vec3(
+                0.0, 
+                f32::cos(y_angle) * lookat_dist, 
+                0.22 - f32::sin(y_angle) * lookat_dist
+            ), 
+            Vec3(0.0, 0.0, 1.0), 
+            (40.0_f32).to_radians(), 
+            480, 
+            270,
+        );
+        scene_builder.add_camera(camera);
+
         scene_builder.build()
     }
 
@@ -1008,6 +1082,11 @@ pub mod test_scenes {
                 name: "cube_orthographic",
                 scene_func: cube_orthographic_scene,
                 settings_func: debug_normals_settings
+            },
+            TestScene {
+                name: "checkered_plane",
+                scene_func: checkered_plane_scene,
+                settings_func: RaytracerSettings::default
             },
             TestScene {
                 name: "dielectric",
