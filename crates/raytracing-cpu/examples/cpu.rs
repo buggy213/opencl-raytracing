@@ -50,29 +50,38 @@ fn main() {
     tracing_subscriber::fmt::init();
 
     let cli_args = CommandLineArguments::parse();
-    let scene = if let Some(filename) = cli_args.input.scene_path {
-        scene::scene_from_gltf_file(&filename)
-            .expect("failed to load scene")
+    let (builtin_scene_settings, scene) = if let Some(filename) = cli_args.input.scene_path {
+        let scene = scene::scene_from_gltf_file(&filename)
+            .expect("failed to load scene");
+        (None, scene)
     } else if let Some(name) = cli_args.input.scene_name {
-        let scene_func = test_scenes::all_test_scenes()
+        let scene_descriptor = test_scenes::all_test_scenes()
             .iter()
             .find(|s| s.name == name)
-            .expect("failed to find scene")
-            .scene_func;
+            .expect("failed to find scene");
 
-        scene_func()
+        let settings = (scene_descriptor.settings_func)();
+        let scene = (scene_descriptor.scene_func)();
+        (Some(settings), scene)
     } else {
         unreachable!("clap should prevent this");
     };
 
     let render_command = cli_args.render_command.unwrap_or(RenderCommand::Full);
     
-    let mut raytracer_settings = RaytracerSettings::default();
-    raytracer_settings.max_ray_depth = cli_args.ray_depth.unwrap_or(raytracer_settings.max_ray_depth);
-    raytracer_settings.light_sample_count = cli_args.light_samples.unwrap_or(raytracer_settings.light_sample_count);
-    raytracer_settings.samples_per_pixel = cli_args.spp.unwrap_or(raytracer_settings.samples_per_pixel);
-    raytracer_settings.accumulate_bounces = true;
-    raytracer_settings.debug_normals = matches!(render_command, RenderCommand::Normals);
+    let raytracer_settings = if let Some(builtin_scene_settings) = builtin_scene_settings {
+        builtin_scene_settings
+    }
+    else {
+        let mut settings = RaytracerSettings::default();
+        settings.max_ray_depth = cli_args.ray_depth.unwrap_or(settings.max_ray_depth);
+        settings.light_sample_count = cli_args.light_samples.unwrap_or(settings.light_sample_count);
+        settings.samples_per_pixel = cli_args.spp.unwrap_or(settings.samples_per_pixel);
+        settings.accumulate_bounces = true;
+        settings.debug_normals = matches!(render_command, RenderCommand::Normals);
+        
+        settings
+    };
 
     let mut backend_settings = CpuBackendSettings::default();
     backend_settings.num_threads = cli_args.num_threads.unwrap_or(backend_settings.num_threads);

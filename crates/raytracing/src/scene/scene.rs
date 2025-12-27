@@ -454,24 +454,10 @@ impl SceneBuilder {
         }
     }
 
-    fn add_lookat_camera(
+    fn add_camera(
         &mut self,
-        camera_position: Vec3,
-        target: Vec3,
-        up: Vec3,
-        yfov: f32, // radians
-        raster_width: usize,
-        raster_height: usize,
+        camera: Camera
     ) {
-        let camera = Camera::lookat_camera(
-            camera_position, 
-            target, 
-            up,
-            yfov,
-            raster_width, 
-            raster_height
-        );
-
         self.camera = Some(camera);
     }
 
@@ -555,7 +541,7 @@ pub mod test_scenes {
     use crate::{
         geometry::{Mesh, Shape, Vec3, Vec3u, Vec4}, 
         materials::Material, 
-        scene::Scene, settings::RaytracerSettings
+        scene::{Camera, Scene}, settings::RaytracerSettings
     };
 
     use super::SceneBuilder;
@@ -590,6 +576,98 @@ pub mod test_scenes {
         )
     }
 
+    fn make_cube(side_length: f32) -> Mesh {
+        let h = side_length / 2.0;
+
+        // 6 faces, each with 4 vertices and 2 triangles
+        // Vertices are duplicated per face for correct flat-shaded normals
+        let mut vertices = Vec::with_capacity(24);
+        let mut normals = Vec::with_capacity(24);
+        let mut tris = Vec::with_capacity(12);
+
+        // Face order: +X, -X, +Y, -Y, +Z, -Z
+        // Each face defined CCW when looking at the face from outside
+
+        // +X face (normal = +X)
+        let base = vertices.len() as u32;
+        vertices.extend_from_slice(&[
+            Vec3(h, -h, -h),
+            Vec3(h,  h, -h),
+            Vec3(h,  h,  h),
+            Vec3(h, -h,  h),
+        ]);
+        normals.extend_from_slice(&[Vec3(1.0, 0.0, 0.0); 4]);
+        tris.push(Vec3u(base, base + 1, base + 2));
+        tris.push(Vec3u(base, base + 2, base + 3));
+
+        // -X face (normal = -X)
+        let base = vertices.len() as u32;
+        vertices.extend_from_slice(&[
+            Vec3(-h,  h, -h),
+            Vec3(-h, -h, -h),
+            Vec3(-h, -h,  h),
+            Vec3(-h,  h,  h),
+        ]);
+        normals.extend_from_slice(&[Vec3(-1.0, 0.0, 0.0); 4]);
+        tris.push(Vec3u(base, base + 1, base + 2));
+        tris.push(Vec3u(base, base + 2, base + 3));
+
+        // +Y face (normal = +Y)
+        let base = vertices.len() as u32;
+        vertices.extend_from_slice(&[
+            Vec3( h, h, -h),
+            Vec3(-h, h, -h),
+            Vec3(-h, h,  h),
+            Vec3( h, h,  h),
+        ]);
+        normals.extend_from_slice(&[Vec3(0.0, 1.0, 0.0); 4]);
+        tris.push(Vec3u(base, base + 1, base + 2));
+        tris.push(Vec3u(base, base + 2, base + 3));
+
+        // -Y face (normal = -Y)
+        let base = vertices.len() as u32;
+        vertices.extend_from_slice(&[
+            Vec3(-h, -h, -h),
+            Vec3( h, -h, -h),
+            Vec3( h, -h,  h),
+            Vec3(-h, -h,  h),
+        ]);
+        normals.extend_from_slice(&[Vec3(0.0, -1.0, 0.0); 4]);
+        tris.push(Vec3u(base, base + 1, base + 2));
+        tris.push(Vec3u(base, base + 2, base + 3));
+
+        // +Z face (normal = +Z)
+        let base = vertices.len() as u32;
+        vertices.extend_from_slice(&[
+            Vec3(-h, -h, h),
+            Vec3( h, -h, h),
+            Vec3( h,  h, h),
+            Vec3(-h,  h, h),
+        ]);
+        normals.extend_from_slice(&[Vec3(0.0, 0.0, 1.0); 4]);
+        tris.push(Vec3u(base, base + 1, base + 2));
+        tris.push(Vec3u(base, base + 2, base + 3));
+
+        // -Z face (normal = -Z)
+        let base = vertices.len() as u32;
+        vertices.extend_from_slice(&[
+            Vec3( h, -h, -h),
+            Vec3(-h, -h, -h),
+            Vec3(-h,  h, -h),
+            Vec3( h,  h, -h),
+        ]);
+        normals.extend_from_slice(&[Vec3(0.0, 0.0, -1.0); 4]);
+        tris.push(Vec3u(base, base + 1, base + 2));
+        tris.push(Vec3u(base, base + 2, base + 3));
+
+        Mesh {
+            vertices,
+            tris,
+            normals,
+            uvs: Vec::new(),
+        }
+    }
+
     // super simple test scene with one sphere, no light
     pub fn sphere_scene() -> Scene {
         let mut scene_builder = SceneBuilder::new();
@@ -612,7 +690,8 @@ pub mod test_scenes {
             white_diffuse,
             Vec3(0.0, 0.0, -3.0)
         );
-        scene_builder.add_lookat_camera(
+
+        let camera = Camera::lookat_camera_perspective(
             Vec3(0.0, 0.0, 0.0), 
             Vec3(0.0, 0.0, -3.0),
             Vec3(0.0, 1.0, 0.0),
@@ -620,10 +699,78 @@ pub mod test_scenes {
             400, 
             400
         );
+        scene_builder.add_camera(camera);
         
         let scene = scene_builder.build();
 
         scene
+    }
+
+    pub fn cube_scene() -> Scene {
+        let mut scene_builder = SceneBuilder::new();
+        
+        let cube_mesh = make_cube(1.0);
+        let cube = Shape::TriangleMesh(cube_mesh);
+
+        let white = scene_builder.add_constant_texture(
+            Vec4(1.0, 1.0, 1.0, 1.0)
+        );
+
+        let white_diffuse = scene_builder.add_material(
+            Material::Diffuse { albedo: white }
+        );
+        
+        scene_builder.add_shape_at_position(
+            cube, 
+            white_diffuse,
+            Vec3(0.0, 0.0, -3.0)
+        );
+        
+        let camera = Camera::lookat_camera_perspective(
+            Vec3(1.0, 0.75, -1.0), 
+            Vec3(0.0, 0.0, -3.0),
+            Vec3(0.0, 1.0, 0.0),
+            (45.0_f32).to_radians(),
+            400, 
+            400
+        );
+        scene_builder.add_camera(camera);
+        
+        scene_builder.build()
+    }
+
+    pub fn cube_orthographic_scene() -> Scene {
+        let mut scene_builder = SceneBuilder::new();
+        
+        let cube_mesh = make_cube(1.0);
+        let cube = Shape::TriangleMesh(cube_mesh);
+
+        let white = scene_builder.add_constant_texture(
+            Vec4(1.0, 1.0, 1.0, 1.0)
+        );
+
+        let white_diffuse = scene_builder.add_material(
+            Material::Diffuse { albedo: white }
+        );
+        
+        scene_builder.add_shape_at_position(
+            cube, 
+            white_diffuse,
+            Vec3(0.0, 0.0, -3.0)
+        );
+        
+        let camera = Camera::lookat_camera_orthographic(
+            Vec3(1.0, 0.75, -1.0), 
+            Vec3(0.0, 0.0, -3.0),
+            Vec3(0.0, 1.0, 0.0),
+            400,
+            400, 
+            2.5 / 400.0
+        );
+
+        scene_builder.add_camera(camera);
+        
+        scene_builder.build()
     }
 
     // template for cornell box, returns a SceneBuilder so other functions can add on top
@@ -708,7 +855,7 @@ pub mod test_scenes {
         scene_builder.add_shape_at_position(Shape::TriangleMesh(back_wall), white_diffuse, Vec3(0.0, 0.0, 0.0));
         
         // Camera looking into the box from the front
-        scene_builder.add_lookat_camera(
+        let camera = Camera::lookat_camera_perspective(
             Vec3(0.0, front + 3.4, 0.4),
             Vec3(0.0, 0.0, h / 2.0),
             Vec3(0.0, 0.0, 1.0),
@@ -716,6 +863,7 @@ pub mod test_scenes {
             500,
             500,
         );
+        scene_builder.add_camera(camera);
 
         // Add a point light near the top center
         scene_builder.add_point_light(
@@ -849,6 +997,16 @@ pub mod test_scenes {
             TestScene {
                 name: "sphere",
                 scene_func: sphere_scene,
+                settings_func: debug_normals_settings
+            },
+            TestScene {
+                name: "cube",
+                scene_func: cube_scene,
+                settings_func: debug_normals_settings
+            },
+            TestScene {
+                name: "cube_orthographic",
+                scene_func: cube_orthographic_scene,
                 settings_func: debug_normals_settings
             },
             TestScene {

@@ -142,7 +142,7 @@ impl Camera {
     }
 
     // creates camera w/ lookat transform + specified raster parameters
-    pub fn lookat_camera(
+    pub fn lookat_camera_perspective(
         camera_position: Vec3, 
         target: Vec3,
 
@@ -170,6 +170,45 @@ impl Camera {
             camera_position, 
             camera_rotation: Quaternion::from_rotation_matrix(camera_to_world.forward), 
             camera_type: CameraType::Perspective { yfov }, 
+            raster_width, 
+            raster_height, 
+            near_clip: 0.01, 
+            far_clip: 1000.0, 
+            world_to_raster: world_to_camera.compose(camera_to_raster)
+        }
+    }
+
+    pub fn lookat_camera_orthographic(
+        camera_position: Vec3, 
+        target: Vec3,
+
+        up: Vec3,
+        raster_width: usize,
+        raster_height: usize,
+        raster_to_screen_ratio: f32,
+    ) -> Camera {
+        let near_clip = 0.01;
+        let far_clip = 1000.0;
+
+        let screen_space_width = (raster_width as f32) * raster_to_screen_ratio;
+        let screen_space_height = (raster_height as f32) * raster_to_screen_ratio;
+
+        let camera_to_raster = Camera::create_orthographic_transform(
+            far_clip, 
+            near_clip, 
+            raster_width, 
+            raster_height, 
+            screen_space_width,
+            screen_space_height,
+        );
+
+        let camera_to_world = Transform::look_at(camera_position, target, up);
+        let world_to_camera = camera_to_world.invert();
+
+        Camera { 
+            camera_position, 
+            camera_rotation: Quaternion::from_rotation_matrix(camera_to_world.forward), 
+            camera_type: CameraType::Orthographic { screen_space_width, screen_space_height }, 
             raster_width, 
             raster_height, 
             near_clip: 0.01, 
