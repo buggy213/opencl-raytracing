@@ -16,7 +16,19 @@ fn sanity_tests() {
             num_threads: 16
         };
 
-        let output_radiance = crate::render(&scene, raytracer_settings, backend_settings);
-        crate::utils::save_png(&output_radiance, 1000.0, &scene, Path::new(&filename));
+        let mut output_radiance = crate::render(&scene, raytracer_settings, backend_settings);
+        
+        if raytracer_settings.debug_normals {
+            crate::utils::normals_to_rgb(&mut output_radiance);
+        }
+
+        let exposure = if raytracer_settings.debug_normals {
+            1.0
+        }
+        else {
+            1000.0
+        };
+
+        crate::utils::save_png(&output_radiance, exposure, &scene, Path::new(&filename));
     }
 }
