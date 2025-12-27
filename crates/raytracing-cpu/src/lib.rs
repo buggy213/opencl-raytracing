@@ -66,6 +66,32 @@ impl<'scene> CpuRaytracingContext<'scene> {
     }
 }
 
+fn camera_ray(
+    camera: &Camera,
+    x: f32,
+    y: f32,
+) -> Ray {
+    let raster_loc = Vec3(x, y, 0.0);
+    let camera_space_loc = camera.world_to_raster.apply_inverse_point(raster_loc);
+    
+    match camera.camera_type {
+        raytracing::scene::CameraType::Orthographic { .. } => {
+            // camera points down +z in it's local coordinate frame
+            let ray_d = camera.world_to_raster.apply_inverse_vector(Vec3(0.0, 0.0, 1.0)).unit();
+            let ray_o = camera_space_loc - ray_d * camera.near_clip;
+            
+            
+            Ray { origin: ray_o, direction: ray_d }
+        },
+        raytracing::scene::CameraType::Perspective { .. } => {
+            let ray_o = camera.camera_position;
+            let ray_d = Vec3::normalized(camera_space_loc - ray_o);
+
+            Ray { origin: ray_o, direction: ray_d }
+        },
+    }
+}
+
 fn generate_ray(
     camera: &Camera, 
     x: u32, 
@@ -74,40 +100,25 @@ fn generate_ray(
 ) -> (Ray, RayDifferentials) {
     let x_disp = sample::sample_uniform();
     let y_disp = sample::sample_uniform();
+    let x = (x as f32) + x_disp;
+    let y = (y as f32) + y_disp;
 
-    let raster_loc = Vec3((x as f32) + x_disp, (y as f32) + y_disp, 0.0);
-    let camera_space_loc = camera.world_to_raster.apply_inverse_point(raster_loc);
-    
-    let ray_o = camera.camera_position.into();
-    let ray_d = Vec3::normalized(camera_space_loc - ray_o);
+    let ray = camera_ray(camera, x, y);
 
-    let ray = Ray {
-        origin: ray_o,
-        direction: ray_d,
-    };
-
-    let x_raster_loc = Vec3(raster_loc.0 + 1.0, raster_loc.1, raster_loc.2);
-    let y_raster_loc = Vec3(raster_loc.0, raster_loc.1 + 1.0, raster_loc.2);
-    let x_camera_space_loc = camera.world_to_raster.apply_inverse_point(x_raster_loc);
-    let y_camera_space_loc = camera.world_to_raster.apply_inverse_point(y_raster_loc);
+    let ray_x = camera_ray(camera, x + 1.0, y);
+    let ray_y = camera_ray(camera, x, y + 1.0);
     
     // we want to scale ray differentials to account for the supersampling that is already done when spp > 1
     // this makes the "effective" texture footprint smaller, though only up to a point
     let scale = f32::max(0.125, f32::sqrt(1.0 / spp as f32));
-    let x_direction = {
-        let dir = x_camera_space_loc - ray_o;
-        Vec3::normalized(ray_d + (dir - ray_d) * scale)
-    };
-    let y_direction = {
-        let dir = y_camera_space_loc - ray_o;
-        Vec3::normalized(ray_d + (dir - ray_d) * scale) 
-    };
+    let scaled_x = ray.direction + (ray_x.direction - ray.direction) * scale;
+    let scaled_y = ray.direction + (ray_y.direction - ray.direction) * scale;
 
     let ray_differentials = RayDifferentials {
-        x_origin: ray_o,
-        y_origin: ray_o,
-        x_direction,
-        y_direction
+        x_origin: ray_x.origin,
+        y_origin: ray_y.origin,
+        x_direction: scaled_x.unit(),
+        y_direction: scaled_y.unit(),
     };
 
     (ray, ray_differentials)

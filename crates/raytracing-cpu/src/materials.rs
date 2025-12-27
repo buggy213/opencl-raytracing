@@ -303,8 +303,8 @@ impl MaterialEvalContext {
         let atb1y = Vec3::dot(dpdv, dpdy);
 
         let dudx = inv_det * (ata11 * atb0x - ata01 * atb1x);
-        let dudy = inv_det * (ata00 * atb1x - ata01 * atb0x);
-        let dvdx = inv_det * (ata11 * atb0y - ata01 * atb1y);
+        let dvdx = inv_det * (ata00 * atb1x - ata01 * atb0x);
+        let dudy = inv_det * (ata11 * atb0y - ata01 * atb1y);
         let dvdy = inv_det * (ata00 * atb1y - ata01 * atb0y);
 
         // clamp to reasonable values: if d{u,v}/d{x,y} is 0,

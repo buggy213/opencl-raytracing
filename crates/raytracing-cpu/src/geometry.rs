@@ -242,7 +242,7 @@ fn ray_mesh_intersect(
         let duv12 = uv1 - uv2;
         let dp02 = p0 - p2;
         let dp12 = p1 - p2;
-        let determinant = duv02.u() * duv12.v() - duv02.v() - duv12.u();
+        let determinant = duv02.u() * duv12.v() - duv02.v() * duv12.u();
 
         let degenerate_uv = f32::abs(determinant) < 1.0e-9;
         
