@@ -1,3 +1,7 @@
+mod aovs;
+
+pub use aovs::AOVFlags;
+
 #[derive(Debug, Clone, Copy)]
 pub struct RaytracerSettings {
     pub max_ray_depth: u32,

@@ -30,24 +30,90 @@ pub fn save_png(radiance: &[Vec3], exposure: f32, scene: &Scene, output_path: &P
     writer.write_image_data(&image_data).expect("failed to write PNG data");
 }
 
-pub fn save_openexr(radiance: &[Vec3], scene: &Scene, output_path: &Path) {
-    let width = scene.camera.raster_width;
-    let height = scene.camera.raster_height;
-
-    exr::prelude::write_rgb_file(
-        output_path, 
-        width, 
-        height, 
-        |x, y| {
-            let rad_at_xy = radiance[y * width + x];
-            (rad_at_xy.0, rad_at_xy.1, rad_at_xy.2)
-        }
-    ).expect("writing exr failed");
-}
-
 pub fn normals_to_rgb(normals: &mut [Vec3]) {
     for normal in normals {
         *normal += Vec3(1.0, 1.0, 1.0);
         *normal /= 2.0;
+    }
+}
+
+mod exr {
+    use std::path::Path;
+
+    use exr::prelude::*;
+    use num::PrimInt;
+    use raytracing::{geometry::Vec3, scene::Scene};
+
+    pub fn channels_from_vec3(
+        channels: &mut Vec<AnyChannel<FlatSamples>>, 
+        names: &[&str; 3],
+        data: &[Vec3],
+    ) {
+        let mut channel0_data = Vec::with_capacity(data.len());
+        let mut channel1_data = Vec::with_capacity(data.len());
+        let mut channel2_data = Vec::with_capacity(data.len());
+
+        for v in data {
+            channel0_data.push(v.0);
+            channel1_data.push(v.1);
+            channel2_data.push(v.2);
+        }
+
+        let channel0 = AnyChannel::new(names[0], FlatSamples::F32(channel0_data));
+        let channel1 = AnyChannel::new(names[1], FlatSamples::F32(channel1_data));
+        let channel2 = AnyChannel::new(names[2], FlatSamples::F32(channel2_data));
+
+        channels.push(channel0);
+        channels.push(channel1);
+        channels.push(channel2);
+    }
+
+    pub fn channel_from_f32_array(
+        channels: &mut Vec<AnyChannel<FlatSamples>>,
+        name: &str,
+        data: &[f32]
+    ) {
+        let channel = AnyChannel::new(name, FlatSamples::F32(data.to_vec()));
+        channels.push(channel);
+    }
+
+    pub fn channel_from_int_array<Value: PrimInt>(
+        channels: &mut Vec<AnyChannel<FlatSamples>>,
+        name: &str,
+        data: &[Value]
+    ) {
+        let mut channel_data = Vec::with_capacity(data.len());
+        for v in data {
+            let v_u32 = v.to_u32().expect("value too large for u32 channel");
+            channel_data.push(v_u32);
+        }
+
+        let channel = AnyChannel::new(name, FlatSamples::U32(channel_data));
+        channels.push(channel);
+    }
+
+    pub fn save_openexr(
+        channels: Vec<AnyChannel<FlatSamples>>,
+        scene: &Scene, 
+        output_path: &Path
+    ) {
+        let width = scene.camera.raster_width;
+        let height = scene.camera.raster_height;
+        
+        let layer = Layer::new(
+            (width, height),
+            LayerAttributes::named("main"),
+            Encoding::FAST_LOSSLESS,
+            AnyChannels::sort(SmallVec::from_vec(channels))
+        );
+
+        let img: Image<_> = Image::new(
+            ImageAttributes::with_size((width, height)),
+            layer
+        );
+
+        img.write()
+            .to_file(output_path)
+            .expect("writing exr failed");
     }
 }

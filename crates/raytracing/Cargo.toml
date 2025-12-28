@@ -12,6 +12,7 @@ bytemuck = { version = "1.22.0", features = ["derive"] }
 anyhow = { workspace = true }
 rand = { workspace = true }
 num = { workspace = true }
+bitflags = { workspace = true }
 tracing = { workspace = true }
 
 embree4 = { workspace = true }
