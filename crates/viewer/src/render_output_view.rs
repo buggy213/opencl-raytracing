@@ -1,8 +1,8 @@
 use std::{borrow::Cow, path::{Path, PathBuf}};
 
 use bytemuck::NoUninit;
-use raytracing::geometry::Vec3;
-use raytracing::settings::RaytracerSettings;
+use raytracing::{geometry::Vec3, renderer::AOVFlags};
+use raytracing::renderer::RaytracerSettings;
 use raytracing_cpu::CpuBackendSettings;
 use wgpu::{util::DeviceExt, TextureFormat};
 use winit::dpi::LogicalSize;
@@ -83,6 +83,7 @@ struct RaytracerResult {
 
 fn raytrace_scene(path: &Path, settings: RaytracerSettings, backend_settings: CpuBackendSettings) -> RaytracerResult {
     let scene = raytracing::scene::scene_from_gltf_file(path).expect("failed to load scene");
+    assert!(settings.outputs.contains(AOVFlags::BEAUTY));
     let output = raytracing_cpu::render(
         &scene, 
         settings,
@@ -90,7 +91,7 @@ fn raytrace_scene(path: &Path, settings: RaytracerSettings, backend_settings: Cp
     );
     
     RaytracerResult { 
-        radiance: output, 
+        radiance: output.beauty.unwrap(), 
         raster_size: (scene.camera.raster_width as u32, scene.camera.raster_height as u32) 
     }
 }
@@ -623,13 +624,14 @@ impl RenderOutputView {
         // If the user requested a render, we need to update the radiance buffer
         // For now, just blocks the entire viewer until raytracing is done
         if self.gui_state.render_scene_requested {
+            // TODO: update ui to render any AOV
             let settings = RaytracerSettings { 
                 max_ray_depth: self.gui_state.max_ray_depth,
                 samples_per_pixel: self.gui_state.spp,
                 light_sample_count: self.gui_state.light_samples,
                 accumulate_bounces: self.gui_state.accumulate_bounces,
 
-                debug_normals: self.gui_state.debug_normals,
+                outputs: AOVFlags::BEAUTY,
             };
 
             let backend_settings = CpuBackendSettings {

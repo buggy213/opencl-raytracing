@@ -1,10 +1,12 @@
 use std::path::{Path, PathBuf};
 
+use bitflags::bitflags_match;
 use clap::Parser;
 
-use raytracing::{scene, settings::RaytracerSettings};
+use raytracing::{renderer::{AOVFlags, RaytracerSettings, RenderOutput}, scene};
 use raytracing_cpu::{CpuBackendSettings, render, render_single_pixel};
 use raytracing::scene::test_scenes;
+use tracing::warn;
 
 #[derive(Debug, clap::Parser)]
 struct CommandLineArguments {
@@ -13,6 +15,8 @@ struct CommandLineArguments {
 
     #[arg(short, long)]
     output: Option<PathBuf>,
+    #[arg(long)]
+    output_format: Option<OutputFormat>,
 
     #[arg(short = 't', long)]
     num_threads: Option<u32>,
@@ -36,10 +40,19 @@ struct InputScene {
     scene_name: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum OutputFormat {
+    Png, Exr,
+}
+
 #[derive(Debug, clap::Subcommand)]
 enum RenderCommand {
-    Full,
-    Normals,
+    Full {
+        #[arg(long, value_delimiter = ',', num_args = 1..)]
+        aov: Option<Vec<String>>,
+        #[arg(long)]
+        no_beauty: Option<bool>,
+    },
     Pixel {
         x: u32,
         y: u32
@@ -67,52 +80,178 @@ fn main() {
         unreachable!("clap should prevent this");
     };
 
-    let render_command = cli_args.render_command.unwrap_or(RenderCommand::Full);
-    
-    let raytracer_settings = if let Some(builtin_scene_settings) = builtin_scene_settings {
+    let mut raytracer_settings = if let Some(builtin_scene_settings) = builtin_scene_settings {
         builtin_scene_settings
-    }
-    else {
-        let mut settings = RaytracerSettings::default();
-        settings.max_ray_depth = cli_args.ray_depth.unwrap_or(settings.max_ray_depth);
-        settings.light_sample_count = cli_args.light_samples.unwrap_or(settings.light_sample_count);
-        settings.samples_per_pixel = cli_args.spp.unwrap_or(settings.samples_per_pixel);
-        settings.accumulate_bounces = true;
-        settings.debug_normals = matches!(render_command, RenderCommand::Normals);
-        
-        settings
+    } else {
+        RaytracerSettings::default()
     };
 
-    let mut backend_settings = CpuBackendSettings::default();
-    backend_settings.num_threads = cli_args.num_threads.unwrap_or(backend_settings.num_threads);
-
-    if let RenderCommand::Pixel { x, y } = render_command {
+    // override builtin / default settings
+    raytracer_settings.max_ray_depth = cli_args.ray_depth.unwrap_or(raytracer_settings.max_ray_depth);
+    raytracer_settings.light_sample_count = cli_args.light_samples.unwrap_or(raytracer_settings.light_sample_count);
+    raytracer_settings.samples_per_pixel = cli_args.spp.unwrap_or(raytracer_settings.samples_per_pixel);
+    raytracer_settings.accumulate_bounces = true;
+    
+    let render_command = cli_args.render_command;    
+    
+    if let Some(RenderCommand::Pixel { x, y }) = render_command {
         for i in 0..1 {
             raytracing_cpu::set_seed(i);
-            let pixel_radiance = render_single_pixel(&scene, raytracer_settings, x, y);
-            dbg!(pixel_radiance);
+            let pixel = render_single_pixel(&scene, raytracer_settings, x, y);
+            
+            println!("hit: {}", pixel.hit);
+            println!("uv: {}", pixel.uv);
+            println!("normal: {}", pixel.normal);
+            println!("radiance: {}", pixel.radiance);
         }
 
         return;
     }
-    
-    let mut output = render(&scene, raytracer_settings, backend_settings);
-    
-    if raytracer_settings.debug_normals {
-        raytracing_cpu::utils::normals_to_rgb(&mut output);
+
+    // hand-parse aovs, i'm no clap expert
+    if let Some(RenderCommand::Full { aov, no_beauty }) = &render_command {
+        let mut aov_flags = raytracer_settings.outputs;
+        for aov_str in aov.iter().flatten() {
+            match aov_str.as_str() {
+                "n" | "normal" => aov_flags.insert(AOVFlags::NORMALS),
+                "u" | "uv" => aov_flags.insert(AOVFlags::UV_COORDS),
+                "b" | "beauty" => warn!("beauty is implicit"),
+                _ => warn!("unknown AOV specified: {aov_str}")
+            }
+        }
+
+        let no_beauty = match no_beauty {
+            Some(x) => *x,
+            None => false
+        };
+
+        if no_beauty {
+            aov_flags.remove(AOVFlags::BEAUTY);
+        }
+
+        raytracer_settings.outputs = aov_flags;
     }
+
+    if raytracer_settings.outputs.is_empty() {
+        warn!("no outputs specified (--no-beauty, and no AOVs), quitting...");
+        return;
+    }
+
+    let mut backend_settings = CpuBackendSettings::default();
+    backend_settings.num_threads = cli_args.num_threads.unwrap_or(backend_settings.num_threads);
+    
+    let render_output = render(
+        &scene, 
+        raytracer_settings, 
+        backend_settings
+    );
 
     let output_folder = Path::new("scenes/output");
     let output_file = output_folder.join(
         cli_args.output.as_ref().unwrap_or(&PathBuf::from("test.png"))
     );
 
-    let exposure = if raytracer_settings.debug_normals {
-        1.0
-    }
-    else {
-        1000.0
-    };
+    save_render_output(
+        render_output, 
+        raytracer_settings.outputs, 
+        cli_args.output_format, 
+        &output_file
+    );
+}
 
-    raytracing_cpu::utils::save_png(&output, exposure, &scene, &output_file);
+// TODO: this should probably return a Result, so the user can try a different path in a loop
+// and not lose their render
+fn save_render_output(
+    render_output: RenderOutput,
+    aov_flags: AOVFlags,
+    output_format: Option<OutputFormat>,
+    output_path: &Path
+) {
+    let output_format = output_format.unwrap_or_else(|| {
+        match output_path.extension() {
+            Some(ext) => {
+                match ext.to_str() {
+                    Some("png") => {
+                        OutputFormat::Png
+                    }
+                    Some("exr") => {
+                        OutputFormat::Exr
+                    }
+                    Some(_) => {
+                        warn!("extension not recognized, defaulting to exr");
+                        OutputFormat::Exr
+                    }
+                    None => {
+                        warn!("weird filename; defaulting to exr");
+                        OutputFormat::Exr
+                    }
+                }
+            }
+            None => {
+                warn!("no extension provided; defaulting to exr");
+                OutputFormat::Exr
+            }
+        }
+    });
+
+    match output_format {
+        OutputFormat::Png => save_to_png(render_output, aov_flags, output_path),
+        OutputFormat::Exr => save_to_exr(render_output, aov_flags, output_path),
+    }
+}
+
+// 1 png file for each output, not suffixed w/ aov name if it's the beauty output
+fn save_to_png(mut render_output: RenderOutput, aov_flags: AOVFlags, output_path: &Path) {
+    fn add_suffix(path: &Path, suffix: &str) -> PathBuf {
+        let dir = path.parent().unwrap();
+        let base_name = path.file_stem().map(|x| x.to_str()).flatten().unwrap();
+        dir.join(format!("{}_{}.{}", base_name, suffix, "png"))
+    }
+    
+    for (name, flag) in aov_flags.iter_names() {
+        bitflags_match!(flag, {
+            AOVFlags::BEAUTY => {
+                raytracing_cpu::utils::png::save_png(
+                    render_output.beauty.as_ref().unwrap(), 
+                    1000.0, 
+                    render_output.width,
+                    render_output.height, 
+                    output_path
+                );
+            }
+            AOVFlags::NORMALS => {
+                let output_path = add_suffix(&output_path, name);
+
+                raytracing_cpu::utils::png::normals_to_rgb(render_output.normals.as_mut().unwrap());
+                raytracing_cpu::utils::png::save_png(
+                    render_output.normals.as_ref().unwrap(), 
+                    1.0, 
+                    render_output.width, 
+                    render_output.height, 
+                    &output_path
+                );
+            }
+            AOVFlags::UV_COORDS => {
+                let output_path = add_suffix(&output_path, name);
+                let uv_rgb = raytracing_cpu::utils::png::uvs_to_rgb(render_output.uv.as_ref().unwrap());
+                raytracing_cpu::utils::png::save_png(
+                    &uv_rgb, 
+                    1.0, 
+                    render_output.width, 
+                    render_output.height, 
+                    &output_path
+                );
+            }
+            _ => ()
+        })
+    }
+}
+
+fn save_to_exr(render_output: RenderOutput, aov_flags: AOVFlags, output_path: &Path) {
+
+    todo!();
+
+    for f in aov_flags.iter() {
+
+    }
 }

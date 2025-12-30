@@ -18,6 +18,9 @@ fn sanity_tests() {
 
         let mut output_radiance = crate::render(&scene, raytracer_settings, backend_settings);
         
+        // TODO: replace w/ snapshot testing, and move tests into their own crate
+        // which interfaces with all backends
+        /* 
         if raytracer_settings.debug_normals {
             crate::utils::normals_to_rgb(&mut output_radiance);
         }
@@ -30,5 +33,6 @@ fn sanity_tests() {
         };
 
         crate::utils::save_png(&output_radiance, exposure, &scene, Path::new(&filename));
+        */
     }
 }

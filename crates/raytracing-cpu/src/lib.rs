@@ -6,7 +6,7 @@ use accel::{traverse_bvh};
 use lights::{light_radiance, occluded, sample_light};
 use materials::CpuMaterial;
 use ray::Ray;
-use raytracing::{geometry::{AABB, Matrix4x4, Vec3}, scene::{Camera, Scene}, settings::RaytracerSettings};
+use raytracing::{geometry::{AABB, Matrix4x4, Vec2, Vec3}, renderer::{AOVFlags, RaytracerSettings, RenderOutput}, scene::{Camera, Scene}};
 use tracing::warn;
 
 use crate::{accel::TraversalCache, materials::MaterialEvalContext, ray::RayDifferentials, scene::CpuAccelerationStructures, texture::CpuTextures};
@@ -308,11 +308,17 @@ fn ray_radiance(
     radiance
 }
 
-fn first_hit_normals(
+struct FirstHitAOVData {
+    hit: bool,
+    uv: Vec2,
+    normals: Vec3,
+}
+
+fn first_hit_aovs(
     ray: Ray, 
     context: &CpuRaytracingContext,
     traversal_cache: &mut TraversalCache,
-) -> Vec3 {
+) -> FirstHitAOVData {
     let hit_info = traverse_bvh(
         ray, 
         0.0,
@@ -323,10 +329,18 @@ fn first_hit_normals(
     );
 
     if let Some(hit_info) = hit_info {
-        hit_info.normal
+        FirstHitAOVData { 
+            hit: true, 
+            uv: hit_info.uv, 
+            normals: hit_info.normal 
+        }
     }
     else {
-        Vec3::zero()
+        FirstHitAOVData { 
+            hit: false, 
+            uv: Vec2::zero(), 
+            normals: Vec3::zero() 
+        }
     }
 }
 
@@ -404,46 +418,71 @@ fn render_tile(
         for i in 0..tile_width {
             let mut radiance = Vec3(0.0, 0.0, 0.0);
             
-            if raytracer_settings.debug_normals {
-                let (camera_ray, _) = generate_ray(
+            for _ in 0..raytracer_settings.samples_per_pixel {
+                let (camera_ray, camera_ray_differentials) = generate_ray(
                     &context.scene.camera, 
                     (tile.x0 + i) as u32, 
-                    (tile.y0 + j) as u32, 
-                    1
+                    (tile.y0 + j) as u32,
+                    raytracer_settings.samples_per_pixel,
                 );
 
-                radiance = first_hit_normals(
-                    camera_ray, 
+                radiance += ray_radiance(
+                    camera_ray,
+                    camera_ray_differentials,
                     context,
-                    traversal_cache,
+                    traversal_cache, 
+                    raytracer_settings
                 );
-            }
-            else {
-                for _ in 0..raytracer_settings.samples_per_pixel {
-                    let (camera_ray, camera_ray_differentials) = generate_ray(
-                        &context.scene.camera, 
-                        (tile.x0 + i) as u32, 
-                        (tile.y0 + j) as u32,
-                        raytracer_settings.samples_per_pixel,
-                    );
-
-                    radiance += ray_radiance(
-                        camera_ray,
-                        camera_ray_differentials,
-                        context,
-                        traversal_cache, 
-                        raytracer_settings
-                    );
-                }
-                
-                radiance /= raytracer_settings.samples_per_pixel as f32; 
             }
             
+            radiance /= raytracer_settings.samples_per_pixel as f32; 
             tile_radiance_buffer.push(radiance);
         }
     }
 
     tile_radiance_buffer
+}
+
+fn render_aovs(
+    context: &CpuRaytracingContext,
+    traversal_cache: &mut TraversalCache,
+    raytracer_settings: &RaytracerSettings,
+
+    render_output: &mut RenderOutput
+) {
+    let output_buffer_size = (render_output.width * render_output.height) as usize;
+
+    if raytracer_settings.outputs.contains(AOVFlags::NORMALS) {
+        render_output.normals = Some(Vec::with_capacity(output_buffer_size));
+    }
+    if raytracer_settings.outputs.contains(AOVFlags::UV_COORDS) {
+        render_output.uv = Some(Vec::with_capacity(output_buffer_size));
+    }
+
+    for j in 0..render_output.height {
+        for i in 0..render_output.width {
+            
+            let (camera_ray, _) = generate_ray(
+                &context.scene.camera, 
+                i as u32, 
+                j as u32,
+                raytracer_settings.samples_per_pixel,
+            );
+
+            let first_hit_aovs = first_hit_aovs(
+                camera_ray, 
+                context, 
+                traversal_cache
+            );
+
+            if raytracer_settings.outputs.contains(AOVFlags::NORMALS) {
+                render_output.normals.as_mut().unwrap().push(first_hit_aovs.normals);
+            }
+            if raytracer_settings.outputs.contains(AOVFlags::UV_COORDS) {
+                render_output.uv.as_mut().unwrap().push(first_hit_aovs.uv);
+            }
+        }
+    }
 }
 
 fn merge_tile(
@@ -468,9 +507,10 @@ pub fn render(
     scene: &Scene, 
     raytracer_settings: RaytracerSettings, 
     backend_settings: CpuBackendSettings
-) -> Vec<Vec3> {
+) -> RenderOutput {
     let width = scene.camera.raster_width;
     let height = scene.camera.raster_height;
+    let mut render_output = RenderOutput::new(width as u32, height as u32);
 
     // construct BVH using embree
     let cpu_acceleration_structures = scene::prepare_cpu_acceleration_structures(scene);
@@ -479,13 +519,23 @@ pub fn render(
         &cpu_acceleration_structures
     );
 
-    let single_threaded = if raytracer_settings.debug_normals {
-        // debug normals is very cheap, so just keep it single threaded
-        true
-    } else {
-        backend_settings.num_threads == 1
-    };
+    // first hit AOVs, then render beauty
+    if raytracer_settings.outputs.intersects(AOVFlags::FIRST_HIT_AOVS) {
+        let mut traversal_cache = TraversalCache::new(&cpu_raytracing_context);
+        render_aovs(
+            &cpu_raytracing_context, 
+            &mut traversal_cache, 
+            &raytracer_settings, 
+            &mut render_output
+        );
+    }
 
+    // exit early if beauty is not needed
+    if !raytracer_settings.outputs.contains(AOVFlags::BEAUTY) {
+        return render_output;
+    }
+
+    let single_threaded = backend_settings.num_threads == 1;
     let radiance = if single_threaded {
         let mut traversal_cache = TraversalCache::new(&cpu_raytracing_context);
         let full_screen = RenderTile {
@@ -560,6 +610,7 @@ pub fn render(
                 });
             }
 
+            // TODO: if a thread panics, should handle this (probably also panic)
             while render_job_count > 0 {
                 let (tile, tile_radiance) = result_channel_rx.recv()
                     .expect("no sender (are workers gone?)");
@@ -621,7 +672,16 @@ pub fn render(
         }
     }
 
-    radiance
+    render_output.beauty = Some(radiance);
+    render_output
+}
+
+#[derive(Debug)]
+pub struct SinglePixelOutput {
+    pub hit: bool,
+    pub uv: Vec2,
+    pub normal: Vec3,
+    pub radiance: Vec3,
 }
 
 pub fn render_single_pixel(
@@ -629,7 +689,7 @@ pub fn render_single_pixel(
     raytracer_settings: RaytracerSettings,
     x: u32,
     y: u32,
-) -> Vec3 {
+) -> SinglePixelOutput {
     let (x, y) = if x >= scene.camera.raster_width as u32 || y >= scene.camera.raster_height as u32 {
         let clamped_x = u32::clamp(x, 0, scene.camera.raster_width as u32 - 1);
         let clamped_y = u32::clamp(y, 0, scene.camera.raster_height as u32 - 1);
@@ -648,20 +708,15 @@ pub fn render_single_pixel(
     );
 
     let mut traversal_cache = TraversalCache::new(&cpu_raytracing_context);
-    let single_pixel = RenderTile {
-        x0: x as usize,
-        x1: x as usize + 1,
-        y0: y as usize,
-        y1: y as usize + 1,
-    };
-
-    let pixel = render_tile(
-        &cpu_raytracing_context,
-        &mut traversal_cache,
-        single_pixel,
+    let (ray, ray_differentials) = generate_ray(&scene.camera, x, y, raytracer_settings.samples_per_pixel);
+    let aovs = first_hit_aovs(ray, &cpu_raytracing_context, &mut traversal_cache);
+    let radiance = ray_radiance(
+        ray, 
+        ray_differentials, 
+        &cpu_raytracing_context, 
+        &mut traversal_cache, 
         &raytracer_settings
-    )[0];
+    );
 
-    
-    pixel
+    SinglePixelOutput { hit: aovs.hit, uv: aovs.uv, normal: aovs.normals, radiance }
 }

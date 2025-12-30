@@ -547,7 +547,7 @@ impl SceneBuilder {
 
 pub mod test_scenes {
     use crate::{
-        geometry::{Mesh, Shape, Vec2, Vec3, Vec3u, Vec4}, lights::Light, materials::{Material, Texture}, scene::{Camera, Scene}, settings::RaytracerSettings
+        geometry::{Mesh, Shape, Vec2, Vec3, Vec3u, Vec4}, lights::Light, materials::{Material, Texture}, scene::{Camera, Scene}, renderer::{AOVFlags, RaytracerSettings}
     };
 
     use super::SceneBuilder;
@@ -1055,7 +1055,7 @@ pub mod test_scenes {
 
     fn debug_normals_settings() -> RaytracerSettings {
         RaytracerSettings {
-            debug_normals: true,
+            outputs: AOVFlags::NORMALS,
             ..Default::default() 
         }
     }
