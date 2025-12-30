@@ -1,5 +1,5 @@
 use raytracing::{geometry::{Shape, Vec3}, lights::Light};
-use crate::{CpuRaytracingContext, accel::TraversalCache, ray::Ray, sample::sample_uniform2, traverse_bvh};
+use crate::{CpuRaytracingContext, accel::TraversalCache, ray::Ray, sample::{self, sample_uniform2}, traverse_bvh};
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct LightSample {
@@ -54,7 +54,9 @@ pub(crate) fn sample_light(
 
             // uniformly pick triangle
             pdf /= emitter.tris.len() as f32;
-            let random_tri_idx = rand::random_range(0..emitter.tris.len());
+
+            let all_tris = 0..emitter.tris.len() as u32;
+            let random_tri_idx = sample::sample_integer(all_tris) as usize;
             
             // uniformly generate sample on triangle
             let sample = sample_uniform2();

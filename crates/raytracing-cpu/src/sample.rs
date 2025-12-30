@@ -1,4 +1,4 @@
-use std::{cell::RefCell, f32};
+use std::{cell::RefCell, f32, ops::Range};
 
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -24,6 +24,20 @@ pub(crate) fn sample_uniform() -> f32 {
     }
     else {
         rand::random_range(0.0 .. 1.0)
+    }
+}
+
+pub(crate) fn sample_integer(range: Range<u32>) -> u32 {
+    if cfg!(debug_assertions) {
+        RNG.with_borrow_mut(|rng| {
+            // so, this is not really very good but
+            // should be good enough for debugging
+            let width = range.end - range.start;
+            range.start + rng.next_u32() % width
+        })
+    }
+    else {
+        rand::random_range(range)
     }
 }
 
