@@ -1,7 +1,7 @@
-use std::ops::{
+use std::{fmt::Display, ops::{
     self, 
     MulAssign
-};
+}};
 
 use rand::random;
 
@@ -193,6 +193,18 @@ impl From<[f32; 3]> for Vec3 {
 impl From<&[f32; 3]> for Vec3 {
     fn from(value: &[f32; 3]) -> Self {
         Vec3(value[0], value[1], value[2])
+    }
+}
+
+impl Display for Vec3 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(")?;
+        self.0.fmt(f)?;
+        write!(f, ", ")?;
+        self.1.fmt(f)?;
+        write!(f, ", ")?;
+        self.2.fmt(f)?;
+        write!(f, ")")
     }
 }
 

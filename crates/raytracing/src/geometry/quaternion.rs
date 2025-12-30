@@ -1,4 +1,4 @@
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::{fmt::Display, ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign}};
 
 use crate::geometry::{Matrix4x4, Transform, Vec3};
 
@@ -281,6 +281,43 @@ impl From<Quaternion> for Transform {
     }
 }
 
+impl Display for Quaternion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(")?;
+
+        self.0.fmt(f)?;
+        if self.1.x() >= 0.0 {
+            write!(f, "+")?;
+            self.1.x().fmt(f)?;
+        }
+        else {
+            write!(f, "-")?;
+            (-self.1.x()).fmt(f)?;
+        }
+        write!(f, "i")?;
+
+        if self.1.y() >= 0.0 {
+            write!(f, "+")?;
+            self.1.y().fmt(f)?;
+        }
+        else {
+            write!(f, "-")?;
+            (-self.1.y()).fmt(f)?;
+        }
+        write!(f, "j")?;
+        if self.1.z() >= 0.0 {
+            write!(f, "+")?;
+            self.1.z().fmt(f)?;
+        }
+        else {
+            write!(f, "-")?;
+            (-self.1.z()).fmt(f)?;
+        }
+
+        write!(f, "k)")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -487,5 +524,27 @@ mod tests {
         assert_approx_eq(q.pure().x(), 2.0);
         assert_approx_eq(q.pure().y(), 3.0);
         assert_approx_eq(q.pure().z(), 4.0);
+    }
+
+    #[test]
+    fn test_display() {
+        let q = Quaternion(1.0, Vec3(2.0, 3.0, 4.0));
+        let formatted = format!("{q}");
+        assert_eq!(
+            formatted.as_str(),
+            "(1+2i+3j+4k)"
+        );
+
+        let formatted = format!("{q:.1}");
+        assert_eq!(
+            formatted.as_str(),
+            "(1.0+2.0i+3.0j+4.0k)"
+        );
+
+        let formatted = format!("{}", -q);
+        assert_eq!(
+            formatted.as_str(),
+            "(-1-2i-3j-4k)"
+        )
     }
 }

@@ -5,7 +5,16 @@ pub struct Complex(pub f32, pub f32);
 
 impl Display for Complex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}+{}i", self.0, self.1)
+        self.0.fmt(f)?;
+        if self.1 >= 0.0 {
+            write!(f, "+")?;
+            self.1.fmt(f)?;
+        }
+        else {
+            write!(f, "-")?;
+            (-self.1).fmt(f)?;
+        }
+        write!(f, "i")
     }
 }
 
