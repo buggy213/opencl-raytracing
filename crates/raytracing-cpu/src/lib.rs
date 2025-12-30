@@ -7,7 +7,7 @@ use lights::{light_radiance, occluded, sample_light};
 use materials::CpuMaterial;
 use ray::Ray;
 use raytracing::{geometry::{AABB, Matrix4x4, Vec2, Vec3}, renderer::{AOVFlags, RaytracerSettings, RenderOutput}, scene::{Camera, Scene}};
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::{accel::TraversalCache, materials::MaterialEvalContext, ray::RayDifferentials, scene::CpuAccelerationStructures, texture::CpuTextures};
 
@@ -522,12 +522,16 @@ pub fn render(
     // first hit AOVs, then render beauty
     if raytracer_settings.outputs.intersects(AOVFlags::FIRST_HIT_AOVS) {
         let mut traversal_cache = TraversalCache::new(&cpu_raytracing_context);
+        let start_aov = std::time::Instant::now();
         render_aovs(
             &cpu_raytracing_context, 
             &mut traversal_cache, 
             &raytracer_settings, 
             &mut render_output
         );
+
+        let end_aov = std::time::Instant::now();
+        info!("finished rendering aovs in {} seconds", (end_aov - start_aov).as_secs_f32());
     }
 
     // exit early if beauty is not needed
@@ -536,6 +540,7 @@ pub fn render(
     }
 
     let single_threaded = backend_settings.num_threads == 1;
+    let start_beauty = std::time::Instant::now();
     let radiance = if single_threaded {
         let mut traversal_cache = TraversalCache::new(&cpu_raytracing_context);
         let full_screen = RenderTile {
@@ -628,6 +633,9 @@ pub fn render(
 
         radiance_buffer
     };
+
+    let end_beauty = std::time::Instant::now();
+    info!("finished rendering beauty in {} seconds", (end_beauty - start_beauty).as_secs_f32());
 
     // TODO: maybe generalize this / make it parameterizable or something
     // check for NaNs and warn, even in release builds (should be quick)
