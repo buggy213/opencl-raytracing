@@ -1,14 +1,12 @@
-mod scene;
 mod camera;
 mod primitive;
+mod scene;
 
-pub use scene::Scene;
+pub use camera::{Camera, CameraType};
+pub use primitive::{
+    AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex, Primitive,
+    PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex,
+};
 pub use scene::gltf::scene_from_gltf_file;
 pub use scene::test_scenes;
-pub use primitive::{
-    Primitive, BasicPrimitive, TransformPrimitive, AggregatePrimitive,
-    PrimitiveIndex, BasicPrimitiveIndex, TransformPrimitiveIndex, AggregatePrimitiveIndex
-};
-pub use camera::{
-    Camera, CameraType
-};
+pub use scene::Scene;

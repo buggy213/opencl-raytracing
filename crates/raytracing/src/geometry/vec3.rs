@@ -1,7 +1,7 @@
-use std::{fmt::Display, ops::{
-    self, 
-    MulAssign
-}};
+use std::{
+    fmt::Display,
+    ops::{self, MulAssign},
+};
 
 use rand::random;
 
@@ -23,9 +23,7 @@ impl Vec3 {
     }
 
     pub fn square_magnitude(&self) -> f32 {
-        self.0 * self.0
-            + self.1 * self.1
-            + self.2 * self.2
+        self.0 * self.0 + self.1 * self.1 + self.2 * self.2
     }
 
     pub fn length(&self) -> f32 {
@@ -37,9 +35,11 @@ impl Vec3 {
     }
 
     pub fn cross(u: Vec3, v: Vec3) -> Vec3 {
-        Vec3(u.1 * v.2 - u.2 * v.1,
+        Vec3(
+            u.1 * v.2 - u.2 * v.1,
             u.2 * v.0 - u.0 * v.2,
-            u.0 * v.1 - u.1 * v.0)
+            u.0 * v.1 - u.1 * v.0,
+        )
     }
 
     pub fn normalize(u: &mut Vec3) {
@@ -121,9 +121,7 @@ impl ops::DivAssign<f32> for Vec3 {
 impl ops::Add for Vec3 {
     type Output = Vec3;
     fn add(self, rhs: Self) -> Self::Output {
-        Vec3(self.0 + rhs.0, 
-            self.1 + rhs.1,
-            self.2 + rhs.2)
+        Vec3(self.0 + rhs.0, self.1 + rhs.1, self.2 + rhs.2)
     }
 }
 
@@ -137,9 +135,7 @@ impl ops::Neg for Vec3 {
 impl ops::Sub for Vec3 {
     type Output = Vec3;
     fn sub(self, rhs: Self) -> Self::Output {
-        Vec3(self.0 - rhs.0, 
-            self.1 - rhs.1,
-            self.2 - rhs.2)
+        Vec3(self.0 - rhs.0, self.1 - rhs.1, self.2 - rhs.2)
     }
 }
 
@@ -155,18 +151,14 @@ impl ops::SubAssign for Vec3 {
 impl ops::Mul for Vec3 {
     type Output = Vec3;
     fn mul(self, rhs: Self) -> Self::Output {
-        Vec3(self.0 * rhs.0, 
-            self.1 * rhs.1,
-            self.2 * rhs.2)
+        Vec3(self.0 * rhs.0, self.1 * rhs.1, self.2 * rhs.2)
     }
 }
 
 impl ops::Mul<f32> for Vec3 {
     type Output = Vec3;
     fn mul(self, rhs: f32) -> Self::Output {
-        Vec3(self.0 * rhs, 
-            self.1 * rhs,
-            self.2 * rhs)
+        Vec3(self.0 * rhs, self.1 * rhs, self.2 * rhs)
     }
 }
 

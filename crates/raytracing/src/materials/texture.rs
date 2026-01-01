@@ -9,12 +9,16 @@ use crate::{geometry::Vec4, materials::image::ImageId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FilterMode {
-    Nearest, Bilinear, Trilinear
+    Nearest,
+    Bilinear,
+    Trilinear,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WrapMode {
-    Repeat, Mirror, Clamp
+    Repeat,
+    Mirror,
+    Clamp,
 }
 
 impl From<WrappingMode> for WrapMode {
@@ -44,28 +48,21 @@ impl WrapMode {
                 let frac = f32::fract(x);
                 if frac < 0.0 {
                     1.0 + frac
-                }
-                else {
+                } else {
                     frac
                 }
-            },
+            }
             WrapMode::Mirror => {
                 let frac = f32::fract(x);
-                let repeat = if frac < 0.0 {
-                    1.0 + frac
-                }
-                else {
-                    frac
-                };
-                
+                let repeat = if frac < 0.0 { 1.0 + frac } else { frac };
+
                 let floor = f32::floor(x) as i32;
                 if i32::rem_euclid(floor, 2) == 1 {
                     1.0 - repeat
-                }
-                else {
+                } else {
                     repeat
                 }
-            },
+            }
             WrapMode::Clamp => f32::clamp(x, 0.0, 1.0),
         }
     }
@@ -74,7 +71,7 @@ impl WrapMode {
 #[derive(Debug, Clone, Copy)]
 pub struct TextureSampler {
     pub filter: FilterMode,
-    pub wrap: WrapMode
+    pub wrap: WrapMode,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -85,14 +82,14 @@ pub enum Texture {
     // "Base" textures
     ImageTexture {
         image: ImageId,
-        sampler: TextureSampler
+        sampler: TextureSampler,
     },
     ConstantTexture {
-        value: Vec4
+        value: Vec4,
     },
 
     // useful for aliasing test scenes
-    // value is (u > 0.5) != (v > 0.5) ? color1 : color2 
+    // value is (u > 0.5) != (v > 0.5) ? color1 : color2
     CheckerTexture {
         color1: Vec4,
         color2: Vec4,
@@ -103,14 +100,13 @@ pub enum Texture {
     // output = a * b at each point
     ScaleTexture {
         a: TextureId,
-        b: TextureId
+        b: TextureId,
     },
 
     // output = mix(a, b, c) at each point
     MixTexture {
         a: TextureId,
         b: TextureId,
-        c: TextureId
+        c: TextureId,
     },
 }
-

@@ -2,7 +2,7 @@
 //! not actually have 4 channels; the remaining channels are treated as all 0.
 //! This is also an intentionally limited interface, only encapsulating common behavior
 //! across different platforms (color space conversion)
-//! 
+//!
 //! I really don't like this current implementation - will want to revisit this in the future
 //! maybe a custom Image handling facility is better?
 
@@ -10,20 +10,8 @@ use std::path::Path;
 
 use anyhow::Context;
 use image::{
-    buffer::ConvertBuffer, 
-    imageops, 
-    metadata::Cicp, 
-    ColorType, 
-    ConvertColorOptions, 
-    DynamicImage, 
-    ImageBuffer, 
-    ImageReader, 
-    Luma, 
-    LumaA, 
-    Pixel, 
-    Primitive, 
-    Rgb, 
-    Rgba
+    buffer::ConvertBuffer, imageops, metadata::Cicp, ColorType, ConvertColorOptions, DynamicImage,
+    ImageBuffer, ImageReader, Luma, LumaA, Pixel, Primitive, Rgb, Rgba,
 };
 use num::ToPrimitive;
 use tracing::warn;
@@ -93,10 +81,18 @@ impl DynamicImageFloat {
 
     fn resize_exact(&self, width: u32, height: u32) -> DynamicImageFloat {
         match self {
-            DynamicImageFloat::LF(image_buffer) => imageops::resize(image_buffer, width, height, imageops::FilterType::Lanczos3).into(),
-            DynamicImageFloat::LaF(image_buffer) => imageops::resize(image_buffer, width, height, imageops::FilterType::Lanczos3).into(),
-            DynamicImageFloat::RgbF(image_buffer) => imageops::resize(image_buffer, width, height, imageops::FilterType::Lanczos3).into(),
-            DynamicImageFloat::RgbaF(image_buffer) => imageops::resize(image_buffer, width, height, imageops::FilterType::Lanczos3).into(),
+            DynamicImageFloat::LF(image_buffer) => {
+                imageops::resize(image_buffer, width, height, imageops::FilterType::Lanczos3).into()
+            }
+            DynamicImageFloat::LaF(image_buffer) => {
+                imageops::resize(image_buffer, width, height, imageops::FilterType::Lanczos3).into()
+            }
+            DynamicImageFloat::RgbF(image_buffer) => {
+                imageops::resize(image_buffer, width, height, imageops::FilterType::Lanczos3).into()
+            }
+            DynamicImageFloat::RgbaF(image_buffer) => {
+                imageops::resize(image_buffer, width, height, imageops::FilterType::Lanczos3).into()
+            }
         }
     }
 
@@ -143,8 +139,8 @@ impl Image {
             image::ColorType::Rgba32F => 4,
             _ => {
                 unimplemented!("unsupported dynamic image format")
-            },
-        }    
+            }
+        }
     }
 
     pub fn width(&self) -> u32 {
@@ -159,11 +155,13 @@ impl Image {
         image_buffer: &ImageBuffer<P, Vec<P::Subpixel>>,
         x: u32,
         y: u32,
-        c: u32
+        c: u32,
     ) -> f32 {
-        let a = image_buffer.get_pixel(x, y).channels()[c as usize].to_f32()
+        let a = image_buffer.get_pixel(x, y).channels()[c as usize]
+            .to_f32()
             .expect("all image data should be representable as f32");
-        let b = P::Subpixel::DEFAULT_MAX_VALUE.to_f32()
+        let b = P::Subpixel::DEFAULT_MAX_VALUE
+            .to_f32()
             .expect("all image data should be representable as f32");
 
         a / b
@@ -177,37 +175,37 @@ impl Image {
         match &self.buffer {
             image::DynamicImage::ImageLuma8(image_buffer) => {
                 Self::get_pixel_channel(image_buffer, x, y, c)
-            },
+            }
             image::DynamicImage::ImageLumaA8(image_buffer) => {
                 Self::get_pixel_channel(image_buffer, x, y, c)
-            },
+            }
             image::DynamicImage::ImageRgb8(image_buffer) => {
                 Self::get_pixel_channel(image_buffer, x, y, c)
-            },
+            }
             image::DynamicImage::ImageRgba8(image_buffer) => {
                 Self::get_pixel_channel(image_buffer, x, y, c)
-            },
+            }
             image::DynamicImage::ImageLuma16(image_buffer) => {
                 Self::get_pixel_channel(image_buffer, x, y, c)
-            },
+            }
             image::DynamicImage::ImageLumaA16(image_buffer) => {
                 Self::get_pixel_channel(image_buffer, x, y, c)
-            },
+            }
             image::DynamicImage::ImageRgb16(image_buffer) => {
                 Self::get_pixel_channel(image_buffer, x, y, c)
-            },
+            }
             image::DynamicImage::ImageRgba16(image_buffer) => {
                 Self::get_pixel_channel(image_buffer, x, y, c)
-            },
+            }
             image::DynamicImage::ImageRgb32F(image_buffer) => {
                 Self::get_pixel_channel(image_buffer, x, y, c)
-            },
+            }
             image::DynamicImage::ImageRgba32F(image_buffer) => {
                 Self::get_pixel_channel(image_buffer, x, y, c)
-            },
+            }
             _ => {
                 unimplemented!("unsupported dynamic image format")
-            },
+            }
         }
     }
 
@@ -216,7 +214,7 @@ impl Image {
             self.get_channel(x, y, 0),
             self.get_channel(x, y, 1),
             self.get_channel(x, y, 2),
-            self.get_channel(x, y, 3)
+            self.get_channel(x, y, 3),
         )
     }
 
@@ -225,7 +223,7 @@ impl Image {
         if base.color_space() != Cicp::SRGB_LINEAR {
             warn!("`generate_mips` called for non-linear image data");
         }
-        
+
         let original_color_type = base.color();
 
         let base: DynamicImageFloat = match base.color() {
@@ -239,16 +237,14 @@ impl Image {
             image::ColorType::Rgba16 => base.to_rgba32f().into(),
             image::ColorType::Rgb32F => base.to_rgb32f().into(),
             image::ColorType::Rgba32F => base.to_rgba32f().into(),
-            _ => unimplemented!(
-                "unsupported dynamic image format"
-            ),
+            _ => unimplemented!("unsupported dynamic image format"),
         };
-        
+
         let base = if !base.width().is_power_of_two() || !base.height().is_power_of_two() {
             warn!("image has non-power-of-two dimensions, resizing");
             let w = base.width().next_power_of_two();
             let h = base.height().next_power_of_two();
-            
+
             base.resize_exact(w, h)
         } else {
             base
@@ -273,76 +269,99 @@ impl Image {
         let image_reader = ImageReader::open(path)
             .map_err(anyhow::Error::from)
             .with_context(|| "failed while loading image")?;
-        let mut image_data = image_reader.decode()
+        let mut image_data = image_reader
+            .decode()
             .map_err(anyhow::Error::from)
             .with_context(|| "failed while decoding image")?;
-        
+
         // ensure values are linear
-        let conversion_result = 
+        let conversion_result =
             image_data.apply_color_space(Cicp::SRGB_LINEAR, ConvertColorOptions::default());
 
         if let Err(conversion_err) = conversion_result {
-            warn!("Unable to convert to linear values for image {} (reason: {})", path.display(), conversion_err);
+            warn!(
+                "Unable to convert to linear values for image {} (reason: {})",
+                path.display(),
+                conversion_err
+            );
         }
-        
-        Ok(Self {
-            buffer: image_data,
-        })
+
+        Ok(Self { buffer: image_data })
     }
 
     pub fn load_from_gltf_image(gltf_image: gltf::image::Data) -> Self {
         // Note: unwrapping here is ok, since gltf_image is internally doing the inverse of this
         let dynamic_image: DynamicImage = match gltf_image.format {
-            gltf::image::Format::R8 => {
-                ImageBuffer::<Luma<u8>, Vec<u8>>::from_raw(gltf_image.width, gltf_image.height, gltf_image.pixels)
-                    .unwrap()
-                    .into()
-            },
-            gltf::image::Format::R8G8 => {
-                ImageBuffer::<LumaA<u8>, Vec<u8>>::from_raw(gltf_image.width, gltf_image.height, gltf_image.pixels)
-                    .unwrap()
-                    .into()
-            },
-            gltf::image::Format::R8G8B8 => {
-                ImageBuffer::<Rgb<u8>, Vec<u8>>::from_raw(gltf_image.width, gltf_image.height, gltf_image.pixels)
-                    .unwrap()
-                    .into()
-            },
-            gltf::image::Format::R8G8B8A8 => {
-                ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(gltf_image.width, gltf_image.height, gltf_image.pixels)
-                    .unwrap()
-                    .into()
-            },
-            gltf::image::Format::R16 => {
-                ImageBuffer::<Luma<u16>, Vec<u16>>::from_raw(gltf_image.width, gltf_image.height, bytemuck::cast_vec(gltf_image.pixels))
-                    .unwrap()
-                    .into()
-            },
-            gltf::image::Format::R16G16 => {
-                ImageBuffer::<LumaA<u16>, Vec<u16>>::from_raw(gltf_image.width, gltf_image.height, bytemuck::cast_vec(gltf_image.pixels))
-                    .unwrap()
-                    .into()
-            },
-            gltf::image::Format::R16G16B16 => {
-                ImageBuffer::<Rgb<u16>, Vec<u16>>::from_raw(gltf_image.width, gltf_image.height, bytemuck::cast_vec(gltf_image.pixels))
-                    .unwrap()
-                    .into()
-            },
-            gltf::image::Format::R16G16B16A16 => {
-                ImageBuffer::<Rgba<u16>, Vec<u16>>::from_raw(gltf_image.width, gltf_image.height, bytemuck::cast_vec(gltf_image.pixels))
-                    .unwrap()
-                    .into()
-            },
-            gltf::image::Format::R32G32B32FLOAT => {
-                ImageBuffer::<Rgb<f32>, Vec<f32>>::from_raw(gltf_image.width, gltf_image.height, bytemuck::cast_vec(gltf_image.pixels))
-                    .unwrap()
-                    .into()
-            },
-            gltf::image::Format::R32G32B32A32FLOAT => {
-                ImageBuffer::<Rgba<f32>, Vec<f32>>::from_raw(gltf_image.width, gltf_image.height, bytemuck::cast_vec(gltf_image.pixels))
-                    .unwrap()
-                    .into()
-            },
+            gltf::image::Format::R8 => ImageBuffer::<Luma<u8>, Vec<u8>>::from_raw(
+                gltf_image.width,
+                gltf_image.height,
+                gltf_image.pixels,
+            )
+            .unwrap()
+            .into(),
+            gltf::image::Format::R8G8 => ImageBuffer::<LumaA<u8>, Vec<u8>>::from_raw(
+                gltf_image.width,
+                gltf_image.height,
+                gltf_image.pixels,
+            )
+            .unwrap()
+            .into(),
+            gltf::image::Format::R8G8B8 => ImageBuffer::<Rgb<u8>, Vec<u8>>::from_raw(
+                gltf_image.width,
+                gltf_image.height,
+                gltf_image.pixels,
+            )
+            .unwrap()
+            .into(),
+            gltf::image::Format::R8G8B8A8 => ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(
+                gltf_image.width,
+                gltf_image.height,
+                gltf_image.pixels,
+            )
+            .unwrap()
+            .into(),
+            gltf::image::Format::R16 => ImageBuffer::<Luma<u16>, Vec<u16>>::from_raw(
+                gltf_image.width,
+                gltf_image.height,
+                bytemuck::cast_vec(gltf_image.pixels),
+            )
+            .unwrap()
+            .into(),
+            gltf::image::Format::R16G16 => ImageBuffer::<LumaA<u16>, Vec<u16>>::from_raw(
+                gltf_image.width,
+                gltf_image.height,
+                bytemuck::cast_vec(gltf_image.pixels),
+            )
+            .unwrap()
+            .into(),
+            gltf::image::Format::R16G16B16 => ImageBuffer::<Rgb<u16>, Vec<u16>>::from_raw(
+                gltf_image.width,
+                gltf_image.height,
+                bytemuck::cast_vec(gltf_image.pixels),
+            )
+            .unwrap()
+            .into(),
+            gltf::image::Format::R16G16B16A16 => ImageBuffer::<Rgba<u16>, Vec<u16>>::from_raw(
+                gltf_image.width,
+                gltf_image.height,
+                bytemuck::cast_vec(gltf_image.pixels),
+            )
+            .unwrap()
+            .into(),
+            gltf::image::Format::R32G32B32FLOAT => ImageBuffer::<Rgb<f32>, Vec<f32>>::from_raw(
+                gltf_image.width,
+                gltf_image.height,
+                bytemuck::cast_vec(gltf_image.pixels),
+            )
+            .unwrap()
+            .into(),
+            gltf::image::Format::R32G32B32A32FLOAT => ImageBuffer::<Rgba<f32>, Vec<f32>>::from_raw(
+                gltf_image.width,
+                gltf_image.height,
+                bytemuck::cast_vec(gltf_image.pixels),
+            )
+            .unwrap()
+            .into(),
         };
 
         Self {
@@ -358,21 +377,21 @@ mod test {
     #[test]
     fn test_mipmap_generation() {
         let crate_path = env!("CARGO_MANIFEST_DIR");
-        let test_path = std::path::Path::new(crate_path)
-            .join("test");
+        let test_path = std::path::Path::new(crate_path).join("test");
 
-        let img = Image::load_from_path(&test_path.join("mip_test.jpg"))
-            .expect("failed to load image");
-        
+        let img =
+            Image::load_from_path(&test_path.join("mip_test.jpg")).expect("failed to load image");
+
         img.buffer
             .save(&test_path.join("output_base.png"))
             .expect("failed to save base image");
-        
+
         let mips = Image::generate_mips(&img.buffer);
-        
+
         for (i, mip) in mips.iter().enumerate() {
             let filename = format!("output_mip_{}.png", i);
-            mip.save(&test_path.join(filename)).expect("failed to save mip image");
+            mip.save(&test_path.join(filename))
+                .expect("failed to save mip image");
         }
     }
 }

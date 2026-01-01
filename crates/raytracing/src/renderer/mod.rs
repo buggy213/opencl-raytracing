@@ -6,7 +6,7 @@ use crate::geometry::{Vec2, Vec3};
 // and thus spending one extra ray is basically trivial compared to the cost of computing the main
 // "beauty" result. should try to ensure the AOV matches the first actual sample taken within that pixel
 // TODO: implement more deterministic sampler so that can actually be done
-// TODO: light path expression support? looks cool but is certainly not cheap to compute. 
+// TODO: light path expression support? looks cool but is certainly not cheap to compute.
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct AOVFlags: u32 {
@@ -16,9 +16,9 @@ bitflags! {
         // ray differentials, uv derivatives, hit-point derivatives, bvh traversal depth
         // material properties? might be useful for materials themselves to be able to define
         // (blender has ability to do fully custom AOV from shader graph, looks cool)
-        
-        const DEBUG = 
-            AOVFlags::NORMALS.bits() 
+
+        const DEBUG =
+            AOVFlags::NORMALS.bits()
             | AOVFlags::UV_COORDS.bits();
 
         const FIRST_HIT_AOVS =
@@ -39,11 +39,12 @@ pub struct RenderOutput {
 
 impl RenderOutput {
     pub fn new(width: u32, height: u32) -> Self {
-        RenderOutput { 
-            width, height, 
-            beauty: None, 
-            normals: None, 
-            uv: None 
+        RenderOutput {
+            width,
+            height,
+            beauty: None,
+            normals: None,
+            uv: None,
         }
     }
 }
@@ -60,13 +61,13 @@ pub struct RaytracerSettings {
 
 impl Default for RaytracerSettings {
     fn default() -> Self {
-        Self { 
-            max_ray_depth: 8, 
-            light_sample_count: 4, 
-            samples_per_pixel: 32, 
-            accumulate_bounces: true, 
+        Self {
+            max_ray_depth: 8,
+            light_sample_count: 4,
+            samples_per_pixel: 32,
+            accumulate_bounces: true,
 
-            outputs: AOVFlags::BEAUTY
+            outputs: AOVFlags::BEAUTY,
         }
     }
 }

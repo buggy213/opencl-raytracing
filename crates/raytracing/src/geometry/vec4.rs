@@ -1,7 +1,7 @@
-use std::{fmt::Display, ops::{
-    self, 
-    MulAssign
-}};
+use std::{
+    fmt::Display,
+    ops::{self, MulAssign},
+};
 
 use rand::random;
 
@@ -27,10 +27,7 @@ impl Vec4 {
     }
 
     pub fn square_magnitude(&self) -> f32 {
-        self.0 * self.0
-            + self.1 * self.1
-            + self.2 * self.2
-            + self.3 * self.3
+        self.0 * self.0 + self.1 * self.1 + self.2 * self.2 + self.3 * self.3
     }
 
     pub fn length(&self) -> f32 {
@@ -59,7 +56,10 @@ impl Vec4 {
 
     pub fn near_zero(&self) -> bool {
         const EPSILON: f32 = 1e-8;
-        self.0.abs() < EPSILON && self.1.abs() < EPSILON && self.2.abs() < EPSILON && self.3.abs() < EPSILON
+        self.0.abs() < EPSILON
+            && self.1.abs() < EPSILON
+            && self.2.abs() < EPSILON
+            && self.3.abs() < EPSILON
     }
 
     pub fn lerp(a: Vec4, b: Vec4, t: f32) -> Vec4 {
@@ -68,11 +68,21 @@ impl Vec4 {
     }
 
     pub fn elementwise_min(a: Vec4, b: Vec4) -> Vec4 {
-        Vec4(f32::min(a.0, b.0), f32::min(a.1, b.1), f32::min(a.2, b.2), f32::min(a.3, b.3))
+        Vec4(
+            f32::min(a.0, b.0),
+            f32::min(a.1, b.1),
+            f32::min(a.2, b.2),
+            f32::min(a.3, b.3),
+        )
     }
 
     pub fn elementwise_max(a: Vec4, b: Vec4) -> Vec4 {
-        Vec4(f32::max(a.0, b.0), f32::max(a.1, b.1), f32::max(a.2, b.2), f32::max(a.3, b.3))
+        Vec4(
+            f32::max(a.0, b.0),
+            f32::max(a.1, b.1),
+            f32::max(a.2, b.2),
+            f32::max(a.3, b.3),
+        )
     }
 
     pub fn zero() -> Vec4 {
@@ -116,10 +126,12 @@ impl ops::DivAssign<f32> for Vec4 {
 impl ops::Add for Vec4 {
     type Output = Vec4;
     fn add(self, rhs: Self) -> Self::Output {
-        Vec4(self.0 + rhs.0, 
+        Vec4(
+            self.0 + rhs.0,
             self.1 + rhs.1,
             self.2 + rhs.2,
-            self.3 + rhs.3)
+            self.3 + rhs.3,
+        )
     }
 }
 
@@ -133,10 +145,12 @@ impl ops::Neg for Vec4 {
 impl ops::Sub for Vec4 {
     type Output = Vec4;
     fn sub(self, rhs: Self) -> Self::Output {
-        Vec4(self.0 - rhs.0, 
+        Vec4(
+            self.0 - rhs.0,
             self.1 - rhs.1,
             self.2 - rhs.2,
-            self.3 - rhs.3)
+            self.3 - rhs.3,
+        )
     }
 }
 
@@ -153,20 +167,19 @@ impl ops::SubAssign for Vec4 {
 impl ops::Mul for Vec4 {
     type Output = Vec4;
     fn mul(self, rhs: Self) -> Self::Output {
-        Vec4(self.0 * rhs.0, 
+        Vec4(
+            self.0 * rhs.0,
             self.1 * rhs.1,
             self.2 * rhs.2,
-            self.3 * rhs.3)
+            self.3 * rhs.3,
+        )
     }
 }
 
 impl ops::Mul<f32> for Vec4 {
     type Output = Vec4;
     fn mul(self, rhs: f32) -> Self::Output {
-        Vec4(self.0 * rhs, 
-            self.1 * rhs,
-            self.2 * rhs,
-            self.3 * rhs)
+        Vec4(self.0 * rhs, self.1 * rhs, self.2 * rhs, self.3 * rhs)
     }
 }
 

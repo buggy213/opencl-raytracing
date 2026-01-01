@@ -5,8 +5,5 @@ pub mod mesh;
 #[derive(Debug, Clone)]
 pub enum Shape {
     TriangleMesh(Mesh),
-    Sphere {
-        center: Vec3,
-        radius: f32
-    }
+    Sphere { center: Vec3, radius: f32 },
 }

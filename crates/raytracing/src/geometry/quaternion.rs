@@ -1,4 +1,7 @@
-use std::{fmt::Display, ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign}};
+use std::{
+    fmt::Display,
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+};
 
 use crate::geometry::{Matrix4x4, Transform, Vec3};
 
@@ -108,7 +111,7 @@ impl Mul<Quaternion> for Quaternion {
     fn mul(self, rhs: Quaternion) -> Self::Output {
         Quaternion(
             self.0 * rhs.0 - Vec3::dot(self.1, rhs.1),
-            self.0 * rhs.1 + rhs.0 * self.1 + Vec3::cross(self.1, rhs.1)
+            self.0 * rhs.1 + rhs.0 * self.1 + Vec3::cross(self.1, rhs.1),
         )
     }
 }
@@ -168,14 +171,14 @@ impl Quaternion {
         every term is of degree 0 (constant) or 2; we fix this degree of freedom by choosing
         the positive root!
 
-        to find x, we can notice Q_11 - Q_22 - Q_33 = 4x^2 - 1, and solve for x. however, 
+        to find x, we can notice Q_11 - Q_22 - Q_33 = 4x^2 - 1, and solve for x. however,
         we need to ensure that x has the right sign; Q_32 - Q_23 = 4xw, and we chose w to be
         positive, so this fixes the sign of x. finding y and z is similar.
 
         doing this approach requires 4 square roots, which is expensive. it is possible to directly
         use the skew-symmetry of the matrix to do better. specifically, if we define r = sqrt(1 + tr Q),
-        s = 1/(2r) and w = (1/2)r, then we saw before that Q_32 - Q_23 = 4xw, so 
-        x = (Q_32 - Q_23)/(4w) = (Q_32 - Q_23)s. We can derive similar expressions for y and z. 
+        s = 1/(2r) and w = (1/2)r, then we saw before that Q_32 - Q_23 = 4xw, so
+        x = (Q_32 - Q_23)/(4w) = (Q_32 - Q_23)s. We can derive similar expressions for y and z.
 
         however, there is still a problem - this can have numerical instability when tr Q \approx -1,
         and so we divide by almost 0 when calculating s. this corresponds to cos(\theta/2) \approx 0, or
@@ -200,7 +203,6 @@ impl Quaternion {
         let Q_33 = rotation.data[2][2];
 
         let trace = Q_11 + Q_22 + Q_33;
-        
 
         let w: f32;
         let x: f32;
@@ -214,24 +216,21 @@ impl Quaternion {
             x = (Q_32 - Q_23) * s;
             y = (Q_13 - Q_31) * s;
             z = (Q_21 - Q_12) * s;
-        }
-        else if Q_11 >= Q_22 && Q_11 >= Q_33 {
+        } else if Q_11 >= Q_22 && Q_11 >= Q_33 {
             let r = (1.0 + Q_11 - Q_22 - Q_33).sqrt();
             let s = 1.0 / (2.0 * r);
             w = (Q_32 - Q_23) * s;
             x = 0.5 * r;
             y = (Q_12 + Q_21) * s;
             z = (Q_13 + Q_31) * s;
-        }
-        else if Q_22 >= Q_11 && Q_22 >= Q_33 {
+        } else if Q_22 >= Q_11 && Q_22 >= Q_33 {
             let r = (1.0 - Q_11 + Q_22 - Q_33).sqrt();
             let s = 1.0 / (2.0 * r);
             w = (Q_13 - Q_31) * s;
             x = (Q_12 + Q_21) * s;
             y = 0.5 * r;
             z = (Q_23 + Q_32) * s;
-        }
-        else {
+        } else {
             let r = (1.0 - Q_11 - Q_22 + Q_33).sqrt();
             let s = 1.0 / (2.0 * r);
             w = (Q_21 - Q_12) * s;
@@ -273,7 +272,7 @@ impl From<Quaternion> for Transform {
     fn from(value: Quaternion) -> Self {
         let rotation_matrix: Matrix4x4 = value.into();
         let inverse = rotation_matrix.transposed();
-        
+
         Transform {
             forward: rotation_matrix,
             inverse,
@@ -289,8 +288,7 @@ impl Display for Quaternion {
         if self.1.x() >= 0.0 {
             write!(f, "+")?;
             self.1.x().fmt(f)?;
-        }
-        else {
+        } else {
             write!(f, "-")?;
             (-self.1.x()).fmt(f)?;
         }
@@ -299,8 +297,7 @@ impl Display for Quaternion {
         if self.1.y() >= 0.0 {
             write!(f, "+")?;
             self.1.y().fmt(f)?;
-        }
-        else {
+        } else {
             write!(f, "-")?;
             (-self.1.y()).fmt(f)?;
         }
@@ -308,8 +305,7 @@ impl Display for Quaternion {
         if self.1.z() >= 0.0 {
             write!(f, "+")?;
             self.1.z().fmt(f)?;
-        }
-        else {
+        } else {
             write!(f, "-")?;
             (-self.1.z()).fmt(f)?;
         }
@@ -326,7 +322,13 @@ mod tests {
     const EPSILON: f32 = 1e-5;
 
     fn assert_approx_eq(a: f32, b: f32) {
-        assert!((a - b).abs() < EPSILON, "Expected {} ≈ {}, difference: {}", a, b, (a - b).abs());
+        assert!(
+            (a - b).abs() < EPSILON,
+            "Expected {} ≈ {}, difference: {}",
+            a,
+            b,
+            (a - b).abs()
+        );
     }
 
     fn assert_vec3_approx_eq(a: Vec3, b: Vec3) {
@@ -376,7 +378,7 @@ mod tests {
         let mut q = Quaternion(3.0, Vec3(4.0, 0.0, 0.0));
         q.normalize();
         assert_approx_eq(q.norm(), 1.0);
-        
+
         let q2 = Quaternion(3.0, Vec3(4.0, 0.0, 0.0));
         let normalized = q2.normalized();
         assert_approx_eq(normalized.norm(), 1.0);
@@ -401,7 +403,7 @@ mod tests {
         let axis = Vec3(1.0, 1.0, 1.0).unit();
         let angle = std::f32::consts::PI / 4.0;
         let q = quaternion_from_axis_angle(axis, angle);
-        
+
         let test_vectors = vec![
             Vec3(1.0, 0.0, 0.0),
             Vec3(0.0, 1.0, 0.0),
@@ -409,7 +411,7 @@ mod tests {
             Vec3(1.0, 1.0, 1.0).unit(),
             Vec3(1.0, 2.0, 3.0).unit(),
         ];
-        
+
         for v in test_vectors {
             let original_length = v.length();
             let rotated = q.rotate(v);
@@ -422,12 +424,12 @@ mod tests {
     fn test_quaternion_rotate_90_degrees_x_axis() {
         // Rotate 90 degrees around x-axis
         let q = quaternion_from_axis_angle(Vec3(1.0, 0.0, 0.0), std::f32::consts::PI / 2.0);
-        
+
         // Rotate y-axis should give z-axis
         let y_axis = Vec3(0.0, 1.0, 0.0);
         let rotated = q.rotate(y_axis);
         assert_vec3_approx_eq(rotated, Vec3(0.0, 0.0, 1.0));
-        
+
         // Rotate z-axis should give -y-axis
         let z_axis = Vec3(0.0, 0.0, 1.0);
         let rotated = q.rotate(z_axis);
@@ -438,7 +440,7 @@ mod tests {
     fn test_quaternion_rotate_180_degrees() {
         // Rotate 180 degrees around y-axis
         let q = quaternion_from_axis_angle(Vec3(0.0, 1.0, 0.0), std::f32::consts::PI);
-        
+
         // Rotate x-axis should give -x-axis
         let x_axis = Vec3(1.0, 0.0, 0.0);
         let rotated = q.rotate(x_axis);
@@ -449,7 +451,7 @@ mod tests {
     fn test_quaternion_rotate_identity() {
         // Identity rotation (0 degrees) should not change the vector
         let q = quaternion_from_axis_angle(Vec3(1.0, 0.0, 0.0), 0.0);
-        
+
         let v = Vec3(1.0, 2.0, 3.0);
         let rotated = q.rotate(v);
         assert_vec3_approx_eq(rotated, v);
@@ -462,14 +464,14 @@ mod tests {
         let axis2 = Vec3(0.0, 1.0, 0.0);
         let q1 = quaternion_from_axis_angle(axis1, std::f32::consts::PI / 4.0).normalized();
         let q2 = quaternion_from_axis_angle(axis2, std::f32::consts::PI / 4.0).normalized();
-        
+
         let v = Vec3(1.0, 0.0, 0.0);
         let rotated1 = q1.rotate(v);
         let rotated2 = q2.rotate(rotated1);
-        
+
         let q_composed = q2 * q1;
         let rotated_composed = q_composed.rotate(v);
-        
+
         assert_vec3_approx_eq(rotated2, rotated_composed);
     }
 
@@ -486,22 +488,22 @@ mod tests {
     fn test_quaternion_arithmetic() {
         let q1 = Quaternion(1.0, Vec3(2.0, 3.0, 4.0));
         let q2 = Quaternion(5.0, Vec3(6.0, 7.0, 8.0));
-        
+
         // Addition
         let sum = q1 + q2;
         assert_approx_eq(sum.real(), 6.0);
         assert_vec3_approx_eq(sum.pure(), Vec3(8.0, 10.0, 12.0));
-        
+
         // Subtraction
         let diff = q2 - q1;
         assert_approx_eq(diff.real(), 4.0);
         assert_vec3_approx_eq(diff.pure(), Vec3(4.0, 4.0, 4.0));
-        
+
         // Scalar multiplication
         let scaled = q1 * 2.0;
         assert_approx_eq(scaled.real(), 2.0);
         assert_vec3_approx_eq(scaled.pure(), Vec3(4.0, 6.0, 8.0));
-        
+
         // Scalar division
         let divided = scaled / 2.0;
         assert_approx_eq(divided.real(), q1.real());
@@ -530,21 +532,12 @@ mod tests {
     fn test_display() {
         let q = Quaternion(1.0, Vec3(2.0, 3.0, 4.0));
         let formatted = format!("{q}");
-        assert_eq!(
-            formatted.as_str(),
-            "(1+2i+3j+4k)"
-        );
+        assert_eq!(formatted.as_str(), "(1+2i+3j+4k)");
 
         let formatted = format!("{q:.1}");
-        assert_eq!(
-            formatted.as_str(),
-            "(1.0+2.0i+3.0j+4.0k)"
-        );
+        assert_eq!(formatted.as_str(), "(1.0+2.0i+3.0j+4.0k)");
 
         let formatted = format!("{}", -q);
-        assert_eq!(
-            formatted.as_str(),
-            "(-1-2i-3j-4k)"
-        )
+        assert_eq!(formatted.as_str(), "(-1-2i-3j-4k)")
     }
 }

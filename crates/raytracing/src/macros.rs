@@ -26,7 +26,7 @@ macro_rules! variadic_max_comparator {
     );
 }
 
-pub(crate) use variadic_min;
 pub(crate) use variadic_max;
-pub(crate) use variadic_min_comparator;
 pub(crate) use variadic_max_comparator;
+pub(crate) use variadic_min;
+pub(crate) use variadic_min_comparator;

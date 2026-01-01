@@ -1,4 +1,7 @@
-use std::{fmt::Display, ops::{self, MulAssign}};
+use std::{
+    fmt::Display,
+    ops::{self, MulAssign},
+};
 
 use rand::random;
 
@@ -18,14 +21,13 @@ impl Vec2 {
     pub fn u(&self) -> f32 {
         self.0
     }
-    
+
     pub fn v(&self) -> f32 {
         self.1
     }
 
     pub fn square_magnitude(&self) -> f32 {
-        self.0 * self.0
-            + self.1 * self.1
+        self.0 * self.0 + self.1 * self.1
     }
 
     pub fn length(&self) -> f32 {
@@ -94,10 +96,7 @@ impl ops::DivAssign<f32> for Vec2 {
 impl ops::Add for Vec2 {
     type Output = Vec2;
     fn add(self, rhs: Self) -> Self::Output {
-        Vec2(
-            self.0 + rhs.0, 
-            self.1 + rhs.1,
-        )
+        Vec2(self.0 + rhs.0, self.1 + rhs.1)
     }
 }
 
@@ -111,10 +110,7 @@ impl ops::Neg for Vec2 {
 impl ops::Sub for Vec2 {
     type Output = Vec2;
     fn sub(self, rhs: Self) -> Self::Output {
-        Vec2(
-            self.0 - rhs.0, 
-            self.1 - rhs.1,
-        )
+        Vec2(self.0 - rhs.0, self.1 - rhs.1)
     }
 }
 
@@ -122,20 +118,14 @@ impl ops::Sub for Vec2 {
 impl ops::Mul for Vec2 {
     type Output = Vec2;
     fn mul(self, rhs: Self) -> Self::Output {
-        Vec2(
-            self.0 * rhs.0, 
-            self.1 * rhs.1,
-        )
+        Vec2(self.0 * rhs.0, self.1 * rhs.1)
     }
 }
 
 impl ops::Mul<f32> for Vec2 {
     type Output = Vec2;
     fn mul(self, rhs: f32) -> Self::Output {
-        Vec2(
-            self.0 * rhs, 
-            self.1 * rhs,
-        )
+        Vec2(self.0 * rhs, self.1 * rhs)
     }
 }
 

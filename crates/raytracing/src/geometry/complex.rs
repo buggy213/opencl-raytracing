@@ -1,4 +1,7 @@
-use std::{fmt::Display, ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign}};
+use std::{
+    fmt::Display,
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Complex(pub f32, pub f32);
@@ -9,8 +12,7 @@ impl Display for Complex {
         if self.1 >= 0.0 {
             write!(f, "+")?;
             self.1.fmt(f)?;
-        }
-        else {
+        } else {
             write!(f, "-")?;
             (-self.1).fmt(f)?;
         }
@@ -96,7 +98,10 @@ impl Mul for Complex {
     type Output = Complex;
 
     fn mul(self, rhs: Self) -> Self::Output {
-        Complex(self.0 * rhs.0 - self.1 * rhs.1, self.1 * rhs.0 + self.0 * rhs.1)
+        Complex(
+            self.0 * rhs.0 - self.1 * rhs.1,
+            self.1 * rhs.0 + self.0 * rhs.1,
+        )
     }
 }
 
@@ -136,7 +141,7 @@ impl Div for Complex {
         let denom = rhs.0 * rhs.0 + rhs.1 * rhs.1;
         Complex(
             (self.0 * rhs.0 + self.1 * rhs.1) / denom,
-            (self.1 * rhs.0 - self.0 * rhs.1) / denom
+            (self.1 * rhs.0 - self.0 * rhs.1) / denom,
         )
     }
 }

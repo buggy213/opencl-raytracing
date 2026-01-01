@@ -4,46 +4,51 @@ use super::{Matrix4x4, Vec3};
 #[derive(Debug, Clone)]
 pub struct Transform {
     pub forward: Matrix4x4,
-    pub inverse: Matrix4x4
+    pub inverse: Matrix4x4,
 }
 
 impl Transform {
     pub fn identity() -> Self {
-        Transform { forward: Matrix4x4::identity(), inverse: Matrix4x4::identity() }
+        Transform {
+            forward: Matrix4x4::identity(),
+            inverse: Matrix4x4::identity(),
+        }
     }
 
     pub fn translate(direction: Vec3) -> Self {
-        Transform { 
-            forward: Matrix4x4::create(1.0, 0.0, 0.0, direction.0, 
-                                       0.0, 1.0, 0.0, direction.1, 
-                                       0.0, 0.0, 1.0, direction.2, 
-                                       0.0, 0.0, 0.0, 1.0), 
-            inverse: Matrix4x4::create(1.0, 0.0, 0.0, -direction.0, 
-                                       0.0, 1.0, 0.0, -direction.1, 
-                                       0.0, 0.0, 1.0, -direction.2, 
-                                       0.0, 0.0, 0.0, 1.0), 
+        #[rustfmt::skip]
+        Transform {
+            forward: Matrix4x4::create(1.0, 0.0, 0.0, direction.0,
+                                       0.0, 1.0, 0.0, direction.1,
+                                       0.0, 0.0, 1.0, direction.2,
+                                       0.0, 0.0, 0.0, 1.0),
+            inverse: Matrix4x4::create(1.0, 0.0, 0.0, -direction.0,
+                                       0.0, 1.0, 0.0, -direction.1,
+                                       0.0, 0.0, 1.0, -direction.2,
+                                       0.0, 0.0, 0.0, 1.0),
         }
     }
 
     pub fn scale(scale: Vec3) -> Self {
+        #[rustfmt::skip]
         Transform {
-            forward: Matrix4x4::create(scale.0, 0.0, 0.0, 0.0, 
-                                       0.0, scale.1, 0.0, 0.0, 
-                                       0.0, 0.0, scale.2, 0.0, 
-                                       0.0, 0.0, 0.0, 1.0), 
-            inverse: Matrix4x4::create(1.0 / scale.0, 0.0, 0.0, 0.0, 
-                                       0.0, 1.0 / scale.1, 0.0, 0.0, 
-                                       0.0, 0.0, 1.0 / scale.2, 0.0, 
-                                       0.0, 0.0, 0.0, 1.0), 
+            forward: Matrix4x4::create(scale.0, 0.0, 0.0, 0.0,
+                                       0.0, scale.1, 0.0, 0.0,
+                                       0.0, 0.0, scale.2, 0.0,
+                                       0.0, 0.0, 0.0, 1.0),
+            inverse: Matrix4x4::create(1.0 / scale.0, 0.0, 0.0, 0.0,
+                                       0.0, 1.0 / scale.1, 0.0, 0.0,
+                                       0.0, 0.0, 1.0 / scale.2, 0.0,
+                                       0.0, 0.0, 0.0, 1.0),
         }
     }
 
     pub fn compose(&self, other: Transform) -> Self {
         // OTHER matmul SELF for forward direction
         // SELF.INVERSE matmul OTHER for inverse
-        Transform { 
+        Transform {
             forward: Matrix4x4::matmul(other.forward, self.forward),
-            inverse: Matrix4x4::matmul(self.inverse, other.inverse)
+            inverse: Matrix4x4::matmul(self.inverse, other.inverse),
         }
     }
 
@@ -64,9 +69,9 @@ impl Transform {
     }
 
     pub fn apply_normal(&self, normal: Vec3) -> Vec3 {
-        // inverse transpose times n is the correct approach. see 
+        // inverse transpose times n is the correct approach. see
         // https://www.scratchapixel.com/lessons/mathematics-physics-for-computer-graphics/geometry/transforming-normals.html
-        
+
         self.inverse.apply_vector_transposed(normal)
     }
 
@@ -75,7 +80,10 @@ impl Transform {
     }
 
     pub fn invert(&self) -> Transform {
-        Transform { forward: self.inverse, inverse: self.forward }
+        Transform {
+            forward: self.inverse,
+            inverse: self.forward,
+        }
     }
 }
 
@@ -83,7 +91,7 @@ impl From<Matrix4x4> for Transform {
     fn from(value: Matrix4x4) -> Self {
         Transform {
             forward: value,
-            inverse: Matrix4x4::invert(&value).expect("failed to invert matrix")
+            inverse: Matrix4x4::invert(&value).expect("failed to invert matrix"),
         }
     }
 }
@@ -95,7 +103,7 @@ impl Transform {
         let a42 = 0.0;
         let a43 = 0.0;
         let a44 = 1.0;
-        
+
         // translation
         let a14 = camera_pos.x();
         let a24 = camera_pos.y();
@@ -118,18 +126,20 @@ impl Transform {
         let a12 = down.x();
         let a22 = down.y();
         let a32: f32 = down.z();
-        
+
+        #[rustfmt::skip]
         let camera_to_world = Matrix4x4::create(
-            a11, a12, a13, a14, 
-            a21, a22, a23, a24, 
-            a31, a32, a33, a34, 
+            a11, a12, a13, a14,
+            a21, a22, a23, a24,
+            a31, a32, a33, a34,
             a41, a42, a43, a44
         );
 
-        Transform { 
-            forward: camera_to_world, 
-            inverse: camera_to_world.invert().expect("look-at transform should be invertible") 
+        Transform {
+            forward: camera_to_world,
+            inverse: camera_to_world
+                .invert()
+                .expect("look-at transform should be invertible"),
         }
     }
 }
-
