@@ -52,7 +52,7 @@ pub mod exr {
 
     use exr::prelude::*;
     use num::PrimInt;
-    use raytracing::{geometry::Vec3, scene::Scene};
+    use raytracing::geometry::Vec3;
 
     pub fn channels_from_vec3(
         channels: &mut Vec<AnyChannel<FlatSamples>>, 
@@ -105,11 +105,12 @@ pub mod exr {
 
     pub fn save_openexr(
         channels: Vec<AnyChannel<FlatSamples>>,
-        scene: &Scene, 
+        width: u32,
+        height: u32,
         output_path: &Path
     ) {
-        let width = scene.camera.raster_width;
-        let height = scene.camera.raster_height;
+        let width = width as usize;
+        let height = height as usize;
         
         let layer = Layer::new(
             (width, height),
