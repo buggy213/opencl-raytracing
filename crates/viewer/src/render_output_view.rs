@@ -632,6 +632,8 @@ impl RenderOutputView {
                 accumulate_bounces: self.gui_state.accumulate_bounces,
 
                 outputs: AOVFlags::BEAUTY,
+                
+                ..Default::default()
             };
 
             let backend_settings = CpuBackendSettings {

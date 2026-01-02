@@ -218,16 +218,12 @@ fn ray_radiance(
         }
 
         let material = &context.scene.materials[hit.material_idx as usize];
-        let material_eval_ctx = if depth == 0 {
-            // TODO: add setting for primary ray antialiasing
-            MaterialEvalContext::new_from_ray_differentials(
-                &hit, 
-                ray, 
-                camera_ray_differentials
-            )
-        }
-        else {
-            // TODO: add setting for and implement secondary ray antialiasing
+        let material_eval_ctx = if depth == 0 && raytracer_settings.antialias_primary_rays {
+            MaterialEvalContext::new_from_ray_differentials(&hit, ray, camera_ray_differentials)
+        } else if depth > 0 && raytracer_settings.antialias_secondary_rays {
+            // TODO: implement secondary ray antialiasing
+            MaterialEvalContext::new_without_antialiasing(&hit)
+        } else {
             MaterialEvalContext::new_without_antialiasing(&hit)
         };
 

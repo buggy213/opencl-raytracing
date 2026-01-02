@@ -57,6 +57,9 @@ pub struct RaytracerSettings {
     pub accumulate_bounces: bool,
 
     pub outputs: AOVFlags,
+
+    pub antialias_primary_rays: bool,
+    pub antialias_secondary_rays: bool,
 }
 
 impl Default for RaytracerSettings {
@@ -68,6 +71,9 @@ impl Default for RaytracerSettings {
             accumulate_bounces: true,
 
             outputs: AOVFlags::BEAUTY,
+
+            antialias_primary_rays: true,
+            antialias_secondary_rays: true,
         }
     }
 }
