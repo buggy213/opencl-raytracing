@@ -501,7 +501,7 @@ fn merge_tile(
 
 pub fn render(
     scene: &Scene, 
-    raytracer_settings: RaytracerSettings, 
+    raytracer_settings: &RaytracerSettings, 
     backend_settings: CpuBackendSettings
 ) -> RenderOutput {
     let width = scene.camera.raster_width;
@@ -690,7 +690,7 @@ pub struct SinglePixelOutput {
 
 pub fn render_single_pixel(
     scene: &Scene, 
-    raytracer_settings: RaytracerSettings,
+    raytracer_settings: &RaytracerSettings,
     x: u32,
     y: u32,
 ) -> SinglePixelOutput {

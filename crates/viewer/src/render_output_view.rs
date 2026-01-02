@@ -81,12 +81,12 @@ struct RaytracerResult {
     raster_size: (u32, u32)
 }
 
-fn raytrace_scene(path: &Path, settings: RaytracerSettings, backend_settings: CpuBackendSettings) -> RaytracerResult {
+fn raytrace_scene(path: &Path, settings: &RaytracerSettings, backend_settings: CpuBackendSettings) -> RaytracerResult {
     let scene = raytracing::scene::scene_from_gltf_file(path).expect("failed to load scene");
     assert!(settings.outputs.contains(AOVFlags::BEAUTY));
     let output = raytracing_cpu::render(
         &scene, 
-        settings,
+        &settings,
         backend_settings
     );
     
@@ -641,7 +641,7 @@ impl RenderOutputView {
             };
 
             let RaytracerResult { radiance, raster_size } = 
-                raytrace_scene(&self.gui_state.scenes[self.gui_state.selected_scene], settings, backend_settings);
+                raytrace_scene(&self.gui_state.scenes[self.gui_state.selected_scene], &settings, backend_settings);
             self.render_output = radiance;
 
             self.resize(raster_size.into(), device);

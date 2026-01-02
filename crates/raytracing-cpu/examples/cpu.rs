@@ -105,7 +105,7 @@ fn main() {
     if let Some(RenderCommand::Pixel { x, y }) = render_command {
         for i in 0..1 {
             raytracing_cpu::set_seed(i);
-            let pixel = render_single_pixel(&scene, raytracer_settings, x, y);
+            let pixel = render_single_pixel(&scene, &raytracer_settings, x, y);
 
             println!("hit: {}", pixel.hit);
             println!("uv: {}", pixel.uv);
@@ -148,7 +148,7 @@ fn main() {
     let mut backend_settings = CpuBackendSettings::default();
     backend_settings.num_threads = cli_args.num_threads.unwrap_or(backend_settings.num_threads);
 
-    let render_output = render(&scene, raytracer_settings, backend_settings);
+    let render_output = render(&scene, &raytracer_settings, backend_settings);
 
     let output_folder = Path::new("scenes/output");
     let output_file = output_folder.join(

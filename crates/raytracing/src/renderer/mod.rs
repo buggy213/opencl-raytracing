@@ -49,7 +49,7 @@ impl RenderOutput {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct RaytracerSettings {
     pub max_ray_depth: u32,
     pub light_sample_count: u32,

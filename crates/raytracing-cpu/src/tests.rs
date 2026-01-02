@@ -16,7 +16,7 @@ fn sanity_tests() {
             num_threads: 16
         };
 
-        let mut output_radiance = crate::render(&scene, raytracer_settings, backend_settings);
+        let mut output_radiance = crate::render(&scene, &raytracer_settings, backend_settings);
         
         // TODO: replace w/ snapshot testing, and move tests into their own crate
         // which interfaces with all backends
