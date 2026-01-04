@@ -66,7 +66,7 @@ impl Mesh {
             match iter {
                 gltf::mesh::util::ReadTexCoords::U8(iter) => {
                     for uv in iter {
-                        let uv = [uv[0] as f32 / u8::MAX as f32, uv[0] as f32 / u8::MAX as f32];
+                        let uv = [uv[0] as f32 / u8::MAX as f32, uv[1] as f32 / u8::MAX as f32];
                         uvs.push(uv.into());
                     }
                 }
