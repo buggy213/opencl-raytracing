@@ -17,8 +17,3 @@ raytracing = { workspace = true }
 png = "0.17.16"
 exr = "1.74.0"
 num_cpus = "1.17.0"
-
-[dev-dependencies]
-clap = { version = "4.5.39", features = ["derive"] }
-bitflags = { workspace = true }
-tracing-subscriber = { workspace = true }

@@ -11,7 +11,9 @@ members = [
     "crates/raytracing-cpu",
     "crates/raytracing-optix",
     
-    "crates/viewer"
+    "crates/viewer",
+    "crates/cli", 
+    "crates/visual-testing",
 ]
 
 [workspace.dependencies]
