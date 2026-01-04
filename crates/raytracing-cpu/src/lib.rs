@@ -9,7 +9,7 @@ use ray::Ray;
 use raytracing::{geometry::{AABB, Matrix4x4, Vec2, Vec3}, renderer::{AOVFlags, RaytracerSettings, RenderOutput}, scene::{Camera, Scene}};
 use tracing::{info, warn};
 
-use crate::{accel::TraversalCache, materials::MaterialEvalContext, ray::RayDifferentials, scene::CpuAccelerationStructures, texture::CpuTextures};
+use crate::{accel::TraversalCache, materials::MaterialEvalContext, ray::RayDifferentials, sample::CpuSampler, scene::CpuAccelerationStructures, texture::CpuTextures};
 
 mod ray;
 mod accel;
@@ -17,7 +17,6 @@ mod geometry;
 mod lights;
 mod materials;
 mod sample;
-pub use sample::set_seed;
 mod scene;
 mod texture;
 pub mod utils;
@@ -140,10 +139,11 @@ fn generate_ray(
     camera: &Camera, 
     x: u32, 
     y: u32,
+    sampler: &mut CpuSampler,
     spp: u32,
 ) -> (Ray, RayDifferentials) {
-    let x_disp = sample::sample_uniform();
-    let y_disp = sample::sample_uniform();
+    let x_disp = sampler.sample_uniform();
+    let y_disp = sampler.sample_uniform();
     let x = (x as f32) + x_disp;
     let y = (y as f32) + y_disp;
 
@@ -175,6 +175,7 @@ fn ray_radiance(
     camera_ray: Ray, 
     camera_ray_differentials: RayDifferentials,
     context: &CpuRaytracingContext,
+    sampler: &mut CpuSampler,
     traversal_cache: &mut TraversalCache,
     raytracer_settings: &RaytracerSettings
 ) -> Vec3 {
@@ -255,7 +256,7 @@ fn ray_radiance(
                 };
 
                 for _ in 0..light_samples {
-                    let light_sample = sample_light(context, light, hit.point);
+                    let light_sample = sample_light(context, light, hit.point, sampler);
                     let occluded = occluded(context, traversal_cache, light_sample);
                     if !occluded {
                         let wi = w2o.apply_vector(-light_sample.shadow_ray.direction); // shadow ray from light to hit point, we want other way
@@ -276,7 +277,7 @@ fn ray_radiance(
         // indirect illumination
         // wi and wo can be facing opposite the normal (e.g. reflection inside a glass sphere)
         // cos_theta terms need to use absolute value to account for this
-        let bsdf_sample = bsdf.sample_bsdf(wo);
+        let bsdf_sample = bsdf.sample_bsdf(wo, sampler);
         let cos_theta = bsdf_sample.wi.z().abs();
         path_weight *= bsdf_sample.bsdf * cos_theta / bsdf_sample.pdf;
 
@@ -402,6 +403,7 @@ fn create_render_jobs(scene: &Scene) -> Vec<RenderTile> {
 
 fn render_tile(
     context: &CpuRaytracingContext,
+    sampler: &mut CpuSampler,
     traversal_cache: &mut TraversalCache,
     tile: RenderTile, 
     raytracer_settings: &RaytracerSettings
@@ -414,11 +416,17 @@ fn render_tile(
         for i in 0..tile_width {
             let mut radiance = Vec3(0.0, 0.0, 0.0);
             
-            for _ in 0..raytracer_settings.samples_per_pixel {
+            for sample_index in 0..raytracer_settings.samples_per_pixel {
+                let x = (tile.x0 + i) as u32;
+                let y = (tile.y0 + j) as u32;
+
+                sampler.start_sample((x, y), sample_index as u64);
+                
                 let (camera_ray, camera_ray_differentials) = generate_ray(
                     &context.scene.camera, 
-                    (tile.x0 + i) as u32, 
-                    (tile.y0 + j) as u32,
+                    x, 
+                    y,
+                    sampler,
                     raytracer_settings.samples_per_pixel,
                 );
 
@@ -426,6 +434,7 @@ fn render_tile(
                     camera_ray,
                     camera_ray_differentials,
                     context,
+                    sampler,
                     traversal_cache, 
                     raytracer_settings
                 );
@@ -441,6 +450,7 @@ fn render_tile(
 
 fn render_aovs(
     context: &CpuRaytracingContext,
+    sampler: &mut CpuSampler,
     traversal_cache: &mut TraversalCache,
     raytracer_settings: &RaytracerSettings,
 
@@ -457,11 +467,15 @@ fn render_aovs(
 
     for j in 0..render_output.height {
         for i in 0..render_output.width {
+            let x = i;
+            let y = j;
+            sampler.start_sample((x, y), 0);
             
             let (camera_ray, _) = generate_ray(
                 &context.scene.camera, 
-                i as u32, 
-                j as u32,
+                x, 
+                y,
+                sampler,
                 raytracer_settings.samples_per_pixel,
             );
 
@@ -515,12 +529,15 @@ pub fn render(
         &cpu_acceleration_structures
     );
 
+    let mut single_threaded_sampler = CpuSampler::from_sampler(&raytracer_settings.sampler, raytracer_settings.seed);
+
     // first hit AOVs, then render beauty
     if raytracer_settings.outputs.intersects(AOVFlags::FIRST_HIT_AOVS) {
         let mut traversal_cache = TraversalCache::new(&cpu_raytracing_context);
         let start_aov = std::time::Instant::now();
         render_aovs(
             &cpu_raytracing_context, 
+            &mut single_threaded_sampler,
             &mut traversal_cache, 
             &raytracer_settings, 
             &mut render_output
@@ -548,6 +565,7 @@ pub fn render(
 
         render_tile(
             &cpu_raytracing_context,
+            &mut single_threaded_sampler,
             &mut traversal_cache,
             full_screen,
             &raytracer_settings
@@ -570,11 +588,13 @@ pub fn render(
 
         fn render_thread(
             context: &CpuRaytracingContext,
+            sampler_template: &CpuSampler,
             work_queue: Arc<Mutex<Vec<RenderTile>>>,
             result_channel_tx: std::sync::mpsc::Sender<(RenderTile, Vec<Vec3>)>,
             raytracer_settings: &RaytracerSettings
         ) {
             let mut traversal_cache = TraversalCache::new(context);
+            let mut sampler = sampler_template.clone();
 
             loop {
                 let mut work_queue_guard = work_queue.lock().expect("lock poisoned");
@@ -587,6 +607,7 @@ pub fn render(
 
                 let tile_radiance = render_tile(
                     context, 
+                    &mut sampler,
                     &mut traversal_cache, 
                     tile, 
                     raytracer_settings
@@ -604,6 +625,7 @@ pub fn render(
                 scope.spawn(|| {
                     render_thread(
                         &cpu_raytracing_context, 
+                        &single_threaded_sampler,
                         thread_work_queue_handle, 
                         thread_result_channel_tx, 
                         &raytracer_settings
@@ -693,6 +715,7 @@ pub fn render_single_pixel(
     raytracer_settings: &RaytracerSettings,
     x: u32,
     y: u32,
+    sample_index: Option<u32>,
 ) -> SinglePixelOutput {
     let (x, y) = if x >= scene.camera.raster_width as u32 || y >= scene.camera.raster_height as u32 {
         let clamped_x = u32::clamp(x, 0, scene.camera.raster_width as u32 - 1);
@@ -705,6 +728,8 @@ pub fn render_single_pixel(
         (x, y)
     };
 
+    let sample_index = sample_index.unwrap_or(0) as u64;
+
     let cpu_acceleration_structures = scene::prepare_cpu_acceleration_structures(scene);
     let cpu_raytracing_context = CpuRaytracingContext::new(
         &scene,
@@ -712,12 +737,23 @@ pub fn render_single_pixel(
     );
 
     let mut traversal_cache = TraversalCache::new(&cpu_raytracing_context);
-    let (ray, ray_differentials) = generate_ray(&scene.camera, x, y, raytracer_settings.samples_per_pixel);
+    let mut single_pixel_sampler = CpuSampler::from_sampler(&raytracer_settings.sampler, raytracer_settings.seed);
+    single_pixel_sampler.start_sample((x, y), sample_index);
+
+    let (ray, ray_differentials) = generate_ray(
+        &scene.camera, 
+        x, 
+        y,
+        &mut single_pixel_sampler,
+        raytracer_settings.samples_per_pixel
+    );
+
     let aovs = first_hit_aovs(ray, &cpu_raytracing_context, &mut traversal_cache);
     let radiance = ray_radiance(
         ray, 
         ray_differentials, 
         &cpu_raytracing_context, 
+        &mut single_pixel_sampler,
         &mut traversal_cache, 
         &raytracer_settings
     );

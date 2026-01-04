@@ -1,6 +1,4 @@
-use std::path::Path;
-
-use crate::{CpuBackendSettings};
+use crate::CpuBackendSettings;
 
 #[test]
 fn sanity_tests() {

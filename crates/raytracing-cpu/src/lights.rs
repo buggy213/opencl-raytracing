@@ -1,5 +1,5 @@
 use raytracing::{geometry::{Shape, Vec3}, lights::Light};
-use crate::{CpuRaytracingContext, accel::TraversalCache, ray::Ray, sample::{self, sample_uniform2}, traverse_bvh};
+use crate::{CpuRaytracingContext, accel::TraversalCache, ray::Ray, sample::{CpuSampler}, traverse_bvh};
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct LightSample {
@@ -12,7 +12,8 @@ pub(crate) struct LightSample {
 pub(crate) fn sample_light(
     context: &CpuRaytracingContext,
     light: &Light, 
-    point: Vec3 // world-space
+    point: Vec3, // world-space
+    sampler: &mut CpuSampler,
 ) -> LightSample {
     match light {
         Light::PointLight { position, intensity } => {
@@ -56,10 +57,10 @@ pub(crate) fn sample_light(
             pdf /= emitter.tris.len() as f32;
 
             let all_tris = 0..emitter.tris.len() as u32;
-            let random_tri_idx = sample::sample_integer(all_tris) as usize;
+            let random_tri_idx = sampler.sample_u32(all_tris) as usize;
             
             // uniformly generate sample on triangle
-            let sample = sample_uniform2();
+            let sample = sampler.sample_uniform2();
             let bary = if sample.0 < sample.1 {
                 let b0 = sample.0 / 2.0;
                 let b1 = sample.1 - sample.0 / 2.0;

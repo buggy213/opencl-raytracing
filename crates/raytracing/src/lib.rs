@@ -8,6 +8,7 @@ pub mod geometry;
 pub mod lights;
 pub mod macros;
 pub mod materials;
+pub mod sampling;
 pub mod scene;
 
 pub mod renderer;

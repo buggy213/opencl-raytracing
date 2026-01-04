@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 
-use crate::geometry::{Vec2, Vec3};
+use crate::{geometry::{Vec2, Vec3}, sampling::Sampler};
 
 // AOV pass is separated from main render; the intention is that most AOVs are cheap to compute
 // and thus spending one extra ray is basically trivial compared to the cost of computing the main
@@ -52,9 +52,12 @@ impl RenderOutput {
 #[derive(Debug, Clone)]
 pub struct RaytracerSettings {
     pub max_ray_depth: u32,
+    pub accumulate_bounces: bool,
+
     pub light_sample_count: u32,
     pub samples_per_pixel: u32,
-    pub accumulate_bounces: bool,
+    pub seed: Option<u64>,
+    pub sampler: Sampler,
 
     pub outputs: AOVFlags,
 
@@ -66,9 +69,12 @@ impl Default for RaytracerSettings {
     fn default() -> Self {
         Self {
             max_ray_depth: 8,
+            accumulate_bounces: true,
+
             light_sample_count: 4,
             samples_per_pixel: 32,
-            accumulate_bounces: true,
+            seed: None,
+            sampler: Sampler::Independent,
 
             outputs: AOVFlags::BEAUTY,
 

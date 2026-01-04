@@ -3,7 +3,7 @@ use std::f32;
 use raytracing::{geometry::{Complex, Vec2, Vec3}, materials::Material, scene};
 use tracing::warn;
 
-use crate::{accel, ray::{Ray, RayDifferentials}, sample, texture::CpuTextures};
+use crate::{accel, ray::{Ray, RayDifferentials}, sample::{self, CpuSampler}, texture::CpuTextures};
 
 #[derive(Debug)]
 pub(crate) struct BsdfSample {
@@ -107,11 +107,17 @@ impl CpuBsdf {
         }
     }
 
-    pub(crate) fn sample_bsdf(&self, wo: Vec3) -> BsdfSample {
+    // we aim to consistently sample the same number of dimensions when the underlying material
+    // is the same to maximize the benefits of stratification. however, some materials simply require
+    // more samples than others, so only *within* a single material (which will likely lead to similar 
+    // subsequent bsdf sampling / similar light sampling later) do we try to ensure this; otherwise
+    // every material would take the same number of dimensions as the maximum of all materials
+    pub(crate) fn sample_bsdf(&self, wo: Vec3, sampler: &mut CpuSampler) -> BsdfSample {
         match self {
             CpuBsdf::Diffuse { albedo } => {
                 // cosine-weighted hemisphere sampling
-                let (wi, pdf) = sample::sample_cosine_hemisphere();
+                let u = sampler.sample_uniform2();
+                let (wi, pdf) = sample::sample_cosine_hemisphere(u);
                 BsdfSample {
                     wi,
                     bsdf: *albedo / f32::consts::PI,
@@ -131,7 +137,7 @@ impl CpuBsdf {
                 // we randomly choose to sample the Dirac in the reflected direction,
                 // or in the refracted direction, proportional to calculated reflection
                 // and transmission coefficients
-                let sample = sample::sample_uniform();
+                let sample = sampler.sample_uniform();
                 let bsdf_sample = if sample < R {
                     let reflection_dir = Vec3::reflect(wo, normal);
                     let cos_theta = reflection_dir.z().abs();
@@ -217,7 +223,8 @@ impl CpuBsdf {
                     *eta, 
                     *kappa,
                     *alpha_x, 
-                    *alpha_y
+                    *alpha_y,
+                    sampler,
                 )
             },
 
@@ -230,7 +237,8 @@ impl CpuBsdf {
                     wo, 
                     *eta, 
                     *alpha_x, 
-                    *alpha_y
+                    *alpha_y,
+                    sampler,
                 )
             },
 
@@ -243,7 +251,8 @@ impl CpuBsdf {
                     wo, 
                     *base_color, 
                     *metallic, 
-                    *alpha
+                    *alpha,
+                    sampler,
                 )
             }
         }
@@ -533,7 +542,7 @@ mod microfacet {
     use raytracing::geometry::{Complex, Vec2, Vec3};
     use tracing::warn;
 
-    use crate::{materials::{BsdfSample, fresnel_complex, fresnel_dielectric}, sample};
+    use crate::{materials::{BsdfSample, fresnel_complex, fresnel_dielectric}, sample::{self, CpuSampler}};
 
     // PBRT 4ed 9.6.1
     // represents relative differential area of microfacets pointing in a particular direction
@@ -595,11 +604,11 @@ mod microfacet {
     // PBRT 4ed 9.6.4
     // sample from visible normals distribution
     // figure 9.29 visually represents what this is doing
-    pub(super) fn sample_wm(w: Vec3, alpha_x: f32, alpha_y: f32) -> Vec3 {
+    pub(super) fn sample_wm(w: Vec3, alpha_x: f32, alpha_y: f32, u: Vec2) -> Vec3 {
         let mut wh = Vec3(alpha_x * w.x(), alpha_y * w.y(), w.z()).unit();
         if wh.z() < 0.0 { wh = -wh; }
 
-        let p = sample::sample_unit_disk();
+        let p = sample::sample_unit_disk(u);
         let t1 = if wh.z() < 0.9999 {
             Vec3::cross(Vec3(0.0, 0.0, 1.0), wh)
         }
@@ -675,8 +684,10 @@ mod microfacet {
         kappa: Vec3,
         alpha_x: f32,
         alpha_y: f32,
+        sampler: &mut CpuSampler,
     ) -> BsdfSample {
-        let wm = sample_wm(wo, alpha_x, alpha_y);
+        let u = sampler.sample_uniform2();
+        let wm = sample_wm(wo, alpha_x, alpha_y, u);
         let wi = Vec3::reflect(wo, wm);
         
         // this represents the case that the ray bounces deeper into
@@ -830,15 +841,17 @@ mod microfacet {
         eta: f32,
         alpha_x: f32,
         alpha_y: f32,
+        sampler: &mut CpuSampler,
     ) -> BsdfSample {
-        let wm = sample_wm(wo, alpha_x, alpha_y);
+        let u = sampler.sample_uniform2();
+        let wm = sample_wm(wo, alpha_x, alpha_y, u);
          
         #[allow(non_snake_case, reason = "physics convention")]
         let R = fresnel_dielectric(Vec3::dot(wo, wm), eta);
         #[allow(non_snake_case, reason = "physics convention")]
         let _T = 1.0 - R;
 
-        let wi = if sample::sample_uniform() < R {
+        let wi = if sampler.sample_uniform() < R {
             let wi = Vec3::reflect(wo, wm);
 
             // see analogous comment in `torrance_sparrow_refl_sample`
@@ -921,7 +934,7 @@ mod gltf_pbr {
 
     use raytracing::geometry::Vec3;
 
-    use crate::{materials::BsdfSample, sample};
+    use crate::{materials::BsdfSample, sample::{self, CpuSampler}};
 
     #[allow(non_snake_case, reason = "gltf spec")]
     fn D(wm: Vec3, alpha: f32) -> f32 {
@@ -1036,14 +1049,19 @@ mod gltf_pbr {
         base_color: Vec3,
         metallic: f32,
         alpha: f32,
+        sampler: &mut CpuSampler,
     ) -> BsdfSample {
         if alpha < 1.0e-4 {
             // effectively smooth case
             // we need to stochastically return the specular component or the diffuse component
+            // we also treat this as effectively separate from non-smooth case for the purposes
+            // of maintaining "sample coherence" with stratified samplers
             let dielectric_fresnel_mix = fresnel_mix_factor(1.5, wo.z());
             let specular_prob = metallic + (1.0 - metallic) * dielectric_fresnel_mix;
             
-            if sample::sample_uniform() < specular_prob {
+            let u1 = sampler.sample_uniform();
+            let u2 = sampler.sample_uniform2();
+            if u1 < specular_prob {
                 // specular_brdf reduces to 1.0 across all wavelengths in the case that it's fully smooth
                 let metal_component = metallic * conductor_fresnel(base_color, Vec3(1.0, 1.0, 1.0), wo.z());
                 let dielectric_specular_component = (1.0 - metallic) * dielectric_fresnel_mix * Vec3(1.0, 1.0, 1.0);
@@ -1055,7 +1073,7 @@ mod gltf_pbr {
                 }
             }
             else {
-                let (wi, wi_pdf) = sample::sample_cosine_hemisphere();
+                let (wi, wi_pdf) = sample::sample_cosine_hemisphere(u2);
                 return BsdfSample { 
                     wi, 
                     bsdf: (1.0 - specular_prob) * base_color * f32::consts::FRAC_1_PI, 
@@ -1065,21 +1083,23 @@ mod gltf_pbr {
             }
         }
 
-        let wm = super::microfacet::sample_wm(wo, alpha, alpha);
+        let wm = super::microfacet::sample_wm(wo, alpha, alpha, sampler.sample_uniform2());
         let specular_wi = Vec3::reflect(wo, wm);
-        let (diffuse_wi, _) = sample::sample_cosine_hemisphere();
+        let (diffuse_wi, _) = sample::sample_cosine_hemisphere(sampler.sample_uniform2());
 
         let dielectric_fresnel_mix = fresnel_mix_factor(1.5, Vec3::dot(wo, wm));
 
         // we stochastically sample the direction according to mix probabilities
         // however, our pdf needs to account for all the ways that a direction could've been chosen
-        let wi = if sample::sample_uniform() < metallic {
+        let u1 = sampler.sample_uniform();
+        let u2 = sampler.sample_uniform();
+        let wi = if u1 < metallic {
             // metal
             specular_wi
         }
         else {
             // dielectric
-            if sample::sample_uniform() < dielectric_fresnel_mix {
+            if u2 < dielectric_fresnel_mix {
                 // reflection
                 specular_wi
             }

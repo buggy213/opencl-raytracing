@@ -104,9 +104,9 @@ fn main() {
 
     if let Some(RenderCommand::Pixel { x, y }) = render_command {
         for i in 0..1 {
-            raytracing_cpu::set_seed(i);
-            let pixel = render_single_pixel(&scene, &raytracer_settings, x, y);
+            let pixel = render_single_pixel(&scene, &raytracer_settings, x, y, Some(i));
 
+            println!("sample {i}");
             println!("hit: {}", pixel.hit);
             println!("uv: {}", pixel.uv);
             println!("normal: {}", pixel.normal);
