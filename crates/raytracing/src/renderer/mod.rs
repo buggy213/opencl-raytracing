@@ -13,17 +13,25 @@ bitflags! {
         const BEAUTY = 1 << 0;
         const NORMALS = 1 << 1;
         const UV_COORDS = 1 << 2;
+        
+        // mip-level also depends on resolution of underlying image too; if textures
+        // are not uniformly sized then directly comparing mip-levels is not really valid.
+        // it might make sense to create a "normalized" mip-level which takes this into account
+        const MIP_LEVEL = 1 << 3;
+
         // ray differentials, uv derivatives, hit-point derivatives, bvh traversal depth
         // material properties? might be useful for materials themselves to be able to define
         // (blender has ability to do fully custom AOV from shader graph, looks cool)
 
         const DEBUG =
             AOVFlags::NORMALS.bits()
-            | AOVFlags::UV_COORDS.bits();
+            | AOVFlags::UV_COORDS.bits()
+            | AOVFlags::MIP_LEVEL.bits();
 
         const FIRST_HIT_AOVS =
             AOVFlags::NORMALS.bits()
-            | AOVFlags::UV_COORDS.bits();
+            | AOVFlags::UV_COORDS.bits()
+            | AOVFlags::MIP_LEVEL.bits();
     }
 }
 
@@ -35,6 +43,7 @@ pub struct RenderOutput {
     pub beauty: Option<Vec<Vec3>>,
     pub normals: Option<Vec<Vec3>>,
     pub uv: Option<Vec<Vec2>>,
+    pub mip_level: Option<Vec<f32>>,
 }
 
 impl RenderOutput {
@@ -45,6 +54,7 @@ impl RenderOutput {
             beauty: None,
             normals: None,
             uv: None,
+            mip_level: None
         }
     }
 }

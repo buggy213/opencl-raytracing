@@ -273,6 +273,28 @@ impl CpuTextures<'_> {
         u0 * (1.0 - y_frac) + u1 * y_frac
     }
 
+    fn mip_level(mip0: &Image, eval_ctx: &MaterialEvalContext) -> f32 {
+        let (dudx, dudy, dvdx, dvdy) = (
+            eval_ctx.dudx,
+            eval_ctx.dudy,
+            eval_ctx.dvdx,
+            eval_ctx.dvdy
+        );
+
+        let dx = f32::sqrt(dudx * dudx + dvdx * dvdx);
+        let dy = f32::sqrt(dudy * dudy + dvdy * dvdy);
+
+        // TODO: anisotropic mipmaps?
+        // if sampling rate is faster than every half pixel, then all frequencies in mip0 
+        // can be reconstructed (theoretically) so just do bilinear filtering.
+        let larger_derivative = f32::max(dx, dy);
+        let half_pixel = 1.0 / (2.0 * mip0.width() as f32);
+
+        let mip_level = f32::log2(larger_derivative / half_pixel);
+        
+        mip_level
+    }
+
     fn sample_image_texture(
         image: &Image,
         image_mipmap: Option<&CpuMipmap>,
@@ -295,16 +317,6 @@ impl CpuTextures<'_> {
                 Self::bilerp_sample(image, u, v)
             },
             raytracing::materials::FilterMode::Trilinear => {
-                let (dudx, dudy, dvdx, dvdy) = (
-                    eval_ctx.dudx,
-                    eval_ctx.dudy,
-                    eval_ctx.dvdx,
-                    eval_ctx.dvdy
-                );
-
-                let dx = f32::sqrt(dudx * dudx + dvdx * dvdx);
-                let dy = f32::sqrt(dudy * dudy + dvdy * dvdy);
-
                 let mipmap = image_mipmap.expect(
                     "trilinear filter mode requires mipmap"
                 );
@@ -312,13 +324,7 @@ impl CpuTextures<'_> {
                 let mip0 = &mipmap.mip0;
                 let mips = &mipmap.mips;
 
-                // TODO: anisotropic mipmaps?
-                // if sampling rate is faster than every half pixel, then all frequencies in mip0 
-                // can be reconstructed (theoretically) so just do bilinear filtering.
-                let larger_derivative = f32::max(dx, dy);
-                let half_pixel = 1.0 / (2.0 * mip0.width() as f32);
-
-                let mip_level = f32::log2(larger_derivative / half_pixel);
+                let mip_level = Self::mip_level(mip0, eval_ctx);
                 let max_mip_level = mips.len() as f32;
                 let lower = f32::floor(f32::clamp(mip_level, 0.0, max_mip_level)) as u32;
                 let upper = f32::ceil(f32::clamp(mip_level, 0.0, max_mip_level)) as u32;
@@ -443,6 +449,27 @@ impl CpuTextures<'_> {
 
                 (one - c_val) * a_val + c_val * b_val
             },
+        }
+    }
+
+    pub(crate) fn texture_mip_level(
+        &self,
+        texture_id: TextureId,
+        eval_ctx: &MaterialEvalContext,
+    ) -> Option<f32> {
+        let tex = &self.scene_textures[texture_id.0 as usize];
+        match tex {
+            Texture::ImageTexture { image, sampler } 
+                if matches!(sampler.filter, FilterMode::Trilinear) => {
+                let mipmap = &self.scene_image_mipmaps[image.0 as usize];
+                if let Some(mipmap) = mipmap {
+                    Some(Self::mip_level(&mipmap.mip0, eval_ctx))
+                }
+                else {
+                    None
+                }
+            }
+            _ => None
         }
     }
 }

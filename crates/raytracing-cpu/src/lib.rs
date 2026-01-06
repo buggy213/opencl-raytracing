@@ -309,15 +309,17 @@ struct FirstHitAOVData {
     hit: bool,
     uv: Vec2,
     normals: Vec3,
+    mip_level: Option<f32>,
 }
 
 fn first_hit_aovs(
-    ray: Ray, 
+    camera_ray: Ray,
+    camera_ray_differentials: RayDifferentials, 
     context: &CpuRaytracingContext,
     traversal_cache: &mut TraversalCache,
 ) -> FirstHitAOVData {
     let hit_info = traverse_bvh(
-        ray, 
+        camera_ray, 
         0.0,
         f32::INFINITY,
         context, 
@@ -325,19 +327,26 @@ fn first_hit_aovs(
         false,
     );
 
-    if let Some(hit_info) = hit_info {
-        FirstHitAOVData { 
-            hit: true, 
-            uv: hit_info.uv, 
-            normals: hit_info.normal 
-        }
-    }
-    else {
-        FirstHitAOVData { 
+    let Some(hit) = hit_info else {
+        return FirstHitAOVData { 
             hit: false, 
             uv: Vec2::zero(), 
-            normals: Vec3::zero() 
-        }
+            normals: Vec3::zero(),
+            mip_level: None
+        };
+    };
+
+    // evaluate material mip-level aov
+    let material = &context.scene.materials[hit.material_idx as usize];
+    let material_eval_ctx = 
+        MaterialEvalContext::new_from_ray_differentials(&hit, camera_ray, camera_ray_differentials);
+    let mip_level = material.get_mip_level(&material_eval_ctx, &context.cpu_textures);
+
+    FirstHitAOVData { 
+        hit: true, 
+        uv: hit.uv, 
+        normals: hit.normal, 
+        mip_level,
     }
 }
 
@@ -464,6 +473,9 @@ fn render_aovs(
     if raytracer_settings.outputs.contains(AOVFlags::UV_COORDS) {
         render_output.uv = Some(Vec::with_capacity(output_buffer_size));
     }
+    if raytracer_settings.outputs.contains(AOVFlags::MIP_LEVEL) {
+        render_output.mip_level = Some(Vec::with_capacity(output_buffer_size));
+    }
 
     for j in 0..render_output.height {
         for i in 0..render_output.width {
@@ -471,7 +483,7 @@ fn render_aovs(
             let y = j;
             sampler.start_sample((x, y), 0);
             
-            let (camera_ray, _) = generate_ray(
+            let (camera_ray, camera_ray_differentials) = generate_ray(
                 &context.scene.camera, 
                 x, 
                 y,
@@ -481,15 +493,26 @@ fn render_aovs(
 
             let first_hit_aovs = first_hit_aovs(
                 camera_ray, 
+                camera_ray_differentials,
                 context, 
                 traversal_cache
             );
 
+            let FirstHitAOVData { 
+                hit, 
+                uv, 
+                normals, 
+                mip_level 
+            } = first_hit_aovs;
+
             if raytracer_settings.outputs.contains(AOVFlags::NORMALS) {
-                render_output.normals.as_mut().unwrap().push(first_hit_aovs.normals);
+                render_output.normals.as_mut().unwrap().push(normals);
             }
             if raytracer_settings.outputs.contains(AOVFlags::UV_COORDS) {
-                render_output.uv.as_mut().unwrap().push(first_hit_aovs.uv);
+                render_output.uv.as_mut().unwrap().push(uv);
+            }
+            if raytracer_settings.outputs.contains(AOVFlags::MIP_LEVEL) {
+                render_output.mip_level.as_mut().unwrap().push(mip_level.unwrap_or(0.0));
             }
         }
     }
@@ -748,7 +771,13 @@ pub fn render_single_pixel(
         raytracer_settings.samples_per_pixel
     );
 
-    let aovs = first_hit_aovs(ray, &cpu_raytracing_context, &mut traversal_cache);
+    let aovs = first_hit_aovs(
+        ray, 
+        ray_differentials, 
+        &cpu_raytracing_context, 
+        &mut traversal_cache
+    );
+
     let radiance = ray_radiance(
         ray, 
         ray_differentials, 

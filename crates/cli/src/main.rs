@@ -241,6 +241,12 @@ fn save_to_png(mut render_output: RenderOutput, aov_flags: AOVFlags, output_path
                     &output_path
                 );
             }
+            AOVFlags::MIP_LEVEL => {
+                // TODO: ideally, we would palettize + round to get a nice plot, using something like matplotlib to generate
+                // a legend
+                warn!("MIP_LEVEL png output not supported (yet)");
+            }
+
             _ => ()
         })
     }
@@ -283,6 +289,16 @@ fn save_to_exr(render_output: RenderOutput, aov_flags: AOVFlags, output_path: &P
                         &mut channels,
                         "V",
                         &v
+                    );
+                }
+            }
+
+            AOVFlags::MIP_LEVEL => {
+                if let Some(ref mip_level) = render_output.mip_level {
+                    raytracing_cpu::utils::exr::channel_from_f32_array(
+                        &mut channels, 
+                        "Mip Level", 
+                        &mip_level
                     );
                 }
             }

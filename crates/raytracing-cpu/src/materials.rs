@@ -391,11 +391,14 @@ impl MaterialEvalContext {
 pub(crate) trait CpuMaterial {
     // evaluate the material at a specific shading point to get a bsdf
     fn get_bsdf(&self, eval_ctx: &MaterialEvalContext, textures: &CpuTextures) -> CpuBsdf;
+
+    // evaluate what mip-level the "primary" (usually albedo / color) texture
+    // associated with a material is, or None if it's not applicable (i.e. it's not an image texture)
+    fn get_mip_level(&self, eval_ctx: &MaterialEvalContext, textures: &CpuTextures) -> Option<f32>;
 }
 
 impl CpuMaterial for Material {
     fn get_bsdf(&self, eval_ctx: &MaterialEvalContext, textures: &CpuTextures) -> CpuBsdf {
-        let uv = eval_ctx.uv;
         match self {
             Material::Diffuse { albedo } => {
                 let albedo = textures.sample(*albedo, eval_ctx);
@@ -462,6 +465,19 @@ impl CpuMaterial for Material {
 
             _ => todo!("support new material")
         }
+    }
+
+    fn get_mip_level(&self, eval_ctx: &MaterialEvalContext, textures: &CpuTextures) -> Option<f32> {
+        let &main_tex = match self {
+            Material::Diffuse { albedo } => albedo,
+            Material::SmoothDielectric { .. } => return None,
+            Material::SmoothConductor { .. } => return None,
+            Material::RoughDielectric { .. } => return None,
+            Material::RoughConductor { .. } => return None,
+            Material::GLTFMetallicRoughness { base_color, metallic_roughness: _ } => base_color,
+        };
+
+        textures.texture_mip_level(main_tex, eval_ctx)
     }
 }
 
