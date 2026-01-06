@@ -151,8 +151,8 @@ impl CpuSampler {
                 sample_index 
             } => {
                 let mut hasher = FxHasher::default();
-                hasher.write_u64(*seed);
                 hasher.write_u32(*dimension);
+                hasher.write_u64(*seed);
                 let hash = hasher.finish() as u32;
 
                 let total_samples = (*x_samples) * (*y_samples);
