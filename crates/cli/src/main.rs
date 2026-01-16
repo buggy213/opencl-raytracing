@@ -16,18 +16,18 @@ struct CommandLineArguments {
     #[command(flatten)]
     input: InputScene,
 
-    #[arg(short, long)]
+    #[arg(short, long, help = "Output filename (written under scenes/output/)")]
     output: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long, value_enum, help = "Force output format (otherwise inferred from extension)")]
     output_format: Option<OutputFormat>,
 
-    #[arg(short = 't', long)]
+    #[arg(short = 't', long, help = "CPU worker threads")]
     num_threads: Option<u32>,
-    #[arg(short = 'd', long)]
+    #[arg(short = 'd', long, help = "Maximum ray depth (bounces)")]
     ray_depth: Option<u32>,
-    #[arg(short, long)]
+    #[arg(short, long, help = "Samples per pixel")]
     spp: Option<u32>,
-    #[arg(short, long)]
+    #[arg(short, long, help = "Light sample count")]
     light_samples: Option<u32>,
 
     #[command(subcommand)]
@@ -37,9 +37,9 @@ struct CommandLineArguments {
 #[derive(Debug, clap::Args)]
 #[group(required = true, multiple = false)]
 struct InputScene {
-    #[arg(long)]
+    #[arg(long, help = "Load a GLTF scene from disk")]
     scene_path: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long, help = "Load a builtin test scene by name")]
     scene_name: Option<String>,
 }
 
@@ -51,14 +51,23 @@ enum OutputFormat {
 
 #[derive(Debug, clap::Subcommand)]
 enum RenderCommand {
+    #[command(about = "Full frame render with AOV control")]
     Full {
-        #[arg(long, value_delimiter = ',', num_args = 1..)]
+        #[arg(
+            long,
+            value_delimiter = ',',
+            num_args = 1..,
+            help = "Comma-separated AOV list (e.g. normal,uv or n,u)"
+        )]
         aov: Option<Vec<String>>,
-        #[arg(long)]
+        #[arg(long, help = "Disable beauty output (useful when only AOVs are desired)")]
         no_beauty: Option<bool>,
     },
+    #[command(about = "Render a single pixel and print diagnostics")]
     Pixel {
+        #[arg(help = "Pixel x coordinate")]
         x: u32,
+        #[arg(help = "Pixel y coordinate")]
         y: u32,
     },
 }
