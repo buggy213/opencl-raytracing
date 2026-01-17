@@ -94,5 +94,14 @@ Options:
 
 ## Tests
 
-- Integration tests live in `crates/raytracing-cpu/src/tests.rs` (likely to be overhauled).
-- Unit tests for math and utility types are run with the normal `cargo test` flow.
+- **Unit tests**: Typically used for math and utility routines. Run with `cargo test`.
+- **Visual regression tests**: Snapshot-based image comparison using `crates/visual-testing`. See [crates/visual-testing/README.md](crates/visual-testing/README.md) for details.
+
+Quick start for visual testing:
+
+```bash
+cargo install --path crates/cli
+cd crates/visual-testing
+uv run rttest cpu --bless -- -s 1 -l 1   # create reference images
+uv run rttest cpu -- -s 1 -l 1           # run tests
+```

@@ -8,5 +8,8 @@
 # lockfile
 Cargo.lock
 
+# agent files
+.cursor
+
 # Added by cargo
 target

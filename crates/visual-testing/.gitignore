@@ -1,0 +1,6 @@
+references/
+outputs/
+.venv/
+uv.lock
+__pycache__/
+
