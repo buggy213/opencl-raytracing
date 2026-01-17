@@ -35,7 +35,7 @@ struct CommandLineArguments {
 }
 
 #[derive(Debug, clap::Args)]
-#[group(required = true, multiple = false)]
+#[group(multiple = false)]
 struct InputScene {
     #[arg(long, help = "Load a GLTF scene from disk")]
     scene_path: Option<PathBuf>,
@@ -70,12 +70,29 @@ enum RenderCommand {
         #[arg(help = "Pixel y coordinate")]
         y: u32,
     },
+    #[command(about = "List all builtin test scenes as JSON")]
+    ListScenes,
 }
 
 fn main() {
     tracing_subscriber::fmt::init();
 
     let cli_args = CommandLineArguments::parse();
+
+    if let Some(RenderCommand::ListScenes) = cli_args.render_command {
+        let scenes: Vec<&str> = test_scenes::all_test_scenes()
+            .iter()
+            .map(|s| s.name)
+            .collect();
+        println!("{}", serde_json::to_string(&scenes).unwrap());
+        return;
+    }
+
+    if cli_args.input.scene_path.is_none() && cli_args.input.scene_name.is_none() {
+        eprintln!("error: either --scene-path or --scene-name is required");
+        std::process::exit(1);
+    }
+
     let (builtin_scene_settings, scene) = if let Some(filename) = cli_args.input.scene_path {
         let scene = scene::scene_from_gltf_file(&filename).expect("failed to load scene");
         (None, scene)

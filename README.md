@@ -47,9 +47,10 @@ Scenes are specified as GLTF files (or a builtin scene name). Outputs are writte
 Usage: cli [OPTIONS] <--scene-path <SCENE_PATH>|--scene-name <SCENE_NAME>> [COMMAND]
 
 Commands:
-  full   Full frame render with AOV control
-  pixel  Render a single pixel and print diagnostics
-  help   Print this message or the help of the given subcommand(s)
+  full         Full frame render with AOV control
+  pixel        Render a single pixel and print diagnostics
+  list-scenes  List all builtin test scenes as JSON
+  help         Print this message or the help of the given subcommand(s)
 
 Options:
       --scene-path <SCENE_PATH>        Load a GLTF scene from disk

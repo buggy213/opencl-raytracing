@@ -13,7 +13,6 @@ members = [
     
     "crates/viewer",
     "crates/cli", 
-    "crates/visual-testing",
 ]
 
 [workspace.dependencies]
