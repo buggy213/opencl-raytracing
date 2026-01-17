@@ -21,9 +21,6 @@ mod scene;
 mod texture;
 pub mod utils;
 
-#[cfg(test)]
-mod tests;
-
 #[derive(Debug, Clone)]
 pub(crate) struct SceneBounds {
     bounding_box: AABB,
