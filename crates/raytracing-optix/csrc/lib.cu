@@ -7,6 +7,7 @@
 #include <optix_stubs.h>
 
 #include "scene.h"
+#include "pipeline.h"
 
 RT_API __host__ OptixDeviceContext initOptix() {
     CUDA_CHECK(cudaSetDevice(0));
@@ -15,6 +16,10 @@ RT_API __host__ OptixDeviceContext initOptix() {
 
     OptixDeviceContext optix_ctx;
     OPTIX_CHECK(optixDeviceContextCreate(0, nullptr, &optix_ctx));
+
+    int driverVersion = 0;
+    CUDA_CHECK(cudaDriverGetVersion(&driverVersion));
+    fprintf(stderr, "Driver version: %d\n", driverVersion);
 
     return optix_ctx;
 }
@@ -59,4 +64,12 @@ RT_API __host__ OptixAccelerationStructure makeInstanceAccelerationStructure(
         transforms,
         len
     );
+}
+
+RT_API __host__ OptixPipeline makeBasicPipeline(
+    OptixDeviceContext ctx,
+    const uint8_t* progData,
+    size_t progSize
+) {
+    return makeBasicPipelineImpl(ctx, progData, progSize);
 }

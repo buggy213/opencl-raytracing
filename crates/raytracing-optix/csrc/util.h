@@ -6,7 +6,7 @@
 
 inline void cudaAssert(cudaError code, const char *file, int line, bool abort = true) {
     if (code != cudaSuccess) {
-        fprintf(stderr, "CUDA error %s at %s:%d", cudaGetErrorName(code), file, line);
+        fprintf(stderr, "CUDA error %s at %s:%d\n", cudaGetErrorName(code), file, line);
         if (abort) {
             exit(code);
         }
@@ -17,7 +17,10 @@ inline void cudaAssert(cudaError code, const char *file, int line, bool abort = 
 
 inline void optixAssert(OptixResult code, const char *file, int line, bool abort = true) {
     if (code != OPTIX_SUCCESS) {
-        fprintf(stderr, "OptiX error %s at %s:%d", optixGetErrorName(code), file, line);
+        fprintf(stderr, "OptiX error %s at %s:%d\n", optixGetErrorName(code), file, line);
+        if (abort) {
+            exit(code);
+        }
     }
 }
 

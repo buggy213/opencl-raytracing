@@ -2,6 +2,7 @@
 
 #include "shared_lib.h"
 #include "lib_types.h"
+#include "stdint.h"
 #include <optix_types.h>
 
 /* Context management */
@@ -28,4 +29,10 @@ RT_API struct OptixAccelerationStructure makeInstanceAccelerationStructure(
     const struct OptixAccelerationStructure* instances,
     const struct Matrix4x4* transforms,
     size_t len
+);
+
+RT_API OptixPipeline makeBasicPipeline(
+    OptixDeviceContext ctx,
+    const uint8_t* progData,
+    size_t progSize
 );

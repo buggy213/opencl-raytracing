@@ -15,6 +15,11 @@ struct Vec3u {
     unsigned int z;
 };
 
+struct Vec2u {
+    unsigned int x;
+    unsigned int y;
+};
+
 struct Matrix4x4 {
     float m[16];
 };

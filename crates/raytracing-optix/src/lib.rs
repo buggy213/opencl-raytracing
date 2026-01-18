@@ -17,6 +17,14 @@ pub fn render(scene: &Scene, /* raytracer_settings: RaytracerSettings */) -> &[V
     let optix_ctx = unsafe { optix::initOptix() };
     
     let scene_as = scene::prepare_optix_acceleration_structures(optix_ctx, scene);
+    let normals_kernel = optix::kernels::NORMALS;
+    let normals_pipeline = unsafe { 
+        optix::makeBasicPipeline(
+            optix_ctx, 
+            normals_kernel.as_ptr(), 
+            normals_kernel.len()
+        ) 
+    };
 
     // SAFETY: optix_ctx is valid
     unsafe { optix::destroyOptix(optix_ctx); }

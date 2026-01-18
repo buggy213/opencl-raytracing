@@ -6,6 +6,13 @@ mod detail {
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 
+pub(crate) mod kernels {
+    // we include the text of the kernels directly; it's more convenient than
+    // doing it at runtime and doesn't require linker shenanigans
+
+    pub(crate) const NORMALS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/normals.optixir"));
+}
+
 pub(crate) use detail::{
     Vec3,
     Vec3u,
@@ -19,6 +26,9 @@ pub(crate) use detail::{
     makeSphereAccelerationStructure,
     makeMeshAccelerationStructure,
     makeInstanceAccelerationStructure,
+
+    OptixPipeline,
+    makeBasicPipeline,
 };
 
 // conversion functions for vocabulary types
