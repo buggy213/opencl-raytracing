@@ -22,7 +22,7 @@ Future ideas: DXR and/or Vulkan ray tracing support.
 ## Notable dependencies / system requirements
 
 - CPU backend: Embree 4 is required. Set `EMBREE_DIR` to the Embree install directory. On Linux, `LD_LIBRARY_PATH` needs to include `${EMBREE_DIR}/lib` because of rpath issues.
-- OptiX backend: CUDA toolkit installed for your platform (currently tested on Linux). Set `OPTIX90_PATH` to the OptiX 9.0 install directory.
+- OptiX backend: CUDA toolkit installed for your platform (currently tested on Linux). OptiX 9.0 should also be installed; set `OPTIX90_PATH` to the OptiX 9.0 install directory.
 - Both CPU and OptiX backends: `libclang` is required for `bindgen` at build time.
 
 ## CLI usage

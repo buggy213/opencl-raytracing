@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use cmake;
 
@@ -41,5 +41,20 @@ fn main() {
 
     let out_path = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     bindings.write_to_file(out_path.join("bindings.rs"))
-        .expect("unable to write bindings")
+        .expect("unable to write bindings");
+
+    // compile OptiX IR through make
+    println!("cargo:rerun-if-changed=kernels");
+    let kernels_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("kernels");
+    let exit_code = std::process::Command::new("make")
+        .current_dir(&kernels_dir)
+        .arg("all")
+        .spawn()
+        .expect("failed to run make")
+        .wait()
+        .expect("failed to run make");
+
+    if !exit_code.success() {
+        panic!("make failed with exit code {exit_code}");
+    }
 }

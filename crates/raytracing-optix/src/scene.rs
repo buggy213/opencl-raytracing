@@ -1,5 +1,5 @@
 //! Most of the scene description conversion is kept within Rust
-//! that calls specific C++ in order to generate hierarchy of Geometry-AS / Instance-AS for OptiX.
+//! that calls into C++ in order to generate hierarchy of Geometry-AS / Instance-AS for OptiX.
 //! We do it this way to avoid having to make the whole scene description #[repr(C)]
 
 use raytracing::{geometry::Shape, scene::{AggregatePrimitiveIndex, Primitive, Scene}};

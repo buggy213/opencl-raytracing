@@ -126,8 +126,9 @@ set(OPTIX_INCLUDE_DIR "${OPTIX90_INCLUDE_DIR}")
 message("OPTIX_INCLUDE_DIR = " "${OPTIX_INCLUDE_DIR}")
 
 set(CU_SOURCE
-        lib.cu
+  lib.cu
   scene.cu
+  pipeline.cu
   optix_function_table.cu
 )
 
