@@ -13,18 +13,28 @@ __host__ void optixLogCallback(unsigned int level, const char* tag, const char* 
     printf("[%s] %s\n", tag, msg);
 }
 
-RT_API __host__ OptixDeviceContext initOptix() {
+RT_API __host__ OptixDeviceContext initOptix(bool debug) {
     CUDA_CHECK(cudaSetDevice(0));
 
     OPTIX_CHECK(optixInit());
 
     OptixDeviceContext optix_ctx;
     OptixDeviceContextOptions options = {};
-    options.validationMode = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_ALL;
-    // all messages
-    options.logCallbackLevel = 4;
-    options.logCallbackData = nullptr;
-    options.logCallbackFunction = &optixLogCallback;
+    if (debug) {
+        options.validationMode = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_ALL;
+        // all messages
+        options.logCallbackLevel = 4;
+        options.logCallbackData = nullptr;
+        options.logCallbackFunction = &optixLogCallback;
+
+    }
+    else {
+        options.validationMode = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_OFF;
+        options.logCallbackLevel = 0;
+        options.logCallbackData = nullptr;
+        options.logCallbackFunction = nullptr;
+    }
+
     OPTIX_CHECK(optixDeviceContextCreate(0, &options, &optix_ctx));
 
     return optix_ctx;

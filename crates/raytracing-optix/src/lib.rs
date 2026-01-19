@@ -14,7 +14,7 @@ mod optix;
 // TODO: common raytracer settings should be factored out of cpu and gpu backends
 pub fn render(scene: &Scene, /* raytracer_settings: RaytracerSettings */) -> &[Vec3] {
     // SAFETY: no preconditions
-    let optix_ctx = unsafe { optix::initOptix() };
+    let optix_ctx = unsafe { optix::initOptix(true) };
     
     let scene_as = scene::prepare_optix_acceleration_structures(optix_ctx, scene);
     let normals_kernel = optix::kernels::NORMALS;

@@ -2,11 +2,18 @@
 
 #include "shared_lib.h"
 #include "lib_types.h"
-#include "stdint.h"
+
+#ifdef __cplusplus
+#include <cstdint>
+#else
+#include <stdint.h>
+#include <stdbool.h>
+#endif
+
 #include <optix_types.h>
 
 /* Context management */
-RT_API OptixDeviceContext initOptix();
+RT_API OptixDeviceContext initOptix(bool debug);
 RT_API void destroyOptix(OptixDeviceContext ctx);
 
 /* Scene conversion functions */
