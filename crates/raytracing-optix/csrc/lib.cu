@@ -9,17 +9,23 @@
 #include "scene.h"
 #include "pipeline.h"
 
+__host__ void optixLogCallback(unsigned int level, const char* tag, const char* msg, void *cbdata) {
+    printf("[%s] %s\n", tag, msg);
+}
+
 RT_API __host__ OptixDeviceContext initOptix() {
     CUDA_CHECK(cudaSetDevice(0));
 
     OPTIX_CHECK(optixInit());
 
     OptixDeviceContext optix_ctx;
-    OPTIX_CHECK(optixDeviceContextCreate(0, nullptr, &optix_ctx));
-
-    int driverVersion = 0;
-    CUDA_CHECK(cudaDriverGetVersion(&driverVersion));
-    fprintf(stderr, "Driver version: %d\n", driverVersion);
+    OptixDeviceContextOptions options = {};
+    options.validationMode = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_ALL;
+    // all messages
+    options.logCallbackLevel = 4;
+    options.logCallbackData = nullptr;
+    options.logCallbackFunction = &optixLogCallback;
+    OPTIX_CHECK(optixDeviceContextCreate(0, &options, &optix_ctx));
 
     return optix_ctx;
 }
@@ -66,10 +72,14 @@ RT_API __host__ OptixAccelerationStructure makeInstanceAccelerationStructure(
     );
 }
 
-RT_API __host__ OptixPipeline makeBasicPipeline(
+RT_API __host__ OptixPipelineWrapper makeBasicPipeline(
     OptixDeviceContext ctx,
     const uint8_t* progData,
     size_t progSize
 ) {
     return makeBasicPipelineImpl(ctx, progData, progSize);
+}
+
+RT_API __host__ void launchBasicPipeline(OptixPipelineWrapper pipelineWrapper) {
+    launchBasicPipelineImpl(pipelineWrapper);
 }

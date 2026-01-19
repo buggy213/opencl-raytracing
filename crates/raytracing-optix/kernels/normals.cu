@@ -10,3 +10,6 @@ extern "C" __global__ void __raygen__debug() {
 
     debug[tid.y * dim.x + tid.x] = uint2 { tid.x, tid.y };
 }
+
+// no-op on miss
+extern "C" __global__ void __miss__nop() {}

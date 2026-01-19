@@ -3,4 +3,7 @@
 #include <cstdint>
 #include <optix_types.h>
 
-OptixPipeline makeBasicPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData, size_t progSize);
+#include "lib_types.h"
+
+OptixPipelineWrapper makeBasicPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData, size_t progSize);
+void launchBasicPipelineImpl(OptixPipelineWrapper pipeline);

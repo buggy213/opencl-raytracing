@@ -164,3 +164,7 @@ impl Display for Vec2 {
         write!(f, ")")
     }
 }
+
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, PartialOrd)]
+pub struct Vec2u(pub u32, pub u32);

@@ -31,8 +31,10 @@ RT_API struct OptixAccelerationStructure makeInstanceAccelerationStructure(
     size_t len
 );
 
-RT_API OptixPipeline makeBasicPipeline(
+RT_API struct OptixPipelineWrapper makeBasicPipeline(
     OptixDeviceContext ctx,
     const uint8_t* progData,
     size_t progSize
 );
+
+RT_API void launchBasicPipeline(struct OptixPipelineWrapper pipelineWrapper);

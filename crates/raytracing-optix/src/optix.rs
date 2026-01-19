@@ -27,8 +27,9 @@ pub(crate) use detail::{
     makeMeshAccelerationStructure,
     makeInstanceAccelerationStructure,
 
-    OptixPipeline,
+    OptixPipelineWrapper,
     makeBasicPipeline,
+    launchBasicPipeline,
 };
 
 // conversion functions for vocabulary types

@@ -1,11 +1,13 @@
 #include "pipeline.h"
 
 #include <cstdint>
+#include <vector>
 
+#include "lib_types.h"
 #include "optix.h"
 #include "util.h"
 
-__host__ OptixPipeline makeBasicPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData, size_t progSize) {
+__host__ OptixPipelineWrapper makeBasicPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData, size_t progSize) {
     OptixModuleCompileOptions moduleCompileOptions = {};
     moduleCompileOptions.maxRegisterCount = OPTIX_COMPILE_DEFAULT_MAX_REGISTER_COUNT;
     moduleCompileOptions.optLevel = OPTIX_COMPILE_OPTIMIZATION_DEFAULT;
@@ -53,9 +55,27 @@ __host__ OptixPipeline makeBasicPipelineImpl(OptixDeviceContext ctx, const uint8
     );
     OPTIX_CHECK(res);
 
+    OptixProgramGroupDesc missGroupDesc = {};
+    missGroupDesc.kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
+    missGroupDesc.miss.module = module;
+    missGroupDesc.miss.entryFunctionName = "__miss__nop";
+
+    OptixProgramGroupOptions missGroupOptions = {};
+    OptixProgramGroup missGroup = nullptr;
+    res = optixProgramGroupCreate(
+        ctx,
+        &missGroupDesc,
+        1,
+        &missGroupOptions,
+        nullptr,
+        nullptr,
+        &missGroup
+    );
+    OPTIX_CHECK(res);
+
     OptixPipeline pipeline = nullptr;
     OptixPipelineLinkOptions pipelineLinkOptions = {};
-    pipelineLinkOptions.maxTraceDepth = 1;
+    pipelineLinkOptions.maxTraceDepth = 4;
 
     OptixProgramGroup programGroups[1] = { raygenGroup };
     res = optixPipelineCreate(
@@ -72,5 +92,82 @@ __host__ OptixPipeline makeBasicPipelineImpl(OptixDeviceContext ctx, const uint8
 
     // note: we are leaking module / program group / pipeline at the moment
     // for one-off renders, this is fine
-    return pipeline;
+    return OptixPipelineWrapper {
+        .pipeline = pipeline,
+        .raygenProgram = raygenGroup,
+        .missProgram = missGroup
+    };
+}
+
+__host__ void launchBasicPipelineImpl(
+    OptixPipelineWrapper pipelineWrapper
+) {
+    struct EmptyRecord {
+        __align__(OPTIX_SBT_RECORD_ALIGNMENT) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
+    };
+
+    EmptyRecord raygenRecord;
+    EmptyRecord missRecord;
+    optixSbtRecordPackHeader(pipelineWrapper.raygenProgram, &raygenRecord);
+    optixSbtRecordPackHeader(pipelineWrapper.missProgram, &missRecord);
+
+    void* d_raygenRecord;
+    cudaMalloc(&d_raygenRecord, sizeof(EmptyRecord));
+    cudaMemcpy(d_raygenRecord, &raygenRecord, sizeof(EmptyRecord), cudaMemcpyHostToDevice);
+
+    void *d_missRecord;
+    cudaMalloc(&d_missRecord, sizeof(EmptyRecord));
+    cudaMemcpy(d_missRecord, &missRecord, sizeof(EmptyRecord), cudaMemcpyHostToDevice);
+
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+
+    OptixShaderBindingTable sbt = {};
+    sbt.raygenRecord = (CUdeviceptr)d_raygenRecord;
+    sbt.missRecordBase = (CUdeviceptr)d_missRecord;
+
+    sbt.hitgroupRecordCount = 0;
+    sbt.missRecordCount = 1;
+    sbt.missRecordStrideInBytes = sizeof(EmptyRecord);
+    sbt.callablesRecordCount = 0;
+
+    struct Params {
+        CUdeviceptr debug;
+    };
+
+    void* d_debug;
+    cudaMalloc(&d_debug, sizeof(uint2) * 5 * 5);
+
+    Params pipelineParams = {};
+    pipelineParams.debug = (CUdeviceptr)d_debug;
+
+    void* d_pipelineParams;
+    cudaMalloc(&d_pipelineParams, sizeof(Params));
+    cudaMemcpy(d_pipelineParams, &pipelineParams, sizeof(Params), cudaMemcpyHostToDevice);
+
+    OptixResult res = optixLaunch(
+        pipelineWrapper.pipeline,
+        stream,
+        (CUdeviceptr)d_pipelineParams,
+        sizeof(Params),
+        &sbt,
+        5,
+        5,
+        1
+    );
+    OPTIX_CHECK(res);
+
+    cudaStreamSynchronize(stream);
+    cudaStreamDestroy(stream);
+
+    std::vector<uint2> h_debug(5 * 5);
+    cudaMemcpy(h_debug.data(), d_debug, 5 * 5 * sizeof(uint2), cudaMemcpyDeviceToHost);
+
+    for (int i = 0; i < 5; i += 1) {
+        for (int j = 0; j < 5; j += 1) {
+            uint2 ij = h_debug[i * 5 + j];
+            printf("(%d, %d) ", ij.x, ij.y);
+        }
+        printf("\n");
+    }
 }

@@ -28,3 +28,9 @@ struct OptixAccelerationStructure {
     CUdeviceptr data;
     OptixTraversableHandle handle;
 };
+
+struct OptixPipelineWrapper {
+    OptixPipeline pipeline;
+    OptixProgramGroup raygenProgram;
+    OptixProgramGroup missProgram;
+};

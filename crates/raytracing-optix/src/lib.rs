@@ -26,6 +26,8 @@ pub fn render(scene: &Scene, /* raytracer_settings: RaytracerSettings */) -> &[V
         ) 
     };
 
+    unsafe { optix::launchBasicPipeline(normals_pipeline); }
+
     // SAFETY: optix_ctx is valid
     unsafe { optix::destroyOptix(optix_ctx); }
 
