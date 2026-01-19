@@ -614,6 +614,7 @@ pub mod test_scenes {
         lights::Light,
         materials::{Material, Texture},
         renderer::{AOVFlags, RaytracerSettings},
+        sampling::Sampler,
         scene::{Camera, Scene},
     };
 
@@ -1240,10 +1241,21 @@ pub mod test_scenes {
                 scene_func: gltf_smooth_nonmetal,
                 settings_func: RaytracerSettings::default,
             },
+            
+            // this scene is meant to clearly demonstrate how stratified sampling
+            // of lens position is able to significantly reduce variance
             TestScene {
                 name: "out_of_focus_sphere",
                 scene_func: out_of_focus_sphere_scene,
-                settings_func: RaytracerSettings::default,
+                settings_func: || RaytracerSettings {
+                    sampler: Sampler::Stratified {
+                        jitter: true,
+                        x_strata: 6,
+                        y_strata: 6,
+                    },
+                    samples_per_pixel: 36,
+                    ..Default::default()
+                },
             },
         ]
     }

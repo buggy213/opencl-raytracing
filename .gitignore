@@ -10,6 +10,8 @@ Cargo.lock
 
 # agent files
 .cursor
+.claude
+CLAUDE.md
 
 # Added by cargo
 target

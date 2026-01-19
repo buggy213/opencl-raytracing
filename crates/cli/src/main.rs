@@ -6,6 +6,7 @@ use clap::Parser;
 use raytracing::scene::test_scenes;
 use raytracing::{
     renderer::{AOVFlags, RaytracerSettings, RenderOutput},
+    sampling::Sampler,
     scene,
 };
 use raytracing_cpu::{CpuBackendSettings, render, render_single_pixel};
@@ -30,8 +31,17 @@ struct CommandLineArguments {
     #[arg(short, long, help = "Light sample count")]
     light_samples: Option<u32>,
 
+    #[arg(long, value_enum, help = "Sampler type")]
+    sampler: Option<SamplerType>,
+
     #[command(subcommand)]
     render_command: Option<RenderCommand>,
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum SamplerType {
+    Independent,
+    Stratified,
 }
 
 #[derive(Debug, clap::Args)]
@@ -125,6 +135,21 @@ fn main() {
     raytracer_settings.samples_per_pixel =
         cli_args.spp.unwrap_or(raytracer_settings.samples_per_pixel);
     raytracer_settings.accumulate_bounces = true;
+
+    if let Some(sampler_type) = cli_args.sampler {
+        raytracer_settings.sampler = match sampler_type {
+            SamplerType::Independent => Sampler::Independent,
+            SamplerType::Stratified => {
+                let spp = raytracer_settings.samples_per_pixel;
+                let strata = (spp as f32).sqrt().ceil() as u32;
+                Sampler::Stratified {
+                    jitter: true,
+                    x_strata: strata,
+                    y_strata: strata,
+                }
+            }
+        };
+    }
 
     let render_command = cli_args.render_command;
 
