@@ -78,29 +78,31 @@ fn minimum_differentials(camera: &Camera) -> RayDifferentials {
     match camera.camera_type {
         raytracing::scene::CameraType::Orthographic { .. } => {
             // for orthographic cameras, all rays are parallel and their origins are equally spaced
+            let origin = camera.world_to_raster.apply_inverse_point(Vec3::zero());
             let dx = camera.world_to_raster.apply_inverse_point(Vec3(1.0, 0.0, 0.0));
             let dy = camera.world_to_raster.apply_inverse_point(Vec3(0.0, 1.0, 0.0));
-            RayDifferentials { 
-                x_origin: dx, 
-                y_origin: dy, 
-                x_direction: Vec3::zero(), 
-                y_direction: Vec3::zero() 
+            RayDifferentials {
+                x_origin: dx - origin,
+                y_origin: dy - origin,
+                x_direction: Vec3::zero(),
+                y_direction: Vec3::zero()
             }
         },
-        raytracing::scene::CameraType::Perspective { .. } => {
-            // for perspective cameras, all rays originate from the pinhole,
-            // and "direction" differential is guaranteed to be constant if primary 
+        raytracing::scene::CameraType::PinholePerspective { .. }
+        | raytracing::scene::CameraType::ThinLensPerspective { .. } => {
+            // for perspective cameras, all rays originate from the pinhole (or lens center),
+            // and "direction" differential is guaranteed to be constant if primary
             // camera rays were unnormalized
             let center_x = (camera.raster_width as f32) / 2.0;
             let center_y = (camera.raster_height as f32) / 2.0;
             let center = camera.world_to_raster.apply_inverse_point(Vec3(center_x, center_y, 0.0));
             let dx = camera.world_to_raster.apply_inverse_point(Vec3(center_x + 1.0, center_y, 0.0));
             let dy = camera.world_to_raster.apply_inverse_point(Vec3(center_x, center_y + 1.0, 0.0));
-            RayDifferentials { 
-                x_origin: Vec3::zero(), 
-                y_origin: Vec3::zero(), 
-                x_direction: dx - center, 
-                y_direction: dy - center, 
+            RayDifferentials {
+                x_origin: Vec3::zero(),
+                y_origin: Vec3::zero(),
+                x_direction: dx - center,
+                y_direction: dy - center,
             }
         },
     }
@@ -110,31 +112,59 @@ fn camera_ray(
     camera: &Camera,
     x: f32,
     y: f32,
+    lens_sample: Option<Vec2>,
 ) -> Ray {
     let raster_loc = Vec3(x, y, 0.0);
-    let camera_space_loc = camera.world_to_raster.apply_inverse_point(raster_loc);
-    
+
     match camera.camera_type {
         raytracing::scene::CameraType::Orthographic { .. } => {
+            let camera_space_o = camera.raster_to_camera.apply_point(raster_loc);
             // camera points down +z in it's local coordinate frame
-            let ray_d = camera.world_to_raster.apply_inverse_vector(Vec3(0.0, 0.0, 1.0)).unit();
-            let ray_o = camera_space_loc - ray_d * camera.near_clip;
-            
-            
-            Ray { origin: ray_o, direction: ray_d }
-        },
-        raytracing::scene::CameraType::Perspective { .. } => {
-            let ray_o = camera.camera_position;
-            let ray_d = Vec3::normalized(camera_space_loc - ray_o);
+            let camera_space_d = Vec3(0.0, 0.0, 1.0);
+
+            let ray_o = camera.camera_to_world.apply_point(camera_space_o);
+            let ray_d = camera.camera_to_world.apply_vector(camera_space_d).unit();
 
             Ray { origin: ray_o, direction: ray_d }
+        },
+        raytracing::scene::CameraType::PinholePerspective { .. } => {
+            let cam_point = camera.raster_to_camera.apply_point(raster_loc);
+            let cam_ray_dir = cam_point.unit();
+
+            let world_origin = camera.camera_to_world.apply_point(Vec3::zero());
+            let world_dir = camera.camera_to_world.apply_vector(cam_ray_dir).unit();
+
+            Ray { origin: world_origin, direction: world_dir }
+        },
+        raytracing::scene::CameraType::ThinLensPerspective { aperture_radius, focal_distance, .. } => {
+            let cam_point = camera.raster_to_camera.apply_point(raster_loc);
+
+            let t = focal_distance / cam_point.z();
+            let focus_point = cam_point * t;
+
+            // Lens sample for depth of field
+            let (cam_origin, cam_dir) = if let Some(Vec2(lens_u, lens_v)) = lens_sample {
+                let lens_origin = Vec3(lens_u * aperture_radius, lens_v * aperture_radius, 0.0);
+                let dir = (focus_point - lens_origin).unit();
+                (lens_origin, dir)
+            } else {
+                // No lens sample - behave like pinhole
+                (Vec3::zero(), cam_point.unit())
+            };
+
+            let world_origin = camera.camera_to_world.apply_point(cam_origin);
+            let world_dir = camera.camera_to_world.apply_vector(cam_dir).unit();
+
+            Ray { origin: world_origin, direction: world_dir }
         },
     }
 }
 
+
+
 fn generate_ray(
-    camera: &Camera, 
-    x: u32, 
+    camera: &Camera,
+    x: u32,
     y: u32,
     sampler: &mut CpuSampler,
     spp: u32,
@@ -144,14 +174,23 @@ fn generate_ray(
     let x = (x as f32) + x_disp;
     let y = (y as f32) + y_disp;
 
-    let ray = camera_ray(camera, x, y);
+    // For thin-lens camera, sample the disk
+    let lens_sample = match camera.camera_type {
+        raytracing::scene::CameraType::ThinLensPerspective { .. } => {
+            let u = sampler.sample_uniform2();
+            Some(sample::sample_unit_disk_concentric(u))
+        },
+        _ => None,
+    };
 
-    let ray_x = camera_ray(camera, x + 1.0, y);
-    let ray_y = camera_ray(camera, x, y + 1.0);
-    
+    let ray = camera_ray(camera, x, y, lens_sample);
+
+    let ray_x = camera_ray(camera, x + 1.0, y, lens_sample);
+    let ray_y = camera_ray(camera, x, y + 1.0, lens_sample);
+
     // we want to scale ray differentials to account for the supersampling that is already done when spp > 1
     // this makes the "effective" texture footprint smaller, though only up to a point
-    // note that i don't think this is exactly what pbrt does since pbrt doesn't require 
+    // note that i don't think this is exactly what pbrt does since pbrt doesn't require
     // primary camera rays to be normalized, but it should be similar enough
     // TODO: do we need primary camera rays to be normalized???
     let scale = f32::max(0.125, f32::sqrt(1.0 / spp as f32));

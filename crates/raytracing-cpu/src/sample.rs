@@ -184,6 +184,22 @@ pub(crate) fn sample_unit_disk(u: Vec2) -> Vec2 {
     Vec2(r * f32::cos(theta), r * f32::sin(theta))
 }
 
+pub(crate) fn sample_unit_disk_concentric(u: Vec2) -> Vec2 {
+    let u_offset = 2.0 * u - Vec2(1.0, 1.0);
+    if u_offset == Vec2::zero() {
+        return Vec2::zero();
+    }
+
+    let (theta, r) = if f32::abs(u_offset.0) > f32::abs(u_offset.1) {
+        (f32::consts::FRAC_PI_4 * (u_offset.1 / u_offset.0), u_offset.0)
+    }
+    else {
+        (f32::consts::FRAC_PI_2 - f32::consts::FRAC_PI_4 * (u_offset.0 / u_offset.1), u_offset.1)
+    };
+
+    r * Vec2(f32::cos(theta), f32::sin(theta))
+}
+
 pub(crate) fn sample_cosine_hemisphere(u: Vec2) -> (Vec3, f32) {
     let d = sample_unit_disk(u);
     let z = f32::sqrt(1.0 - d.0 * d.0 - d.1 * d.1);

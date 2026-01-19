@@ -1125,6 +1125,42 @@ pub mod test_scenes {
         gltf_sphere_scene(Vec3(0.5, 0.5, 0.0), 0.0, 0.0)
     }
 
+    // Thin-lens camera test scene: sphere is out of focus
+    pub fn out_of_focus_sphere_scene() -> Scene {
+        let mut scene_builder = SceneBuilder::new();
+
+        let sphere = Shape::Sphere {
+            center: Vec3::zero(),
+            radius: 1.0,
+        };
+
+        let white = scene_builder.add_constant_texture(Vec4(1.0, 1.0, 1.0, 1.0));
+        let white_diffuse = scene_builder.add_material(Material::Diffuse { albedo: white });
+
+        scene_builder.add_shape_at_position(sphere, white_diffuse, Vec3(0.0, 0.0, -5.0));
+
+        let sun = Light::DirectionLight {
+            direction: Vec3(0.0, 0.0, -1.0),
+            radiance: Vec3(1.0, 1.0, 1.0),
+        };
+        scene_builder.add_light(sun);
+
+        // Thin-lens camera: focused at z=-3 (in front of sphere), sphere will be blurred
+        let camera = Camera::lookat_camera_thin_lens_perspective(
+            Vec3(0.0, 0.0, 0.0),
+            Vec3(0.0, 0.0, -5.0),
+            Vec3(0.0, 1.0, 0.0),
+            (45.0_f32).to_radians(),
+            400,
+            400,
+            0.1,
+            3.0,
+        );
+        scene_builder.add_camera(camera);
+
+        scene_builder.build()
+    }
+
     fn debug_normals_settings() -> RaytracerSettings {
         RaytracerSettings {
             outputs: AOVFlags::NORMALS,
@@ -1202,6 +1238,11 @@ pub mod test_scenes {
             TestScene {
                 name: "gltf_smooth_nonmetal",
                 scene_func: gltf_smooth_nonmetal,
+                settings_func: RaytracerSettings::default,
+            },
+            TestScene {
+                name: "out_of_focus_sphere",
+                scene_func: out_of_focus_sphere_scene,
                 settings_func: RaytracerSettings::default,
             },
         ]

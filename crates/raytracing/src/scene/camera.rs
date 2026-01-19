@@ -8,8 +8,13 @@ pub enum CameraType {
         screen_space_width: f32,
         screen_space_height: f32,
     },
-    Perspective {
+    PinholePerspective {
         yfov: f32, // radians
+    },
+    ThinLensPerspective {
+        yfov: f32,            // radians
+        aperture_radius: f32, // lens radius in world units
+        focal_distance: f32,  // distance to focal plane in camera space
     },
 }
 
@@ -25,6 +30,9 @@ pub struct Camera {
     pub far_clip: f32,
 
     pub world_to_raster: Transform,
+
+    pub camera_to_world: Transform,
+    pub raster_to_camera: Transform,
 }
 
 const DEFAULT_FAR_CLIP: f32 = 1000.0;
@@ -128,10 +136,11 @@ impl Camera {
             data: camera_node.transform().matrix(),
         };
         camera_to_world_matrix.transpose();
+        let camera_to_world: Transform = Transform::from(camera_to_world_matrix);
         let world_to_camera_matrix: Matrix4x4 = camera_to_world_matrix.invert().unwrap();
         let world_to_camera: Transform = Transform::from(world_to_camera_matrix);
         let camera_type;
-        let (world_to_raster, raster_width) = match gltf_camera.projection() {
+        let (world_to_raster, raster_width, camera_to_raster) = match gltf_camera.projection() {
             Projection::Perspective(perspective) => {
                 let width: usize =
                     (raster_height as f32 * perspective.aspect_ratio().unwrap()) as usize;
@@ -142,19 +151,16 @@ impl Camera {
                     width,
                     raster_height,
                 );
-                let world_to_raster: Transform = world_to_camera.compose(camera_to_raster);
-                camera_type = CameraType::Perspective {
+                let world_to_raster: Transform = world_to_camera.compose(camera_to_raster.clone());
+                camera_type = CameraType::PinholePerspective {
                     yfov: perspective.yfov(),
                 };
-                (world_to_raster, width)
+                (world_to_raster, width, camera_to_raster)
             }
             Projection::Orthographic(orthographic) => {
                 let screen_space_width: f32 = orthographic.xmag();
                 let screen_space_height: f32 = orthographic.ymag();
-                println!(
-                    "ssheight={}, sswidth={}",
-                    screen_space_height, screen_space_width
-                );
+
                 let width: usize =
                     (raster_height as f32 * screen_space_width / screen_space_height) as usize;
                 let camera_to_raster: Transform = Self::create_orthographic_transform(
@@ -165,14 +171,16 @@ impl Camera {
                     screen_space_width, // idk why i need to flip this but i do
                     -screen_space_height,
                 );
-                let world_to_raster: Transform = world_to_camera.compose(camera_to_raster);
+                let world_to_raster: Transform = world_to_camera.compose(camera_to_raster.clone());
                 camera_type = CameraType::Orthographic {
                     screen_space_width,
                     screen_space_height,
                 };
-                (world_to_raster, width)
+                (world_to_raster, width, camera_to_raster)
             }
         };
+
+        let raster_to_camera = camera_to_raster.invert();
 
         Camera {
             camera_position: camera_position.into(),
@@ -183,6 +191,8 @@ impl Camera {
             near_clip: 0.01,
             far_clip: 1000.0,
             world_to_raster,
+            camera_to_world,
+            raster_to_camera,
         }
     }
 
@@ -209,16 +219,19 @@ impl Camera {
 
         let camera_to_world = Transform::look_at(camera_position, target, up);
         let world_to_camera = camera_to_world.invert();
+        let raster_to_camera = camera_to_raster.invert();
 
         Camera {
             camera_position,
             camera_rotation: Quaternion::from_rotation_matrix(camera_to_world.forward),
-            camera_type: CameraType::Perspective { yfov },
+            camera_type: CameraType::PinholePerspective { yfov },
             raster_width,
             raster_height,
-            near_clip: 0.01,
-            far_clip: 1000.0,
+            near_clip,
+            far_clip,
             world_to_raster: world_to_camera.compose(camera_to_raster),
+            camera_to_world,
+            raster_to_camera,
         }
     }
 
@@ -248,6 +261,7 @@ impl Camera {
 
         let camera_to_world = Transform::look_at(camera_position, target, up);
         let world_to_camera = camera_to_world.invert();
+        let raster_to_camera = camera_to_raster.invert();
 
         Camera {
             camera_position,
@@ -258,9 +272,55 @@ impl Camera {
             },
             raster_width,
             raster_height,
-            near_clip: 0.01,
-            far_clip: 1000.0,
+            near_clip,
+            far_clip,
             world_to_raster: world_to_camera.compose(camera_to_raster),
+            camera_to_world,
+            raster_to_camera,
+        }
+    }
+
+    // creates a thin-lens perspective camera for depth-of-field effects
+    pub fn lookat_camera_thin_lens_perspective(
+        camera_position: Vec3,
+        target: Vec3,
+        up: Vec3,
+        yfov: f32, // radians
+        raster_width: usize,
+        raster_height: usize,
+        aperture_radius: f32,  // lens radius in world units
+        focal_distance: f32,   // distance to focal plane
+    ) -> Camera {
+        let near_clip = 0.01;
+        let far_clip = 1000.0;
+
+        let camera_to_raster = Camera::create_perspective_transform(
+            far_clip,
+            near_clip,
+            yfov,
+            raster_width,
+            raster_height,
+        );
+
+        let camera_to_world = Transform::look_at(camera_position, target, up);
+        let world_to_camera = camera_to_world.invert();
+        let raster_to_camera = camera_to_raster.invert();
+
+        Camera {
+            camera_position,
+            camera_rotation: Quaternion::from_rotation_matrix(camera_to_world.forward),
+            camera_type: CameraType::ThinLensPerspective {
+                yfov,
+                aperture_radius,
+                focal_distance,
+            },
+            raster_width,
+            raster_height,
+            near_clip,
+            far_clip,
+            world_to_raster: world_to_camera.compose(camera_to_raster),
+            camera_to_world,
+            raster_to_camera,
         }
     }
 }
