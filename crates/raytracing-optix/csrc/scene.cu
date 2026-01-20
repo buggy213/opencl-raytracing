@@ -35,6 +35,9 @@ __host__ OptixAccelerationStructure makeSphereGAS(
     OptixBuildInputSphereArray& sphereBuildInput = buildInput.sphereArray;
     sphereBuildInput.numSbtRecords = 1;
 
+    unsigned int sphereBuildFlags = OPTIX_GEOMETRY_FLAG_NONE;
+    sphereBuildInput.flags = &sphereBuildFlags;
+
     // runtime / device APIs are interoperable, so this should "just work"
     sphereBuildInput.numVertices = 1;
     sphereBuildInput.vertexBuffers = (CUdeviceptr*)(&d_center);

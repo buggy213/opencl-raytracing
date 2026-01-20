@@ -22,7 +22,10 @@ __host__ OptixPipelineWrapper makeBasicPipelineImpl(OptixDeviceContext ctx, cons
     pipelineCompileOptions.numAttributeValues = 2;
     pipelineCompileOptions.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
     pipelineCompileOptions.pipelineLaunchParamsVariableName = "pipeline_params";
-    pipelineCompileOptions.usesPrimitiveTypeFlags = 0;
+    pipelineCompileOptions.usesPrimitiveTypeFlags =
+        OPTIX_PRIMITIVE_TYPE_FLAGS_CUSTOM |
+        OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE |
+        OPTIX_PRIMITIVE_TYPE_FLAGS_SPHERE;
 
     OptixModule module = nullptr;
     OptixResult res = optixModuleCreate(
@@ -34,6 +37,23 @@ __host__ OptixPipelineWrapper makeBasicPipelineImpl(OptixDeviceContext ctx, cons
         nullptr,
         nullptr,
         &module
+    );
+    OPTIX_CHECK(res);
+
+    OptixModule builtinModule = nullptr;
+    OptixBuiltinISOptions builtinModuleOptions = {};
+    builtinModuleOptions.builtinISModuleType = OPTIX_PRIMITIVE_TYPE_SPHERE;
+    // need this flag in order to get the center in closest-hit program
+    builtinModuleOptions.buildFlags = OPTIX_BUILD_FLAG_ALLOW_RANDOM_VERTEX_ACCESS;
+    builtinModuleOptions.curveEndcapFlags = 0;
+    builtinModuleOptions.usesMotionBlur = false;
+
+    res = optixBuiltinISModuleGet(
+        ctx,
+        &moduleCompileOptions,
+        &pipelineCompileOptions,
+        &builtinModuleOptions,
+        &builtinModule
     );
     OPTIX_CHECK(res);
 
@@ -73,17 +93,40 @@ __host__ OptixPipelineWrapper makeBasicPipelineImpl(OptixDeviceContext ctx, cons
     );
     OPTIX_CHECK(res);
 
+    OptixProgramGroupDesc hitGroupDesc = {};
+
+    hitGroupDesc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
+    hitGroupDesc.hitgroup.moduleCH = module;
+    hitGroupDesc.hitgroup.entryFunctionNameCH = "__closesthit__normal";
+    hitGroupDesc.hitgroup.moduleIS = builtinModule;
+    hitGroupDesc.hitgroup.entryFunctionNameIS = nullptr;
+    hitGroupDesc.hitgroup.moduleAH = nullptr;
+    hitGroupDesc.hitgroup.entryFunctionNameAH = nullptr;
+
+    OptixProgramGroupOptions hitGroupOptions = {};
+    OptixProgramGroup hitGroup = nullptr;
+    res = optixProgramGroupCreate(
+        ctx,
+        &hitGroupDesc,
+        1,
+        &hitGroupOptions,
+        nullptr,
+        nullptr,
+        &hitGroup
+    );
+    OPTIX_CHECK(res);
+
     OptixPipeline pipeline = nullptr;
     OptixPipelineLinkOptions pipelineLinkOptions = {};
     pipelineLinkOptions.maxTraceDepth = 4;
 
-    OptixProgramGroup programGroups[1] = { raygenGroup };
+    OptixProgramGroup programGroups[3] = { raygenGroup, missGroup, hitGroup };
     res = optixPipelineCreate(
         ctx,
         &pipelineCompileOptions,
         &pipelineLinkOptions,
         programGroups,
-        1,
+        3,
         nullptr,
         nullptr,
         &pipeline
@@ -95,7 +138,8 @@ __host__ OptixPipelineWrapper makeBasicPipelineImpl(OptixDeviceContext ctx, cons
     return OptixPipelineWrapper {
         .pipeline = pipeline,
         .raygenProgram = raygenGroup,
-        .missProgram = missGroup
+        .missProgram = missGroup,
+        .hitProgramGroup = hitGroup
     };
 }
 
@@ -108,27 +152,37 @@ __host__ void launchBasicPipelineImpl(
 
     EmptyRecord raygenRecord;
     EmptyRecord missRecord;
+    EmptyRecord hitGroupRecord;
     optixSbtRecordPackHeader(pipelineWrapper.raygenProgram, &raygenRecord);
     optixSbtRecordPackHeader(pipelineWrapper.missProgram, &missRecord);
+    optixSbtRecordPackHeader(pipelineWrapper.hitProgramGroup, &hitGroupRecord);
 
     void* d_raygenRecord;
     cudaMalloc(&d_raygenRecord, sizeof(EmptyRecord));
     cudaMemcpy(d_raygenRecord, &raygenRecord, sizeof(EmptyRecord), cudaMemcpyHostToDevice);
 
-    void *d_missRecord;
+    void* d_missRecord;
     cudaMalloc(&d_missRecord, sizeof(EmptyRecord));
     cudaMemcpy(d_missRecord, &missRecord, sizeof(EmptyRecord), cudaMemcpyHostToDevice);
+
+    void* d_hitGroupRecord;
+    cudaMalloc(&d_hitGroupRecord, sizeof(EmptyRecord));
+    cudaMemcpy(d_hitGroupRecord, &hitGroupRecord, sizeof(EmptyRecord), cudaMemcpyHostToDevice);
 
     cudaStream_t stream;
     cudaStreamCreate(&stream);
 
     OptixShaderBindingTable sbt = {};
     sbt.raygenRecord = (CUdeviceptr)d_raygenRecord;
-    sbt.missRecordBase = (CUdeviceptr)d_missRecord;
 
-    sbt.hitgroupRecordCount = 0;
+    sbt.missRecordBase = (CUdeviceptr)d_missRecord;
     sbt.missRecordCount = 1;
     sbt.missRecordStrideInBytes = sizeof(EmptyRecord);
+
+    sbt.hitgroupRecordBase = (CUdeviceptr)d_hitGroupRecord;
+    sbt.hitgroupRecordCount = 1;
+    sbt.hitgroupRecordStrideInBytes = sizeof(EmptyRecord);
+
     sbt.callablesRecordCount = 0;
 
     struct Params {

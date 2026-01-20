@@ -2,6 +2,7 @@
 
 #include "shared_lib.h"
 #include "lib_types.h"
+#include "lib_optix_types.h"
 
 #ifdef __cplusplus
 #include <cstdint>

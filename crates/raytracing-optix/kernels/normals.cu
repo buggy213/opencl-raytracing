@@ -13,3 +13,5 @@ extern "C" __global__ void __raygen__debug() {
 
 // no-op on miss
 extern "C" __global__ void __miss__nop() {}
+
+extern "C" __global__ void __closesthit__normal() {}

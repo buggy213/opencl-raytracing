@@ -135,6 +135,7 @@ set(CU_SOURCE
 set(API_HEADERS
   lib_api.h
   lib_types.h
+  lib_optix_types.h
   shared_lib.h
 )
 
