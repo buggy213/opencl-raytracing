@@ -26,7 +26,14 @@ pub fn render(scene: &Scene, /* raytracer_settings: RaytracerSettings */) -> &[V
         ) 
     };
 
-    unsafe { optix::launchBasicPipeline(normals_pipeline); }
+    let camera: optix::Camera = scene.camera.clone().into();
+    unsafe { 
+        optix::launchBasicPipeline(
+            normals_pipeline,
+            &camera,
+            scene_as.handle
+        ); 
+    }
 
     // SAFETY: optix_ctx is valid
     unsafe { optix::destroyOptix(optix_ctx); }

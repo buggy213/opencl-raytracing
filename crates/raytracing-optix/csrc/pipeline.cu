@@ -18,7 +18,7 @@ __host__ OptixPipelineWrapper makeBasicPipelineImpl(OptixDeviceContext ctx, cons
     OptixPipelineCompileOptions pipelineCompileOptions = {};
     pipelineCompileOptions.usesMotionBlur = false;
     pipelineCompileOptions.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_ANY;
-    pipelineCompileOptions.numPayloadValues = 2;
+    pipelineCompileOptions.numPayloadValues = 4;
     pipelineCompileOptions.numAttributeValues = 2;
     pipelineCompileOptions.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
     pipelineCompileOptions.pipelineLaunchParamsVariableName = "pipeline_params";
@@ -144,7 +144,9 @@ __host__ OptixPipelineWrapper makeBasicPipelineImpl(OptixDeviceContext ctx, cons
 }
 
 __host__ void launchBasicPipelineImpl(
-    OptixPipelineWrapper pipelineWrapper
+    OptixPipelineWrapper pipelineWrapper,
+    const Camera* camera,
+    OptixTraversableHandle rootHandle
 ) {
     struct EmptyRecord {
         __align__(OPTIX_SBT_RECORD_ALIGNMENT) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
@@ -186,14 +188,25 @@ __host__ void launchBasicPipelineImpl(
     sbt.callablesRecordCount = 0;
 
     struct Params {
-        CUdeviceptr debug;
+        CUdeviceptr normals;
+        CUdeviceptr camera;
+        OptixTraversableHandle root_handle;
     };
 
-    void* d_debug;
-    cudaMalloc(&d_debug, sizeof(uint2) * 5 * 5);
+    size_t width = camera->raster_width;
+    size_t height = camera->raster_height;
+
+    void* d_normals;
+    cudaMalloc(&d_normals, sizeof(float3) * width * height);
+
+    void* d_camera;
+    cudaMalloc(&d_camera, sizeof(Camera));
+    cudaMemcpy(d_camera, camera, sizeof(Camera), cudaMemcpyHostToDevice);
 
     Params pipelineParams = {};
-    pipelineParams.debug = (CUdeviceptr)d_debug;
+    pipelineParams.normals = (CUdeviceptr)d_normals;
+    pipelineParams.camera = (CUdeviceptr)d_camera;
+    pipelineParams.root_handle = rootHandle;
 
     void* d_pipelineParams;
     cudaMalloc(&d_pipelineParams, sizeof(Params));
@@ -205,8 +218,8 @@ __host__ void launchBasicPipelineImpl(
         (CUdeviceptr)d_pipelineParams,
         sizeof(Params),
         &sbt,
-        5,
-        5,
+        width,
+        height,
         1
     );
     OPTIX_CHECK(res);
@@ -214,14 +227,16 @@ __host__ void launchBasicPipelineImpl(
     cudaStreamSynchronize(stream);
     cudaStreamDestroy(stream);
 
-    std::vector<uint2> h_debug(5 * 5);
-    cudaMemcpy(h_debug.data(), d_debug, 5 * 5 * sizeof(uint2), cudaMemcpyDeviceToHost);
+    std::vector<float3> h_debug(width * height);
+    cudaMemcpy(h_debug.data(), d_normals, sizeof(float3) * width * height, cudaMemcpyDeviceToHost);
 
-    for (int i = 0; i < 5; i += 1) {
-        for (int j = 0; j < 5; j += 1) {
-            uint2 ij = h_debug[i * 5 + j];
-            printf("(%d, %d) ", ij.x, ij.y);
+    /*
+    for (int i = 0; i < height; i += 1) {
+        for (int j = 0; j < width; j += 1) {
+            float3 ij = h_debug[i * 5 + j];
+            printf("(%.2f, %.2f, %.2f) ", ij.x, ij.y, ij.z);
         }
         printf("\n");
     }
+    */
 }

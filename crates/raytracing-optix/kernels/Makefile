@@ -2,17 +2,19 @@ ifeq ($(origin OPTIX90_PATH),undefined)
 $(error OPTIX90_PATH must be set)
 endif
 
-ifeq ($(origin OUT_DIR),undefined)
-$(error OUT_DIR should be set by cargo)
-endif
-
 KERNELS := \
 	normals.cu
 
-OPTIXIR := $(addprefix $(OUT_DIR)/,$(KERNELS:.cu=.optixir))
-
 NVCC := nvcc
+
+ifeq ($(origin OUT_DIR),undefined)
+$(warning OUT_DIR should be set by cargo; assuming that this is a run for IDE)
+OPTIXIR := $(KERNELS:.cu=.optixir)
 NVCCFLAGS := --optix-ir --use_fast_math -arch=compute_86 -I$(OPTIX90_PATH)/include
+else
+OPTIXIR := $(addprefix $(OUT_DIR)/,$(KERNELS:.cu=.optixir))
+NVCCFLAGS := --optix-ir --use_fast_math -arch=compute_86 -I$(OPTIX90_PATH)/include -I$(OUT_DIR)
+endif
 
 .PHONY: all clean
 

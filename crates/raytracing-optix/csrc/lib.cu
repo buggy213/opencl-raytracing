@@ -90,6 +90,10 @@ RT_API __host__ OptixPipelineWrapper makeBasicPipeline(
     return makeBasicPipelineImpl(ctx, progData, progSize);
 }
 
-RT_API __host__ void launchBasicPipeline(OptixPipelineWrapper pipelineWrapper) {
-    launchBasicPipelineImpl(pipelineWrapper);
+RT_API __host__ void launchBasicPipeline(
+    OptixPipelineWrapper pipelineWrapper,
+    const Camera* camera,
+    OptixTraversableHandle rootHandle
+) {
+    launchBasicPipelineImpl(pipelineWrapper, camera, rootHandle);
 }

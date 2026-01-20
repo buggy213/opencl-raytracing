@@ -1,5 +1,9 @@
 #pragma once
 
+/*
+ * Types shared between Rust/C++ to manage OptiX runtime state and configuration
+ */
+
 #include <optix_types.h>
 
 struct OptixAccelerationStructure {

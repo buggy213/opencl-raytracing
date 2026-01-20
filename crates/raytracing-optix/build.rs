@@ -2,6 +2,10 @@ use std::path::{Path, PathBuf};
 
 use cmake;
 
+fn bindgen_customization(bindings_builder: bindgen::Builder) -> bindgen::Builder {
+    bindings_builder.rustified_enum("CameraTypeKind")
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=csrc");
     println!("cargo:rerun-if-changed=build.rs");
@@ -31,13 +35,15 @@ fn main() {
     };
 
     
-    let bindings = bindgen::Builder::default()
+    let bindings_builder = bindgen::Builder::default()
         .header("wrapper.h")
         .clang_arg(include_path)
         .clang_arg(optix_include_path)
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .generate()
-        .expect("unable to generate bindings");
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
+
+    let bindings_builder = bindgen_customization(bindings_builder);
+
+    let bindings = bindings_builder.generate().expect("unable to generate bindings");
 
     let out_path = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     bindings.write_to_file(out_path.join("bindings.rs"))

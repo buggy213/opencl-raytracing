@@ -1,5 +1,9 @@
 #pragma once
 
+/*
+ * Types shared between host C++/Rust code and device OptiX kernels
+ */
+
 #ifdef __cplusplus
 #include <cstddef>
 #else
@@ -61,22 +65,22 @@ enum CameraTypeKind {
 
 struct CameraType {
     enum CameraTypeKind kind;
-    union {
-        struct {
+    union Variant {
+        struct Orthographic {
             float screen_space_width;
             float screen_space_height;
         } orthographic;
 
-        struct {
+        struct PinholePerspective {
             float yfov;
         } pinhole_perspective;
 
-        struct {
+        struct ThinLensPerspective {
             float yfov;
             float aperture_radius;
             float focal_distance;
         } thin_lens_perspective;
-    };
+    } variant;
 };
 
 // @raytracing::scene::camera::Camera
@@ -94,4 +98,9 @@ struct Camera {
 
     struct Transform camera_to_world;
     struct Transform raster_to_camera;
+};
+
+// @raytracing::scene::scene::Scene
+struct Scene {
+    struct Camera camera;
 };

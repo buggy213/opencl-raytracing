@@ -2,7 +2,7 @@ use gltf::camera::Projection;
 
 use crate::geometry::{Matrix4x4, Quaternion, Transform, Vec3};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum CameraType {
     Orthographic {
         screen_space_width: f32,
@@ -18,7 +18,7 @@ pub enum CameraType {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Camera {
     pub camera_position: Vec3,
     pub camera_rotation: Quaternion,

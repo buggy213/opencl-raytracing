@@ -45,4 +45,8 @@ RT_API struct OptixPipelineWrapper makeBasicPipeline(
     size_t progSize
 );
 
-RT_API void launchBasicPipeline(struct OptixPipelineWrapper pipelineWrapper);
+RT_API void launchBasicPipeline(
+    struct OptixPipelineWrapper pipelineWrapper,
+    const struct Camera* camera,
+    OptixTraversableHandle rootHandle
+);
