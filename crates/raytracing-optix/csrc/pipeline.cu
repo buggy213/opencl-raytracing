@@ -43,8 +43,7 @@ __host__ OptixPipelineWrapper makeBasicPipelineImpl(OptixDeviceContext ctx, cons
     OptixModule builtinModule = nullptr;
     OptixBuiltinISOptions builtinModuleOptions = {};
     builtinModuleOptions.builtinISModuleType = OPTIX_PRIMITIVE_TYPE_SPHERE;
-    // need this flag in order to get the center in closest-hit program
-    builtinModuleOptions.buildFlags = OPTIX_BUILD_FLAG_ALLOW_RANDOM_VERTEX_ACCESS;
+    builtinModuleOptions.buildFlags = OPTIX_BUILD_FLAG_NONE;
     builtinModuleOptions.curveEndcapFlags = 0;
     builtinModuleOptions.usesMotionBlur = false;
 
@@ -93,40 +92,56 @@ __host__ OptixPipelineWrapper makeBasicPipelineImpl(OptixDeviceContext ctx, cons
     );
     OPTIX_CHECK(res);
 
-    OptixProgramGroupDesc hitGroupDesc = {};
+    OptixProgramGroupDesc sphereHitGroupDesc = {};
+    OptixProgramGroupDesc triHitGroupDesc = {};
 
-    hitGroupDesc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
-    hitGroupDesc.hitgroup.moduleCH = module;
-    hitGroupDesc.hitgroup.entryFunctionNameCH = "__closesthit__normal";
-    hitGroupDesc.hitgroup.moduleIS = builtinModule;
-    hitGroupDesc.hitgroup.entryFunctionNameIS = nullptr;
-    hitGroupDesc.hitgroup.moduleAH = nullptr;
-    hitGroupDesc.hitgroup.entryFunctionNameAH = nullptr;
+    sphereHitGroupDesc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
+    sphereHitGroupDesc.hitgroup.moduleCH = module;
+    sphereHitGroupDesc.hitgroup.entryFunctionNameCH = "__closesthit__normal_sphere";
+    sphereHitGroupDesc.hitgroup.moduleIS = builtinModule;
+    sphereHitGroupDesc.hitgroup.entryFunctionNameIS = nullptr;
+    sphereHitGroupDesc.hitgroup.moduleAH = nullptr;
+    sphereHitGroupDesc.hitgroup.entryFunctionNameAH = nullptr;
+
+    triHitGroupDesc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
+    triHitGroupDesc.hitgroup.moduleCH = module;
+    triHitGroupDesc.hitgroup.entryFunctionNameCH = "__closesthit__normal_tri";
+    triHitGroupDesc.hitgroup.moduleIS = nullptr;
+    triHitGroupDesc.hitgroup.entryFunctionNameIS = nullptr;
+    triHitGroupDesc.hitgroup.moduleAH = nullptr;
+    triHitGroupDesc.hitgroup.entryFunctionNameAH = nullptr;
 
     OptixProgramGroupOptions hitGroupOptions = {};
-    OptixProgramGroup hitGroup = nullptr;
+    OptixProgramGroup sphereHitGroup = nullptr;
+    OptixProgramGroup triHitGroup = nullptr;
+
+    OptixProgramGroupDesc hitGroupDescs[2] = { sphereHitGroupDesc, triHitGroupDesc };
+    OptixProgramGroup hitGroups[2];
     res = optixProgramGroupCreate(
         ctx,
-        &hitGroupDesc,
-        1,
+        hitGroupDescs,
+        2,
         &hitGroupOptions,
         nullptr,
         nullptr,
-        &hitGroup
+        hitGroups
     );
     OPTIX_CHECK(res);
+
+    sphereHitGroup = hitGroups[0];
+    triHitGroup = hitGroups[1];
 
     OptixPipeline pipeline = nullptr;
     OptixPipelineLinkOptions pipelineLinkOptions = {};
     pipelineLinkOptions.maxTraceDepth = 4;
 
-    OptixProgramGroup programGroups[3] = { raygenGroup, missGroup, hitGroup };
+    OptixProgramGroup programGroups[4] = { raygenGroup, missGroup, sphereHitGroup, triHitGroup };
     res = optixPipelineCreate(
         ctx,
         &pipelineCompileOptions,
         &pipelineLinkOptions,
         programGroups,
-        3,
+        4,
         nullptr,
         nullptr,
         &pipeline
@@ -139,7 +154,8 @@ __host__ OptixPipelineWrapper makeBasicPipelineImpl(OptixDeviceContext ctx, cons
         .pipeline = pipeline,
         .raygenProgram = raygenGroup,
         .missProgram = missGroup,
-        .hitProgramGroup = hitGroup
+        .sphereHitProgramGroup = sphereHitGroup,
+        .triHitProgramGroup = triHitGroup,
     };
 }
 
@@ -155,10 +171,13 @@ __host__ void launchBasicPipelineImpl(
 
     EmptyRecord raygenRecord;
     EmptyRecord missRecord;
-    EmptyRecord hitGroupRecord;
+    EmptyRecord sphereHitGroupRecord;
+    EmptyRecord triHitGroupRecord;
+
     optixSbtRecordPackHeader(pipelineWrapper.raygenProgram, &raygenRecord);
     optixSbtRecordPackHeader(pipelineWrapper.missProgram, &missRecord);
-    optixSbtRecordPackHeader(pipelineWrapper.hitProgramGroup, &hitGroupRecord);
+    optixSbtRecordPackHeader(pipelineWrapper.sphereHitProgramGroup, &sphereHitGroupRecord);
+    optixSbtRecordPackHeader(pipelineWrapper.triHitProgramGroup, &triHitGroupRecord);
 
     void* d_raygenRecord;
     cudaMalloc(&d_raygenRecord, sizeof(EmptyRecord));
@@ -168,9 +187,10 @@ __host__ void launchBasicPipelineImpl(
     cudaMalloc(&d_missRecord, sizeof(EmptyRecord));
     cudaMemcpy(d_missRecord, &missRecord, sizeof(EmptyRecord), cudaMemcpyHostToDevice);
 
-    void* d_hitGroupRecord;
-    cudaMalloc(&d_hitGroupRecord, sizeof(EmptyRecord));
-    cudaMemcpy(d_hitGroupRecord, &hitGroupRecord, sizeof(EmptyRecord), cudaMemcpyHostToDevice);
+    EmptyRecord* d_hitGroupRecords;
+    cudaMalloc(&d_hitGroupRecords, 2 * sizeof(EmptyRecord));
+    cudaMemcpy(&d_hitGroupRecords[0], &sphereHitGroupRecord, sizeof(EmptyRecord), cudaMemcpyHostToDevice);
+    cudaMemcpy(&d_hitGroupRecords[1], &triHitGroupRecord, sizeof(EmptyRecord), cudaMemcpyHostToDevice);
 
     cudaStream_t stream;
     cudaStreamCreate(&stream);
@@ -182,8 +202,8 @@ __host__ void launchBasicPipelineImpl(
     sbt.missRecordCount = 1;
     sbt.missRecordStrideInBytes = sizeof(EmptyRecord);
 
-    sbt.hitgroupRecordBase = (CUdeviceptr)d_hitGroupRecord;
-    sbt.hitgroupRecordCount = 1;
+    sbt.hitgroupRecordBase = (CUdeviceptr)d_hitGroupRecords;
+    sbt.hitgroupRecordCount = 2;
     sbt.hitgroupRecordStrideInBytes = sizeof(EmptyRecord);
 
     sbt.callablesRecordCount = 0;
@@ -243,5 +263,5 @@ __host__ void launchBasicPipelineImpl(
     cudaFree(d_pipelineParams);
     cudaFree(d_raygenRecord);
     cudaFree(d_missRecord);
-    cudaFree(d_hitGroupRecord);
+    cudaFree(d_hitGroupRecords);
 }

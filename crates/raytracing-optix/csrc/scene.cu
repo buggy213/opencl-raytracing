@@ -35,8 +35,8 @@ __host__ OptixAccelerationStructure makeSphereGAS(
     OptixBuildInputSphereArray& sphereBuildInput = buildInput.sphereArray;
     sphereBuildInput.numSbtRecords = 1;
 
-    unsigned int sphereBuildFlags = OPTIX_GEOMETRY_FLAG_NONE;
-    sphereBuildInput.flags = &sphereBuildFlags;
+    unsigned int flags = OPTIX_GEOMETRY_FLAG_NONE;
+    sphereBuildInput.flags = &flags;
 
     // runtime / device APIs are interoperable, so this should "just work"
     sphereBuildInput.numVertices = 1;
@@ -80,6 +80,7 @@ __host__ OptixAccelerationStructure makeSphereGAS(
     // since d_output backs the TraversableHandle
     return OptixAccelerationStructure {
         .data = (CUdeviceptr)d_output,
+        .primitive_type = OPTIX_BUILD_INPUT_TYPE_SPHERES,
         .handle = output
     };
 }
@@ -112,6 +113,9 @@ __host__ OptixAccelerationStructure makeMeshGAS(
     buildInput.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
     OptixBuildInputTriangleArray& triangleBuildInput = buildInput.triangleArray;
     triangleBuildInput.numSbtRecords = 1;
+
+    unsigned int flags = OPTIX_GEOMETRY_FLAG_NONE;
+    triangleBuildInput.flags = &flags;
 
     // runtime / device APIs are interoperable, so this should "just work"
     triangleBuildInput.vertexBuffers = (CUdeviceptr*)(&d_vertices);
@@ -162,6 +166,7 @@ __host__ OptixAccelerationStructure makeMeshGAS(
     // since d_output backs the TraversableHandle
     return OptixAccelerationStructure {
         .data = (CUdeviceptr)d_output,
+        .primitive_type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES,
         .handle = output
     };
 }
@@ -179,7 +184,14 @@ __host__ OptixAccelerationStructure makeIAS(
         OptixInstance instance;
         instance.instanceId = 0; /* we don't use this field, even if there is instancing happening */
         instance.visibilityMask = 255;
-        instance.sbtOffset = 0;
+
+        if (instances[i].primitive_type == OPTIX_BUILD_INPUT_TYPE_TRIANGLES) {
+            instance.sbtOffset = 1;
+        }
+        else {
+            instance.sbtOffset = 0;
+        }
+
         instance.flags = OPTIX_INSTANCE_FLAG_NONE;
         instance.traversableHandle = instances[i].handle;
         memcpy(
@@ -248,6 +260,7 @@ __host__ OptixAccelerationStructure makeIAS(
     // since d_output backs the TraversableHandle
     return OptixAccelerationStructure {
         .data = (CUdeviceptr)d_output,
+        .primitive_type = OPTIX_BUILD_INPUT_TYPE_INSTANCES,
         .handle = output
     };
 }

@@ -8,6 +8,7 @@
 
 struct OptixAccelerationStructure {
     CUdeviceptr data;
+    OptixBuildInputType primitive_type;
     OptixTraversableHandle handle;
 };
 
@@ -15,5 +16,6 @@ struct OptixPipelineWrapper {
     OptixPipeline pipeline;
     OptixProgramGroup raygenProgram;
     OptixProgramGroup missProgram;
-    OptixProgramGroup hitProgramGroup;
+    OptixProgramGroup sphereHitProgramGroup;
+    OptixProgramGroup triHitProgramGroup;
 };

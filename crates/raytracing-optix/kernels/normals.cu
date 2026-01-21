@@ -20,7 +20,8 @@ __device__ Ray generate_ray(
             float3 cam_point = camera.raster_to_camera.forward * raster_loc;
 
             float3 world_origin = camera.camera_to_world.forward * make_float3(0.0f, 0.0f, 0.0f);
-            float3 world_dir = camera.camera_to_world.forward * cam_point;
+            float3 world_point = camera.camera_to_world.forward * cam_point;
+            float3 world_dir = normalize(world_point - world_origin);
 
             return Ray { .origin = world_origin, .direction = world_dir };
         }
@@ -72,7 +73,7 @@ extern "C" __global__ void __miss__nop() {
     optixSetPayload_3(__float_as_uint(0.0f));
 }
 
-extern "C" __global__ void __closesthit__normal() {
+extern "C" __global__ void __closesthit__normal_sphere() {
     float4 sphere_data[1];
     optixGetSphereData(sphere_data);
 
@@ -90,4 +91,23 @@ extern "C" __global__ void __closesthit__normal() {
     optixSetPayload_0(__float_as_uint(normal.x));
     optixSetPayload_1(__float_as_uint(normal.y));
     optixSetPayload_2(__float_as_uint(normal.z));
+}
+
+extern "C" __global__ void __closesthit__normal_tri() {
+    float3 tri_data[3];
+    optixGetTriangleVertexData(tri_data);
+
+    // OptiX has front-face CCW winding order by default
+    float3 e01 = tri_data[1] - tri_data[0];
+    float3 e02 = tri_data[2] - tri_data[0];
+
+    float3 normal = normalize(cross(e01, e02));
+    optixSetPayload_0(__float_as_uint(normal.x));
+    optixSetPayload_1(__float_as_uint(normal.y));
+    optixSetPayload_2(__float_as_uint(normal.z));
+
+    // float2 bary = optixGetTriangleBarycentrics();
+    // optixSetPayload_0(__float_as_uint(bary.x));
+    // optixSetPayload_1(__float_as_uint(bary.y));
+    // optixSetPayload_2(__float_as_uint(1.0f - bary.x - bary.y));
 }
