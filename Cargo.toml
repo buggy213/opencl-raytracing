@@ -7,7 +7,6 @@ members = [
     
     "crates/raytracing", 
     
-    "crates/raytracing-cl", 
     "crates/raytracing-cpu",
     "crates/raytracing-optix",
     
