@@ -1,18 +1,29 @@
 //! # OptiX backend for raytracer
-//! 
+//!
 //! This is mostly a stub library; the actual code lives in C++
 //! The surface area of OptiX library is quite large, and no good FFI library exists (yet)
 //! `rust-cuda` looks promising, but doesn't seem fully fleshed out
 //! So, interfacing w/ OptiX + CUDA (runtime + driver) is done in C++
 //! Can always move code into Rust later if need be...
 
-use raytracing::{geometry::Vec3, scene::Scene};
+use raytracing::{
+    renderer::{RaytracerSettings, RenderOutput},
+    scene::Scene,
+};
 
-mod scene;
 mod optix;
+mod scene;
 
-// TODO: common raytracer settings should be factored out of cpu and gpu backends
-pub fn render(scene: &Scene, /* raytracer_settings: RaytracerSettings */) -> &[Vec3] {
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OptixBackendSettings {
+    // Future: device_id, memory_limit, etc.
+}
+
+pub fn render(
+    scene: &Scene,
+    _raytracer_settings: &RaytracerSettings,
+    _backend_settings: OptixBackendSettings,
+) -> RenderOutput {
     // SAFETY: no preconditions
     let optix_ctx = unsafe { optix::initOptix(true) };
     
@@ -36,7 +47,9 @@ pub fn render(scene: &Scene, /* raytracer_settings: RaytracerSettings */) -> &[V
     }
 
     // SAFETY: optix_ctx is valid
-    unsafe { optix::destroyOptix(optix_ctx); }
+    unsafe {
+        optix::destroyOptix(optix_ctx);
+    }
 
-    todo!()
+    todo!("OptiX render not fully implemented")
 }

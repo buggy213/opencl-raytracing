@@ -41,10 +41,25 @@ cargo run -p cli -- --scene-path path/to/scene.gltf --output out/render.exr
 
 Scenes are specified as GLTF files (or a builtin scene name). Outputs are written under `scenes/output/` using the path you pass (default: `output.exr`). 
 
+### Backend selection
+
+The CLI supports multiple rendering backends via the `--backend` flag:
+
+- `cpu` (default): Reference CPU renderer
+- `optix`: NVIDIA OptiX backend (requires building with `--features optix`)
+
+```bash
+# CPU backend (default)
+cargo run -p cli -- --scene-name sphere -s 4 full
+
+# OptiX backend (requires optix feature)
+cargo run -p cli --features optix -- --backend optix --scene-name sphere -s 4 full
+```
+
 ### CLI help output
 
 ```text
-Usage: cli [OPTIONS] <--scene-path <SCENE_PATH>|--scene-name <SCENE_NAME>> [COMMAND]
+Usage: cli [OPTIONS] [COMMAND]
 
 Commands:
   full         Full frame render with AOV control
@@ -57,10 +72,12 @@ Options:
       --scene-name <SCENE_NAME>        Load a builtin test scene by name
   -o, --output <OUTPUT>                Output filename (written under scenes/output/)
       --output-format <OUTPUT_FORMAT>  Force output format (otherwise inferred from extension) [possible values: png, exr]
+      --backend <BACKEND>              Rendering backend [default: cpu] [possible values: cpu, optix]
   -t, --num-threads <NUM_THREADS>      CPU worker threads
   -d, --ray-depth <RAY_DEPTH>          Maximum ray depth (bounces)
   -s, --spp <SPP>                      Samples per pixel
   -l, --light-samples <LIGHT_SAMPLES>  Light sample count
+      --sampler <SAMPLER>              Sampler type [possible values: independent, stratified]
   -h, --help                           Print help
 ```
 

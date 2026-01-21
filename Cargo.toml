@@ -42,5 +42,6 @@ raytracing = { path = "crates/raytracing" }
 
 raytracing-cl = { path = "crates/raytracing-cl" }
 raytracing-cpu = { path = "crates/raytracing-cpu" }
+raytracing-optix = { path = "crates/raytracing-optix" }
 
 viewer = { path = "crates/viewer" }

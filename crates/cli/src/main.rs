@@ -22,6 +22,9 @@ struct CommandLineArguments {
     #[arg(long, value_enum, help = "Force output format (otherwise inferred from extension)")]
     output_format: Option<OutputFormat>,
 
+    #[arg(long, value_enum, default_value_t = Backend::Cpu, help = "Rendering backend")]
+    backend: Backend,
+
     #[arg(short = 't', long, help = "CPU worker threads")]
     num_threads: Option<u32>,
     #[arg(short = 'd', long, help = "Maximum ray depth (bounces)")]
@@ -42,6 +45,13 @@ struct CommandLineArguments {
 enum SamplerType {
     Independent,
     Stratified,
+}
+
+#[derive(Debug, Clone, Copy, Default, clap::ValueEnum)]
+enum Backend {
+    #[default]
+    Cpu,
+    Optix,
 }
 
 #[derive(Debug, clap::Args)]
@@ -196,10 +206,31 @@ fn main() {
         return;
     }
 
-    let mut backend_settings = CpuBackendSettings::default();
-    backend_settings.num_threads = cli_args.num_threads.unwrap_or(backend_settings.num_threads);
+    if matches!(cli_args.backend, Backend::Optix) && cli_args.num_threads.is_some() {
+        eprintln!("error: --threads is not supported with OptiX backend");
+        std::process::exit(1);
+    }
 
-    let render_output = render(&scene, &raytracer_settings, backend_settings);
+    let render_output = match cli_args.backend {
+        Backend::Cpu => {
+            let mut backend_settings = CpuBackendSettings::default();
+            backend_settings.num_threads =
+                cli_args.num_threads.unwrap_or(backend_settings.num_threads);
+            render(&scene, &raytracer_settings, backend_settings)
+        }
+        Backend::Optix => {
+            #[cfg(feature = "optix")]
+            {
+                let backend_settings = raytracing_optix::OptixBackendSettings::default();
+                raytracing_optix::render(&scene, &raytracer_settings, backend_settings)
+            }
+            #[cfg(not(feature = "optix"))]
+            {
+                eprintln!("error: OptiX backend not compiled (enable 'optix' feature)");
+                std::process::exit(1);
+            }
+        }
+    };
 
     let output_folder = Path::new("scenes/output");
     let output_file = output_folder.join(
