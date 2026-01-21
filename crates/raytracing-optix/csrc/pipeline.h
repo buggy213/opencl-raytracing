@@ -7,4 +7,9 @@
 #include "lib_types.h"
 
 OptixPipelineWrapper makeBasicPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData, size_t progSize);
-void launchBasicPipelineImpl(OptixPipelineWrapper pipeline, const Camera* camera, OptixTraversableHandle rootHandle);
+void launchBasicPipelineImpl(
+    OptixPipelineWrapper pipeline,
+    const Camera* camera,
+    OptixTraversableHandle rootHandle,
+    Vec3* normals
+);

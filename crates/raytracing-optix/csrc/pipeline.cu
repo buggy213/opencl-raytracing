@@ -146,7 +146,8 @@ __host__ OptixPipelineWrapper makeBasicPipelineImpl(OptixDeviceContext ctx, cons
 __host__ void launchBasicPipelineImpl(
     OptixPipelineWrapper pipelineWrapper,
     const Camera* camera,
-    OptixTraversableHandle rootHandle
+    OptixTraversableHandle rootHandle,
+    Vec3* normals
 ) {
     struct EmptyRecord {
         __align__(OPTIX_SBT_RECORD_ALIGNMENT) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
@@ -227,16 +228,20 @@ __host__ void launchBasicPipelineImpl(
     cudaStreamSynchronize(stream);
     cudaStreamDestroy(stream);
 
-    std::vector<float3> h_debug(width * height);
-    cudaMemcpy(h_debug.data(), d_normals, sizeof(float3) * width * height, cudaMemcpyDeviceToHost);
+    std::vector<float3> h_normals(width * height);
+    cudaMemcpy(h_normals.data(), d_normals, sizeof(float3) * width * height, cudaMemcpyDeviceToHost);
 
-    /*
-    for (int i = 0; i < height; i += 1) {
-        for (int j = 0; j < width; j += 1) {
-            float3 ij = h_debug[i * 5 + j];
-            printf("(%.2f, %.2f, %.2f) ", ij.x, ij.y, ij.z);
-        }
-        printf("\n");
+    // float3 is 16 bytes (aligned), Vec3 is 12 bytes (packed)
+    for (size_t i = 0; i < width * height; i++) {
+        normals[i].x = h_normals[i].x;
+        normals[i].y = h_normals[i].y;
+        normals[i].z = h_normals[i].z;
     }
-    */
+
+    cudaFree(d_normals);
+    cudaFree(d_camera);
+    cudaFree(d_pipelineParams);
+    cudaFree(d_raygenRecord);
+    cudaFree(d_missRecord);
+    cudaFree(d_hitGroupRecord);
 }

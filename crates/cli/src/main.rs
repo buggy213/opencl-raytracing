@@ -80,8 +80,8 @@ enum RenderCommand {
             help = "Comma-separated AOV list (e.g. normal,uv or n,u)"
         )]
         aov: Option<Vec<String>>,
-        #[arg(long, help = "Disable beauty output (useful when only AOVs are desired)")]
-        no_beauty: Option<bool>,
+        #[arg(long, action, help = "Disable beauty output (useful when only AOVs are desired)")]
+        no_beauty: bool,
     },
     #[command(about = "Render a single pixel and print diagnostics")]
     Pixel {
@@ -189,12 +189,7 @@ fn main() {
             }
         }
 
-        let no_beauty = match no_beauty {
-            Some(x) => *x,
-            None => false,
-        };
-
-        if no_beauty {
+        if *no_beauty {
             aov_flags.remove(AOVFlags::BEAUTY);
         }
 

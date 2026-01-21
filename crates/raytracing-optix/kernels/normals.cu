@@ -14,8 +14,8 @@ __device__ Ray generate_ray(
         case Orthographic:
             return {};
         case PinholePerspective: {
-            float xf = __uint_as_float(x);
-            float yf = __uint_as_float(y);
+            float xf = (float)x;
+            float yf = (float)y;
             float3 raster_loc = make_float3(xf, yf, 0.0f);
             float3 cam_point = camera.raster_to_camera.forward * raster_loc;
 
@@ -55,6 +55,13 @@ extern "C" __global__ void __raygen__debug() {
         z,
         w
     );
+
+    float3& target = pipeline_params.normals[tid.y * dim.x + tid.x];
+    target = make_float3(
+        __uint_as_float(x),
+        __uint_as_float(y),
+        __uint_as_float(z)
+    );
 }
 
 // set payload values to zeros
@@ -70,8 +77,17 @@ extern "C" __global__ void __closesthit__normal() {
     optixGetSphereData(sphere_data);
 
     // w is the radius
-    optixSetPayload_0(__float_as_uint(sphere_data[0].x));
-    optixSetPayload_1(__float_as_uint(sphere_data[0].y));
-    optixSetPayload_2(__float_as_uint(sphere_data[0].z));
-    optixSetPayload_3(__float_as_uint(sphere_data[0].w));
+    float3 sphere_center = make_float3(sphere_data->x, sphere_data->y, sphere_data->z);
+    float sphere_radius = sphere_data->w;
+
+    float3 ray_origin = optixGetWorldRayOrigin();
+    float3 ray_direction = optixGetWorldRayDirection();
+    float t = optixGetRayTmax();
+
+    float3 intersection_point = ray_origin + ray_direction * t;
+
+    float3 normal = (intersection_point - sphere_center) / sphere_radius;
+    optixSetPayload_0(__float_as_uint(normal.x));
+    optixSetPayload_1(__float_as_uint(normal.y));
+    optixSetPayload_2(__float_as_uint(normal.z));
 }

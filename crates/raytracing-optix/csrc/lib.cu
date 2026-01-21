@@ -93,7 +93,13 @@ RT_API __host__ OptixPipelineWrapper makeBasicPipeline(
 RT_API __host__ void launchBasicPipeline(
     OptixPipelineWrapper pipelineWrapper,
     const Camera* camera,
-    OptixTraversableHandle rootHandle
+    OptixTraversableHandle rootHandle,
+    struct Vec3* normals
 ) {
-    launchBasicPipelineImpl(pipelineWrapper, camera, rootHandle);
+    launchBasicPipelineImpl(
+        pipelineWrapper,
+        camera,
+        rootHandle,
+        normals
+    );
 }

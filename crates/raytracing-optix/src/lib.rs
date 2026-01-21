@@ -7,7 +7,7 @@
 //! Can always move code into Rust later if need be...
 
 use raytracing::{
-    renderer::{RaytracerSettings, RenderOutput},
+    renderer::{AOVFlags, RaytracerSettings, RenderOutput},
     scene::Scene,
 };
 
@@ -21,9 +21,13 @@ pub struct OptixBackendSettings {
 
 pub fn render(
     scene: &Scene,
-    _raytracer_settings: &RaytracerSettings,
+    raytracer_settings: &RaytracerSettings,
     _backend_settings: OptixBackendSettings,
 ) -> RenderOutput {
+    if raytracer_settings.outputs != AOVFlags::NORMALS {
+        todo!("only normals for now");
+    }
+
     // SAFETY: no preconditions
     let optix_ctx = unsafe { optix::initOptix(true) };
     
@@ -38,11 +42,19 @@ pub fn render(
     };
 
     let camera: optix::Camera = scene.camera.clone().into();
+    let mut render_output = RenderOutput::new(camera.raster_width as u32, camera.raster_height as u32);
+    let buffer_size = camera.raster_width * camera.raster_height;
+    let zero: optix::Vec3 = raytracing::geometry::Vec3::zero().into();
+    let mut normals = vec![
+        zero; 
+        buffer_size
+    ];
     unsafe { 
         optix::launchBasicPipeline(
             normals_pipeline,
             &camera,
-            scene_as.handle
+            scene_as.handle,
+            normals.as_mut_ptr()
         ); 
     }
 
@@ -50,6 +62,9 @@ pub fn render(
     unsafe {
         optix::destroyOptix(optix_ctx);
     }
-
-    todo!("OptiX render not fully implemented")
+    
+    // in theory, this should be optimized away
+    let normals = normals.iter().map(|v| raytracing::geometry::Vec3(v.x, v.y, v.z)).collect();
+    render_output.normals = Some(normals);
+    render_output
 }
