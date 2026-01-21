@@ -290,8 +290,18 @@ pub(super) mod gltf {
 
             let wrap = wrap_s;
 
-            // TODO: actually respect filter mode from gltf (its model is somewhat different)
-            let filter_mode = FilterMode::Nearest;
+            let filter_mode = match (sampler.min_filter(), sampler.mag_filter()) {
+                (None, None) => FilterMode::Nearest,
+                (None, Some(gltf::texture::MagFilter::Nearest)) => FilterMode::Nearest,
+                (None, Some(gltf::texture::MagFilter::Linear)) => FilterMode::Bilinear,
+                (Some(gltf::texture::MinFilter::Nearest), _) => FilterMode::Nearest,
+                (Some(gltf::texture::MinFilter::Linear), _) => FilterMode::Bilinear,
+                (Some(gltf::texture::MinFilter::LinearMipmapLinear), _) => FilterMode::Trilinear,
+                (Some(other_min_filter), _) => {
+                    warn!("filter type {other_min_filter:?} not supported, falling back to nearest");
+                    FilterMode::Nearest
+                }
+            };
 
             let texture = Texture::ImageTexture {
                 image: image_id,

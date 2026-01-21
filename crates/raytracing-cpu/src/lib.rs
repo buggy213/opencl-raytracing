@@ -535,7 +535,7 @@ fn render_aovs(
             );
 
             let FirstHitAOVData { 
-                hit, 
+                hit: _, 
                 uv, 
                 normals, 
                 mip_level 

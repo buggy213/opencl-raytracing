@@ -184,6 +184,7 @@ fn main() {
             match aov_str.as_str() {
                 "n" | "normal" => aov_flags.insert(AOVFlags::NORMALS),
                 "u" | "uv" => aov_flags.insert(AOVFlags::UV_COORDS),
+                "m" | "mip" => aov_flags.insert(AOVFlags::MIP_LEVEL),
                 "b" | "beauty" => warn!("beauty is implicit"),
                 _ => warn!("unknown AOV specified: {aov_str}"),
             }
