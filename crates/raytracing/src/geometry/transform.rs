@@ -16,30 +16,26 @@ impl Transform {
     }
 
     pub fn translate(direction: Vec3) -> Self {
-        #[rustfmt::skip]
         Transform {
-            forward: Matrix4x4::create(1.0, 0.0, 0.0, direction.0,
-                                       0.0, 1.0, 0.0, direction.1,
-                                       0.0, 0.0, 1.0, direction.2,
-                                       0.0, 0.0, 0.0, 1.0),
-            inverse: Matrix4x4::create(1.0, 0.0, 0.0, -direction.0,
-                                       0.0, 1.0, 0.0, -direction.1,
-                                       0.0, 0.0, 1.0, -direction.2,
-                                       0.0, 0.0, 0.0, 1.0),
+            forward: Matrix4x4::translation(direction),
+            inverse: Matrix4x4::translation(-direction),
+        }
+    }
+
+    pub fn rotate(theta: f32, v: Vec3) -> Self {
+        let forward =  Matrix4x4::rotation(theta, v);
+        let inverse = forward.transposed();
+        
+        Transform {
+            forward,
+            inverse
         }
     }
 
     pub fn scale(scale: Vec3) -> Self {
-        #[rustfmt::skip]
         Transform {
-            forward: Matrix4x4::create(scale.0, 0.0, 0.0, 0.0,
-                                       0.0, scale.1, 0.0, 0.0,
-                                       0.0, 0.0, scale.2, 0.0,
-                                       0.0, 0.0, 0.0, 1.0),
-            inverse: Matrix4x4::create(1.0 / scale.0, 0.0, 0.0, 0.0,
-                                       0.0, 1.0 / scale.1, 0.0, 0.0,
-                                       0.0, 0.0, 1.0 / scale.2, 0.0,
-                                       0.0, 0.0, 0.0, 1.0),
+            forward: Matrix4x4::scale(scale),
+            inverse: Matrix4x4::scale(Vec3(1.0 / scale.0, 1.0 / scale.1, 1.0 / scale.2)),
         }
     }
 

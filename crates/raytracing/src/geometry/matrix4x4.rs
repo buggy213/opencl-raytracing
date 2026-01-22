@@ -259,6 +259,15 @@ impl Matrix4x4 {
         me
     }
 
+    pub fn translation(direction: Vec3) -> Matrix4x4 {
+        let mut me = Self::identity();
+        me.data[0][3] = direction.0;
+        me.data[1][3] = direction.1;
+        me.data[2][3] = direction.2;
+
+        me
+    }
+
     // rotate theta clockwise about v, assuming right-handed coordinate system
     pub fn rotation(theta: f32, v: Vec3) -> Matrix4x4 {
         // rotation matrix
@@ -301,6 +310,15 @@ impl Matrix4x4 {
             a41, a42, a43, a44
         )
     }
+
+    pub fn scale(scale: Vec3) -> Matrix4x4 {
+        let mut me = Self::identity();
+        me.data[0][0] = scale.0;
+        me.data[1][1] = scale.1;
+        me.data[2][2] = scale.2;
+
+        me
+    }
 }
 
 impl Matrix4x4 {
@@ -337,5 +355,25 @@ impl Matrix4x4 {
         let b = self.data[0][1] * v.0 + self.data[1][1] * v.1 + self.data[2][1] * v.2;
         let c = self.data[0][2] * v.0 + self.data[1][2] * v.1 + self.data[2][2] * v.2;
         Vec3(a, b, c)
+    }
+}
+
+// both `From` implementations assume row major
+impl From<[f32; 16]> for Matrix4x4 {
+    fn from(value: [f32; 16]) -> Self {
+        Matrix4x4 {
+            data: [
+                [value[0], value[1], value[2], value[3]],
+                [value[4], value[5], value[6], value[7]],
+                [value[8], value[9], value[10], value[11]],
+                [value[12], value[13], value[14], value[15]],
+            ],
+        }
+    }
+}
+
+impl From<[[f32; 4]; 4]> for Matrix4x4 {
+    fn from(value: [[f32; 4]; 4]) -> Self {
+        Self { data: value }
     }
 }
