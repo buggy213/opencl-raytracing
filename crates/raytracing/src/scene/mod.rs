@@ -1,6 +1,7 @@
 mod camera;
 mod primitive;
 mod scene;
+mod pbrt;
 
 pub use camera::{Camera, CameraType};
 pub use primitive::{
