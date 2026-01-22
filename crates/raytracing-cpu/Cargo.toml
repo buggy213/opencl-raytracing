@@ -15,5 +15,5 @@ embree4 = { workspace = true }
 raytracing = { workspace = true }
 
 png = "0.17.16"
-exr = "1.74.0"
+exr = { workspace = true }
 num_cpus = "1.17.0"

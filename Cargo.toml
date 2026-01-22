@@ -32,6 +32,7 @@ bitflags = "2.10.0"
 
 # image handling
 image = "0.25.8"
+exr = "1.74.0"
 
 # workspace members
 embree4 = { path = "crates/embree4" }
