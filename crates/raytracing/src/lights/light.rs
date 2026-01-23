@@ -1,8 +1,7 @@
 use tracing::warn;
 
 use crate::{
-    geometry::{Quaternion, Transform, Vec3},
-    scene::BasicPrimitiveIndex,
+    geometry::{Quaternion, Transform, Vec3}, materials::TextureId, scene::BasicPrimitiveIndex
 };
 
 #[derive(Debug)]
@@ -93,4 +92,18 @@ impl Light {
             transform,
         }
     }
+}
+
+// environment lighting only done by rays which miss; easiest to implement
+// TODO: importance sampling the environment light too
+// TODO: different texture mapping functions for general textures too (need this to support pbrt scenes)
+#[derive(Debug, Clone, Copy)]
+pub enum TextureMapping {
+    Spherical
+}
+
+#[derive(Debug)]
+pub struct EnvironmentLight {
+    pub mapping: TextureMapping,
+    pub radiance: TextureId,
 }

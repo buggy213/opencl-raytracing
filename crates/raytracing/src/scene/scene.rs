@@ -1,7 +1,7 @@
 use crate::{
     geometry::{Shape, Transform, Vec3, Vec4},
-    lights::Light,
-    materials::{Image, Material, Texture, TextureId},
+    lights::{EnvironmentLight, Light},
+    materials::{Image, ImageId, Material, Texture, TextureId},
     scene::primitive::{
         AggregatePrimitive, AggregatePrimitiveIndex, BasicPrimitive, BasicPrimitiveIndex,
         MaterialIndex, Primitive, PrimitiveIndex, TransformPrimitive, TransformPrimitiveIndex,
@@ -17,6 +17,7 @@ pub struct Scene {
     primitives: Vec<Primitive>,
     root_primitive: AggregatePrimitiveIndex,
 
+    pub environment_light: Option<EnvironmentLight>,
     pub lights: Vec<Light>,
 
     pub materials: Vec<Material>,
@@ -510,6 +511,8 @@ pub(super) mod gltf {
         primitives.push(root_primitive);
 
         Ok(Scene {
+            // gltf doesn't support environment lighting
+            environment_light: None, 
             lights,
             primitives,
             root_primitive: root_primitive_idx,
@@ -521,51 +524,66 @@ pub(super) mod gltf {
     }
 }
 
-struct SceneBuilder {
+pub(crate) struct SceneBuilder {
     camera: Option<Camera>,
     primitives: Vec<Primitive>,
     primitive_idxs: Vec<PrimitiveIndex>,
+    environment_light: Option<EnvironmentLight>,
     lights: Vec<Light>,
     materials: Vec<Material>,
     textures: Vec<Texture>,
+    images: Vec<Image>,
 }
 
 impl SceneBuilder {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         SceneBuilder {
             camera: None,
             primitives: Vec::new(),
             primitive_idxs: Vec::new(),
+            environment_light: None,
             lights: Vec::new(),
             materials: Vec::new(),
             textures: Vec::new(),
+            images: Vec::new(),
         }
     }
 
-    fn add_camera(&mut self, camera: Camera) {
+    pub(crate) fn add_camera(&mut self, camera: Camera) {
         self.camera = Some(camera);
     }
 
-    fn add_texture(&mut self, tex: Texture) -> TextureId {
+    pub(crate) fn add_environment_light(&mut self, environment_light: EnvironmentLight) {
+        self.environment_light = Some(environment_light);
+    }
+
+    pub(crate) fn add_texture(&mut self, tex: Texture) -> TextureId {
         let texture_id = TextureId(self.textures.len() as u32);
         self.textures.push(tex);
 
         texture_id
     }
 
-    fn add_constant_texture(&mut self, value: Vec4) -> TextureId {
+    pub(crate) fn add_constant_texture(&mut self, value: Vec4) -> TextureId {
         let const_texture = Texture::ConstantTexture { value };
         self.add_texture(const_texture)
     }
 
-    fn add_material(&mut self, material: Material) -> MaterialIndex {
+    pub(crate) fn add_material(&mut self, material: Material) -> MaterialIndex {
         let material_id = self.materials.len() as u32;
         self.materials.push(material);
 
         material_id
     }
 
-    fn add_shape_at_position(&mut self, shape: Shape, material_id: MaterialIndex, position: Vec3) {
+    pub(crate) fn add_image(&mut self, image: Image) -> ImageId {
+        let image_id = ImageId(self.images.len() as u32);
+        self.images.push(image);
+
+        image_id
+    }
+
+    pub(crate) fn add_shape_at_position(&mut self, shape: Shape, material_id: MaterialIndex, position: Vec3) {
         let basic_primitive_idx = BasicPrimitiveIndex(self.primitives.len() as u32);
         let basic_primitive = BasicPrimitive {
             shape,
@@ -586,11 +604,50 @@ impl SceneBuilder {
         self.primitive_idxs.push(transform_primitive_idx.into());
     }
 
-    fn add_light(&mut self, light: Light) {
+    pub(crate) fn add_shape_with_transform(
+        &mut self,
+        shape: Shape,
+        material_id: MaterialIndex,
+        transform: &Transform,
+        area_light_radiance: Option<Vec3>,
+    ) {
+        let basic_primitive_idx = BasicPrimitiveIndex(self.primitives.len() as u32);
+
+        let area_light_idx = if let Some(radiance) = area_light_radiance {
+            let area_light = Light::DiffuseAreaLight {
+                prim_id: basic_primitive_idx,
+                radiance,
+                transform: transform.clone(),
+            };
+            let idx = self.lights.len() as u32;
+            self.lights.push(area_light);
+            Some(idx)
+        } else {
+            None
+        };
+
+        let basic_primitive = BasicPrimitive {
+            shape,
+            material: material_id,
+            area_light: area_light_idx,
+        };
+        self.primitives.push(basic_primitive.into());
+
+        let transform_primitive_idx = TransformPrimitiveIndex(self.primitives.len() as u32);
+        let transformed = TransformPrimitive {
+            primitive: basic_primitive_idx.into(),
+            transform: transform.clone(),
+        };
+        self.primitives.push(transformed.into());
+
+        self.primitive_idxs.push(transform_primitive_idx.into());
+    }
+
+    pub(crate) fn add_light(&mut self, light: Light) {
         self.lights.push(light);
     }
 
-    fn add_point_light(&mut self, position: Vec3, intensity: Vec3) {
+    pub(crate) fn add_point_light(&mut self, position: Vec3, intensity: Vec3) {
         let point_light = Light::PointLight {
             position,
             intensity,
@@ -598,7 +655,7 @@ impl SceneBuilder {
         self.add_light(point_light);
     }
 
-    fn build(mut self) -> Scene {
+    pub(crate) fn build(mut self) -> Scene {
         let root_primitive_idx = AggregatePrimitiveIndex(self.primitives.len() as u32);
         let root_primitive = AggregatePrimitive {
             children: self.primitive_idxs,
@@ -610,663 +667,12 @@ impl SceneBuilder {
             camera: self.camera.expect("scene description incomplete"),
             primitives: self.primitives,
             root_primitive: root_primitive_idx,
+            environment_light: self.environment_light, 
             lights: self.lights,
             materials: self.materials,
             textures: self.textures,
-            images: Vec::new(),
+            images: self.images,
         }
     }
 }
 
-pub mod test_scenes {
-    use crate::{
-        geometry::{Mesh, Shape, Vec2, Vec3, Vec3u, Vec4},
-        lights::Light,
-        materials::{Material, Texture},
-        renderer::{AOVFlags, RaytracerSettings},
-        sampling::Sampler,
-        scene::{Camera, Scene},
-    };
-
-    use super::SceneBuilder;
-
-    // helpers for basic meshes
-    fn make_mesh(verts: &[Vec3], tris: &[Vec3u], normals: &[Vec3]) -> Mesh {
-        Mesh {
-            vertices: verts.to_vec(),
-            tris: tris.to_vec(),
-            normals: normals.to_vec(),
-            uvs: Vec::new(),
-        }
-    }
-
-    fn make_plane(a: Vec3, b: Vec3, c: Vec3, d: Vec3, normal: Vec3) -> Mesh {
-        // ensure a, b, c, d are coplanar, counterclockwise
-        let ab = b - a;
-        let ac = c - a;
-        let x = Vec3::cross(ab, ac).unit();
-
-        let cd = d - c;
-        let ca = -ac;
-        let y = Vec3::cross(cd, ca).unit();
-
-        assert!(
-            (x - normal).near_zero(),
-            "points not in plane defined by normal"
-        );
-        assert!(
-            (y - normal).near_zero(),
-            "points not in plane defined by normal"
-        );
-
-        make_mesh(
-            &[a, b, c, d],
-            &[Vec3u(0, 1, 2), Vec3u(2, 3, 0)],
-            &[normal, normal, normal, normal],
-        )
-    }
-
-    #[rustfmt::skip]
-    fn make_cube(side_length: f32) -> Mesh {
-        let h = side_length / 2.0;
-
-        // 6 faces, each with 4 vertices and 2 triangles
-        // Vertices are duplicated per face for correct flat-shaded normals
-        let mut vertices = Vec::with_capacity(24);
-        let mut normals = Vec::with_capacity(24);
-        let mut tris = Vec::with_capacity(12);
-
-        // Face order: +X, -X, +Y, -Y, +Z, -Z
-        // Each face defined CCW when looking at the face from outside
-
-        // +X face (normal = +X)
-        let base = vertices.len() as u32;
-
-        vertices.extend_from_slice(&[
-            Vec3(h, -h, -h),
-            Vec3(h,  h, -h),
-            Vec3(h,  h,  h),
-            Vec3(h, -h,  h),
-        ]);
-        normals.extend_from_slice(&[Vec3(1.0, 0.0, 0.0); 4]);
-        tris.push(Vec3u(base, base + 1, base + 2));
-        tris.push(Vec3u(base, base + 2, base + 3));
-
-        // -X face (normal = -X)
-        let base = vertices.len() as u32;
-        vertices.extend_from_slice(&[
-            Vec3(-h,  h, -h),
-            Vec3(-h, -h, -h),
-            Vec3(-h, -h,  h),
-            Vec3(-h,  h,  h),
-        ]);
-        normals.extend_from_slice(&[Vec3(-1.0, 0.0, 0.0); 4]);
-        tris.push(Vec3u(base, base + 1, base + 2));
-        tris.push(Vec3u(base, base + 2, base + 3));
-
-        // +Y face (normal = +Y)
-        let base = vertices.len() as u32;
-        vertices.extend_from_slice(&[
-            Vec3( h, h, -h),
-            Vec3(-h, h, -h),
-            Vec3(-h, h,  h),
-            Vec3( h, h,  h),
-        ]);
-        normals.extend_from_slice(&[Vec3(0.0, 1.0, 0.0); 4]);
-        tris.push(Vec3u(base, base + 1, base + 2));
-        tris.push(Vec3u(base, base + 2, base + 3));
-
-        // -Y face (normal = -Y)
-        let base = vertices.len() as u32;
-        vertices.extend_from_slice(&[
-            Vec3(-h, -h, -h),
-            Vec3( h, -h, -h),
-            Vec3( h, -h,  h),
-            Vec3(-h, -h,  h),
-        ]);
-        normals.extend_from_slice(&[Vec3(0.0, -1.0, 0.0); 4]);
-        tris.push(Vec3u(base, base + 1, base + 2));
-        tris.push(Vec3u(base, base + 2, base + 3));
-
-        // +Z face (normal = +Z)
-        let base = vertices.len() as u32;
-        vertices.extend_from_slice(&[
-            Vec3(-h, -h, h),
-            Vec3( h, -h, h),
-            Vec3( h,  h, h),
-            Vec3(-h,  h, h),
-        ]);
-        normals.extend_from_slice(&[Vec3(0.0, 0.0, 1.0); 4]);
-        tris.push(Vec3u(base, base + 1, base + 2));
-        tris.push(Vec3u(base, base + 2, base + 3));
-
-        // -Z face (normal = -Z)
-        let base = vertices.len() as u32;
-        vertices.extend_from_slice(&[
-            Vec3( h, -h, -h),
-            Vec3(-h, -h, -h),
-            Vec3(-h,  h, -h),
-            Vec3( h,  h, -h),
-        ]);
-        normals.extend_from_slice(&[Vec3(0.0, 0.0, -1.0); 4]);
-        tris.push(Vec3u(base, base + 1, base + 2));
-        tris.push(Vec3u(base, base + 2, base + 3));
-
-        Mesh {
-            vertices,
-            tris,
-            normals,
-            uvs: Vec::new(),
-        }
-    }
-
-    // super simple test scene with one sphere, no light
-    pub fn sphere_scene() -> Scene {
-        let mut scene_builder = SceneBuilder::new();
-
-        let sphere = Shape::Sphere {
-            center: Vec3::zero(),
-            radius: 1.0,
-        };
-
-        let white = scene_builder.add_constant_texture(Vec4(1.0, 1.0, 1.0, 1.0));
-
-        let white_diffuse = scene_builder.add_material(Material::Diffuse { albedo: white });
-
-        scene_builder.add_shape_at_position(sphere, white_diffuse, Vec3(0.0, 0.0, -3.0));
-
-        let camera = Camera::lookat_camera_perspective(
-            Vec3(0.0, 0.0, 0.0),
-            Vec3(0.0, 0.0, -3.0),
-            Vec3(0.0, 1.0, 0.0),
-            (45.0_f32).to_radians(),
-            400,
-            400,
-        );
-        scene_builder.add_camera(camera);
-
-        let scene = scene_builder.build();
-
-        scene
-    }
-
-    pub fn cube_scene() -> Scene {
-        let mut scene_builder = SceneBuilder::new();
-
-        let cube_mesh = make_cube(1.0);
-        let cube = Shape::TriangleMesh(cube_mesh);
-
-        let white = scene_builder.add_constant_texture(Vec4(1.0, 1.0, 1.0, 1.0));
-
-        let white_diffuse = scene_builder.add_material(Material::Diffuse { albedo: white });
-
-        scene_builder.add_shape_at_position(cube, white_diffuse, Vec3(0.0, 0.0, -3.0));
-
-        let camera = Camera::lookat_camera_perspective(
-            Vec3(1.0, 0.75, -1.0),
-            Vec3(0.0, 0.0, -3.0),
-            Vec3(0.0, 1.0, 0.0),
-            (45.0_f32).to_radians(),
-            400,
-            400,
-        );
-        scene_builder.add_camera(camera);
-
-        scene_builder.build()
-    }
-
-    pub fn cube_orthographic_scene() -> Scene {
-        let mut scene_builder = SceneBuilder::new();
-
-        let cube_mesh = make_cube(1.0);
-        let cube = Shape::TriangleMesh(cube_mesh);
-
-        let white = scene_builder.add_constant_texture(Vec4(1.0, 1.0, 1.0, 1.0));
-
-        let white_diffuse = scene_builder.add_material(Material::Diffuse { albedo: white });
-
-        scene_builder.add_shape_at_position(cube, white_diffuse, Vec3(0.0, 0.0, -3.0));
-
-        let camera = Camera::lookat_camera_orthographic(
-            Vec3(1.0, 0.75, -1.0),
-            Vec3(0.0, 0.0, -3.0),
-            Vec3(0.0, 1.0, 0.0),
-            400,
-            400,
-            2.5 / 400.0,
-        );
-
-        scene_builder.add_camera(camera);
-
-        scene_builder.build()
-    }
-
-    pub fn checkered_plane_scene() -> Scene {
-        let mut scene_builder = SceneBuilder::new();
-
-        let plane = {
-            let mut plane = make_plane(
-                Vec3(-100.0, -100.0, 0.1),
-                Vec3(100.0, -100.0, 0.1),
-                Vec3(100.0, 100.0, 0.1),
-                Vec3(-100.0, 100.0, 0.1),
-                Vec3(0.0, 0.0, 1.0),
-            );
-
-            plane.uvs = vec![
-                Vec2(-500.0, -500.0),
-                Vec2(500.0, -500.0),
-                Vec2(500.0, 500.0),
-                Vec2(-500.0, 500.0),
-            ];
-
-            plane
-        };
-        let plane_shape = Shape::TriangleMesh(plane);
-
-        let checker_tex = Texture::CheckerTexture {
-            color1: Vec4(0.0, 0.0, 0.0, 1.0),
-            color2: Vec4(1.0, 1.0, 1.0, 1.0),
-        };
-        let checker_tex_id = scene_builder.add_texture(checker_tex);
-        let checker_material = Material::Diffuse {
-            albedo: checker_tex_id,
-        };
-
-        let checker_material_id = scene_builder.add_material(checker_material);
-
-        scene_builder.add_shape_at_position(plane_shape, checker_material_id, Vec3::zero());
-
-        // light from straight up
-        let sun = Light::DirectionLight {
-            direction: Vec3(0.0, 0.0, -1.0),
-            radiance: Vec3(1000.0, 1000.0, 1000.0),
-        };
-        scene_builder.add_light(sun);
-
-        // angle below +y axis
-        let y_angle = (10.0_f32).to_radians();
-        let lookat_dist = 1.0;
-
-        let camera = Camera::lookat_camera_perspective(
-            Vec3(0.0, 0.0, 0.22),
-            Vec3(
-                0.0,
-                f32::cos(y_angle) * lookat_dist,
-                0.22 - f32::sin(y_angle) * lookat_dist,
-            ),
-            Vec3(0.0, 0.0, 1.0),
-            (40.0_f32).to_radians(),
-            480,
-            270,
-        );
-        scene_builder.add_camera(camera);
-
-        scene_builder.build()
-    }
-
-    // template for cornell box, returns a SceneBuilder so other functions can add on top
-    // note: this isn't the same dimensions as the real cornell box
-    #[rustfmt::skip]
-    fn cornell_box() -> SceneBuilder {
-        let mut scene_builder = SceneBuilder::new();
-
-        // Dimensions: width=2, height=1.5, depth=2.0, y-up
-        let w = 2.0;
-        let h = 1.5;
-        let d = 2.0;
-
-        // Box corners
-        let left   = w / 2.0;
-        let right  =  -w / 2.0;
-        let bottom = 0.0;
-        let top    = h;
-        let back   = -d / 2.0;
-        let front  =  d / 2.0;
-
-        // Plane normals
-        let up    = Vec3(0.0, 0.0, 1.0);
-        let down  = Vec3(0.0, 0.0, -1.0);
-        let leftn = Vec3(-1.0, 0.0, 0.0);
-        let rightn= Vec3(1.0, 0.0, 0.0);
-        let backn = Vec3(0.0, 1.0, 0.0);
-
-        // Floor
-        let floor = make_plane(
-            Vec3(right, front, bottom),
-            Vec3(right, back, bottom),
-            Vec3(left, back, bottom),
-            Vec3(left, front, bottom),
-            up,
-        );
-        // Ceiling
-        let ceiling = make_plane(
-            Vec3(left, front, top),
-            Vec3(left, back, top),
-            Vec3(right, back, top),
-            Vec3(right, front, top),
-            down,
-        );
-        // Left wall
-        let left_wall = make_plane(
-            Vec3(left, front, bottom),
-            Vec3(left, back, bottom),
-            Vec3(left, back, top),
-            Vec3(left, front, top),
-            leftn,
-        );
-        // Right wall
-        let right_wall = make_plane(
-            Vec3(right, front, top),
-            Vec3(right, back, top),
-            Vec3(right, back, bottom),
-            Vec3(right, front, bottom),
-            rightn,
-        );
-        // Back wall
-        let back_wall = make_plane(
-            Vec3(right, back, top),
-            Vec3(left, back, top),
-            Vec3(left, back, bottom),
-            Vec3(right, back, bottom),
-            backn,
-        );
-
-        // Add planes to scene builder with colored walls
-        let white = scene_builder.add_constant_texture(Vec4(0.6, 0.6, 0.6, 1.0));
-        let red   = scene_builder.add_constant_texture(Vec4(0.6, 0.2, 0.2, 1.0));
-        let blue  = scene_builder.add_constant_texture(Vec4(0.2, 0.2, 0.6, 1.0));
-
-        let white_diffuse = scene_builder.add_material(Material::Diffuse { albedo: white });
-        let red_diffuse   = scene_builder.add_material(Material::Diffuse { albedo: red });
-        let blue_diffuse  = scene_builder.add_material(Material::Diffuse { albedo: blue });
-
-        scene_builder.add_shape_at_position(Shape::TriangleMesh(floor), white_diffuse, Vec3(0.0, 0.0, 0.0));
-        scene_builder.add_shape_at_position(Shape::TriangleMesh(ceiling), white_diffuse, Vec3(0.0, 0.0, 0.0));
-        scene_builder.add_shape_at_position(Shape::TriangleMesh(left_wall), red_diffuse, Vec3(0.0, 0.0, 0.0));
-        scene_builder.add_shape_at_position(Shape::TriangleMesh(right_wall), blue_diffuse, Vec3(0.0, 0.0, 0.0));
-        scene_builder.add_shape_at_position(Shape::TriangleMesh(back_wall), white_diffuse, Vec3(0.0, 0.0, 0.0));
-
-        // Camera looking into the box from the front
-        let camera = Camera::lookat_camera_perspective(
-            Vec3(0.0, front + 3.4, 0.4),
-            Vec3(0.0, 0.0, h / 2.0),
-            Vec3(0.0, 0.0, 1.0),
-            (37.8_f32).to_radians(),
-            500,
-            500,
-        );
-        scene_builder.add_camera(camera);
-
-        // Add a point light near the top center
-        scene_builder.add_point_light(
-            Vec3(0.0, 0.0, top - 0.1),    // slightly below the ceiling, centered
-            Vec3(1000.0, 1000.0, 1000.0), // bright white light
-        );
-
-        scene_builder
-    }
-
-    // single dielectric sphere (ior = 1.5) in cornell box
-    pub fn dielectric_scene() -> Scene {
-        let mut cornell_box = cornell_box();
-
-        let ior_texture = cornell_box.add_constant_texture(Vec4(1.5, 0.0, 0.0, 0.0));
-        let dielectric_material =
-            cornell_box.add_material(Material::SmoothDielectric { eta: ior_texture });
-        cornell_box.add_shape_at_position(
-            Shape::Sphere {
-                center: Vec3::zero(),
-                radius: 0.5,
-            },
-            dielectric_material,
-            Vec3(0.0, 0.0, 0.75),
-        );
-
-        cornell_box.build()
-    }
-
-    // single "gold" sphere in cornell box
-    // ior at red wavelengths is 0.13 + 4.10i
-    // ior at green wavelengths is 0.43 + 2.46i
-    // ior at blue wavelengths is 1.38 + 1.91i
-    pub fn metal_scene() -> Scene {
-        let mut cornell_box = cornell_box();
-
-        let ior_texture = cornell_box.add_constant_texture(Vec4(0.13, 0.43, 1.38, 0.0));
-        let kappa_texture = cornell_box.add_constant_texture(Vec4(4.10, 2.46, 1.91, 0.0));
-        let metal_material = cornell_box.add_material(Material::SmoothConductor {
-            eta: ior_texture,
-            kappa: kappa_texture,
-        });
-        cornell_box.add_shape_at_position(
-            Shape::Sphere {
-                center: Vec3::zero(),
-                radius: 0.5,
-            },
-            metal_material,
-            Vec3(0.0, 0.0, 0.75),
-        );
-
-        cornell_box.build()
-    }
-
-    pub fn rough_metal_scene() -> Scene {
-        let mut cornell_box = cornell_box();
-
-        let ior_texture = cornell_box.add_constant_texture(Vec4(0.13, 0.43, 1.38, 0.0));
-        let kappa_texture = cornell_box.add_constant_texture(Vec4(4.10, 2.46, 1.91, 0.0));
-        let roughness_texture = cornell_box.add_constant_texture(Vec4(0.5, 0.5, 0.0, 0.0));
-        let rough_conductor_material = cornell_box.add_material(Material::RoughConductor {
-            eta: ior_texture,
-            kappa: kappa_texture,
-            roughness: roughness_texture,
-        });
-
-        cornell_box.add_shape_at_position(
-            Shape::Sphere {
-                center: Vec3::zero(),
-                radius: 0.5,
-            },
-            rough_conductor_material,
-            Vec3(0.0, 0.0, 0.75),
-        );
-
-        cornell_box.build()
-    }
-
-    pub fn rough_dielectric_scene() -> Scene {
-        let mut cornell_box = cornell_box();
-
-        let ior_texture = cornell_box.add_constant_texture(Vec4(1.5, 0.0, 0.0, 0.0));
-        let roughness_texture = cornell_box.add_constant_texture(Vec4(0.5, 0.5, 0.0, 0.0));
-        let rough_dielectric_material = cornell_box.add_material(Material::RoughDielectric {
-            eta: ior_texture,
-            roughness: roughness_texture,
-        });
-        cornell_box.add_shape_at_position(
-            Shape::Sphere {
-                center: Vec3::zero(),
-                radius: 0.5,
-            },
-            rough_dielectric_material,
-            Vec3(0.0, 0.0, 0.75),
-        );
-
-        cornell_box.build()
-    }
-
-    fn gltf_sphere_scene(base_color: Vec3, metallic: f32, roughness: f32) -> Scene {
-        let mut cornell_box = cornell_box();
-
-        let base_color_texture =
-            cornell_box.add_constant_texture(Vec4(base_color.0, base_color.1, base_color.2, 0.0));
-        let metallic_roughness_texture =
-            cornell_box.add_constant_texture(Vec4(0.0, roughness, metallic, 0.0));
-        let gltf_material = cornell_box.add_material(Material::GLTFMetallicRoughness {
-            base_color: base_color_texture,
-            metallic_roughness: metallic_roughness_texture,
-        });
-
-        cornell_box.add_shape_at_position(
-            Shape::Sphere {
-                center: Vec3::zero(),
-                radius: 0.5,
-            },
-            gltf_material,
-            Vec3(0.0, 0.0, 0.75),
-        );
-
-        cornell_box.build()
-    }
-
-    pub fn gltf_rough_metal() -> Scene {
-        gltf_sphere_scene(Vec3(0.5, 0.5, 0.0), 1.0, 0.5)
-    }
-
-    pub fn gltf_rough_nonmetal() -> Scene {
-        gltf_sphere_scene(Vec3(0.5, 0.5, 0.0), 0.0, 0.5)
-    }
-
-    pub fn gltf_smooth_metal() -> Scene {
-        gltf_sphere_scene(Vec3(0.5, 0.5, 0.0), 1.0, 0.0)
-    }
-
-    pub fn gltf_smooth_nonmetal() -> Scene {
-        gltf_sphere_scene(Vec3(0.5, 0.5, 0.0), 0.0, 0.0)
-    }
-
-    // Thin-lens camera test scene: sphere is out of focus
-    pub fn out_of_focus_sphere_scene() -> Scene {
-        let mut scene_builder = SceneBuilder::new();
-
-        let sphere = Shape::Sphere {
-            center: Vec3::zero(),
-            radius: 1.0,
-        };
-
-        let white = scene_builder.add_constant_texture(Vec4(1.0, 1.0, 1.0, 1.0));
-        let white_diffuse = scene_builder.add_material(Material::Diffuse { albedo: white });
-
-        scene_builder.add_shape_at_position(sphere, white_diffuse, Vec3(0.0, 0.0, -5.0));
-
-        let sun = Light::DirectionLight {
-            direction: Vec3(0.0, 0.0, -1.0),
-            radiance: Vec3(1.0, 1.0, 1.0),
-        };
-        scene_builder.add_light(sun);
-
-        // Thin-lens camera: focused at z=-3 (in front of sphere), sphere will be blurred
-        let camera = Camera::lookat_camera_thin_lens_perspective(
-            Vec3(0.0, 0.0, 0.0),
-            Vec3(0.0, 0.0, -5.0),
-            Vec3(0.0, 1.0, 0.0),
-            (45.0_f32).to_radians(),
-            400,
-            400,
-            0.1,
-            3.0,
-        );
-        scene_builder.add_camera(camera);
-
-        scene_builder.build()
-    }
-
-    fn debug_normals_settings() -> RaytracerSettings {
-        RaytracerSettings {
-            outputs: AOVFlags::NORMALS,
-            ..Default::default()
-        }
-    }
-
-    pub struct TestScene {
-        pub name: &'static str,
-        pub scene_func: fn() -> Scene,
-        pub settings_func: fn() -> RaytracerSettings,
-    }
-
-    pub const fn all_test_scenes() -> &'static [TestScene] {
-        &[
-            TestScene {
-                name: "sphere",
-                scene_func: sphere_scene,
-                settings_func: debug_normals_settings,
-            },
-            TestScene {
-                name: "cube",
-                scene_func: cube_scene,
-                settings_func: debug_normals_settings,
-            },
-            TestScene {
-                name: "cube_orthographic",
-                scene_func: cube_orthographic_scene,
-                settings_func: debug_normals_settings,
-            },
-            TestScene {
-                name: "checkered_plane",
-                scene_func: checkered_plane_scene,
-                // deliberately only 1 spp to exhibit aliasing
-                settings_func: || RaytracerSettings {
-                    samples_per_pixel: 1,
-                    ..Default::default()
-                },
-            },
-            TestScene {
-                name: "dielectric",
-                scene_func: dielectric_scene,
-                settings_func: RaytracerSettings::default,
-            },
-            TestScene {
-                name: "metal",
-                scene_func: metal_scene,
-                settings_func: RaytracerSettings::default,
-            },
-            TestScene {
-                name: "rough_metal",
-                scene_func: rough_metal_scene,
-                settings_func: RaytracerSettings::default,
-            },
-            TestScene {
-                name: "rough_dielectric",
-                scene_func: rough_dielectric_scene,
-                settings_func: RaytracerSettings::default,
-            },
-            TestScene {
-                name: "gltf_rough_metal",
-                scene_func: gltf_rough_metal,
-                settings_func: RaytracerSettings::default,
-            },
-            TestScene {
-                name: "gltf_rough_nonmetal",
-                scene_func: gltf_rough_nonmetal,
-                settings_func: RaytracerSettings::default,
-            },
-            TestScene {
-                name: "gltf_smooth_metal",
-                scene_func: gltf_smooth_metal,
-                settings_func: RaytracerSettings::default,
-            },
-            TestScene {
-                name: "gltf_smooth_nonmetal",
-                scene_func: gltf_smooth_nonmetal,
-                settings_func: RaytracerSettings::default,
-            },
-            
-            // this scene is meant to clearly demonstrate how stratified sampling
-            // of lens position is able to significantly reduce variance
-            TestScene {
-                name: "out_of_focus_sphere",
-                scene_func: out_of_focus_sphere_scene,
-                settings_func: || RaytracerSettings {
-                    sampler: Sampler::Stratified {
-                        jitter: true,
-                        x_strata: 6,
-                        y_strata: 6,
-                    },
-                    samples_per_pixel: 36,
-                    ..Default::default()
-                },
-            },
-        ]
-    }
-}

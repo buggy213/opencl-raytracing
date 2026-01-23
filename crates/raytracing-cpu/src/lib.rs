@@ -9,7 +9,7 @@ use ray::Ray;
 use raytracing::{geometry::{AABB, Matrix4x4, Vec2, Vec3}, renderer::{AOVFlags, RaytracerSettings, RenderOutput}, scene::{Camera, Scene}};
 use tracing::{info, warn};
 
-use crate::{accel::TraversalCache, materials::MaterialEvalContext, ray::RayDifferentials, sample::CpuSampler, scene::CpuAccelerationStructures, texture::CpuTextures};
+use crate::{accel::TraversalCache, lights::environment_light_radiance, materials::MaterialEvalContext, ray::RayDifferentials, sample::CpuSampler, scene::CpuAccelerationStructures, texture::CpuTextures};
 
 mod ray;
 mod accel;
@@ -243,7 +243,14 @@ fn ray_radiance(
 
         let hit = match hit_info {
             Some(hit) => hit,
-            None => break
+            None => {
+                // unconditionally add environment lighting, as direct lighting can't sample it (yet)
+                if let Some(environment_light) = &context.scene.environment_light {
+                    radiance += path_weight * environment_light_radiance(environment_light, ray.direction, &context.cpu_textures);
+                }
+
+                break;
+            }
         };
 
         let add_zero_bounce = raytracer_settings.accumulate_bounces || raytracer_settings.max_ray_depth == depth;
@@ -259,9 +266,9 @@ fn ray_radiance(
             MaterialEvalContext::new_from_ray_differentials(&hit, ray, camera_ray_differentials)
         } else if depth > 0 && raytracer_settings.antialias_secondary_rays {
             // TODO: implement secondary ray antialiasing
-            MaterialEvalContext::new_without_antialiasing(&hit)
+            MaterialEvalContext::new_without_antialiasing(hit.uv)
         } else {
-            MaterialEvalContext::new_without_antialiasing(&hit)
+            MaterialEvalContext::new_without_antialiasing(hit.uv)
         };
 
         let bsdf = material.get_bsdf(&material_eval_ctx, &context.cpu_textures);

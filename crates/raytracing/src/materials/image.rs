@@ -6,7 +6,7 @@
 //! I really don't like this current implementation - will want to revisit this in the future
 //! maybe a custom Image handling facility is better?
 
-use std::path::Path;
+use std::{io::Cursor, path::Path};
 
 use anyhow::Context;
 use image::{
@@ -222,6 +222,14 @@ impl Image {
         Self {
             buffer: dynamic_image,
         }
+    }
+
+    pub fn load_from_bytes(bytes: &[u8]) -> Result<Self, image::ImageError> {
+        let img = image::ImageReader::new(Cursor::new(bytes))
+            .with_guessed_format()?
+            .decode()?;
+
+        Ok(Image { buffer: img })
     }
 
     pub fn save<Q: AsRef<Path>>(&self, path: Q) -> Result<(), image::ImageError> {

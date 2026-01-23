@@ -57,7 +57,7 @@ enum Backend {
 #[derive(Debug, clap::Args)]
 #[group(multiple = false)]
 struct InputScene {
-    #[arg(long, help = "Load a GLTF scene from disk")]
+    #[arg(long, help = "Load a scene from disk (GLTF or PBRT)")]
     scene_path: Option<PathBuf>,
     #[arg(long, help = "Load a builtin test scene by name")]
     scene_name: Option<String>,
@@ -114,7 +114,14 @@ fn main() {
     }
 
     let (builtin_scene_settings, scene) = if let Some(filename) = cli_args.input.scene_path {
-        let scene = scene::scene_from_gltf_file(&filename).expect("failed to load scene");
+        let scene = match filename.extension().and_then(|e| e.to_str()) {
+            Some("pbrt") => todo!("pbrt importer"),
+            Some("gltf") => scene::scene_from_gltf_file(&filename).expect("failed to load GLTF scene"),
+            ext => {
+                warn!("unrecognized file extension {ext:?}, trying to import as gltf");
+                scene::scene_from_gltf_file(&filename).expect("failed to load GLTF")
+            }
+        };
         (None, scene)
     } else if let Some(name) = cli_args.input.scene_name {
         let scene_descriptor = test_scenes::all_test_scenes()

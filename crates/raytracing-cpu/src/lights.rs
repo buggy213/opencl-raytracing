@@ -1,5 +1,7 @@
-use raytracing::{geometry::{Shape, Vec3}, lights::Light};
-use crate::{CpuRaytracingContext, accel::TraversalCache, ray::Ray, sample::{CpuSampler}, traverse_bvh};
+use std::f32;
+
+use raytracing::{geometry::{Shape, Vec2, Vec3}, lights::{EnvironmentLight, Light}};
+use crate::{CpuRaytracingContext, accel::TraversalCache, materials::MaterialEvalContext, ray::Ray, sample::CpuSampler, texture::CpuTextures, traverse_bvh};
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct LightSample {
@@ -125,6 +127,28 @@ pub(crate) fn light_radiance(light: &Light, _hit_point: Vec3) -> Vec3 {
             *radiance
         },
     }
+}
+
+pub(crate) fn environment_light_radiance(
+    environment_light: &EnvironmentLight, 
+    direction: Vec3,
+    textures: &CpuTextures,
+) -> Vec3 {
+    // compute texture mapping function from world-space direction
+    let direction = direction.unit();
+    let st = match environment_light.mapping {
+        raytracing::lights::TextureMapping::Spherical => {
+            let t = f32::acos(direction.z()) * f32::consts::FRAC_1_PI;
+            let s = (f32::atan2(direction.x(), direction.y()) + f32::consts::PI) * f32::consts::FRAC_1_PI * 0.5;
+            
+            Vec2(s, t)
+        },
+    };
+
+    let eval_ctx = MaterialEvalContext::new_without_antialiasing(st);
+    let sampled_radiance = textures.sample(environment_light.radiance, &eval_ctx);
+
+    Vec3(sampled_radiance.0, sampled_radiance.1, sampled_radiance.2)
 }
 
 pub(crate) fn occluded(context: &CpuRaytracingContext, traversal_cache: &mut TraversalCache, light_sample: LightSample) -> bool {

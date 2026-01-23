@@ -343,9 +343,9 @@ impl MaterialEvalContext {
     }
 
     pub(crate) fn new_without_antialiasing(
-        hit_info: &accel::HitInfo
+        uv: Vec2
     ) -> Self {
-        MaterialEvalContext { uv: hit_info.uv, dudx: 0.0, dudy: 0.0, dvdx: 0.0, dvdy: 0.0 }
+        MaterialEvalContext { uv, dudx: 0.0, dudy: 0.0, dvdx: 0.0, dvdy: 0.0 }
     }
 
     pub(crate) fn new_from_ray_differentials(
