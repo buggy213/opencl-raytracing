@@ -481,46 +481,6 @@ pub fn rough_dielectric_scene() -> Scene {
     cornell_box.build()
 }
 
-fn gltf_sphere_scene(base_color: Vec3, metallic: f32, roughness: f32) -> Scene {
-    let mut cornell_box = cornell_box();
-
-    let base_color_texture =
-        cornell_box.add_constant_texture(Vec4(base_color.0, base_color.1, base_color.2, 0.0));
-    let metallic_roughness_texture =
-        cornell_box.add_constant_texture(Vec4(0.0, roughness, metallic, 0.0));
-    let gltf_material = cornell_box.add_material(Material::GLTFMetallicRoughness {
-        base_color: base_color_texture,
-        metallic_roughness: metallic_roughness_texture,
-    });
-
-    cornell_box.add_shape_at_position(
-        Shape::Sphere {
-            center: Vec3::zero(),
-            radius: 0.5,
-        },
-        gltf_material,
-        Vec3(0.0, 0.0, 0.75),
-    );
-
-    cornell_box.build()
-}
-
-pub fn gltf_rough_metal() -> Scene {
-    gltf_sphere_scene(Vec3(0.5, 0.5, 0.0), 1.0, 0.5)
-}
-
-pub fn gltf_rough_nonmetal() -> Scene {
-    gltf_sphere_scene(Vec3(0.5, 0.5, 0.0), 0.0, 0.5)
-}
-
-pub fn gltf_smooth_metal() -> Scene {
-    gltf_sphere_scene(Vec3(0.5, 0.5, 0.0), 1.0, 0.0)
-}
-
-pub fn gltf_smooth_nonmetal() -> Scene {
-    gltf_sphere_scene(Vec3(0.5, 0.5, 0.0), 0.0, 0.0)
-}
-
 // Thin-lens camera test scene: sphere is out of focus
 pub fn out_of_focus_sphere_scene() -> Scene {
     let mut scene_builder = SceneBuilder::new();
@@ -662,26 +622,6 @@ pub const fn all_test_scenes() -> &'static [TestScene] {
         TestScene {
             name: "rough_dielectric",
             scene_func: rough_dielectric_scene,
-            settings_func: RaytracerSettings::default,
-        },
-        TestScene {
-            name: "gltf_rough_metal",
-            scene_func: gltf_rough_metal,
-            settings_func: RaytracerSettings::default,
-        },
-        TestScene {
-            name: "gltf_rough_nonmetal",
-            scene_func: gltf_rough_nonmetal,
-            settings_func: RaytracerSettings::default,
-        },
-        TestScene {
-            name: "gltf_smooth_metal",
-            scene_func: gltf_smooth_metal,
-            settings_func: RaytracerSettings::default,
-        },
-        TestScene {
-            name: "gltf_smooth_nonmetal",
-            scene_func: gltf_smooth_nonmetal,
             settings_func: RaytracerSettings::default,
         },
         

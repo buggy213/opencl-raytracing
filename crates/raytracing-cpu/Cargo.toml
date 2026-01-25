@@ -13,6 +13,7 @@ num = { workspace = true }
 
 embree4 = { workspace = true }
 raytracing = { workspace = true }
+bitflags = { workspace = true }
 
 png = "0.17.16"
 exr = { workspace = true }

@@ -1,6 +1,5 @@
 use std::{
-    fmt::Display,
-    ops::{self, MulAssign},
+    fmt::Display, hash::Hash, ops::{self, MulAssign}
 };
 
 use rand::random;
@@ -76,6 +75,14 @@ impl Vec3 {
 
     pub fn elementwise_max(a: Vec3, b: Vec3) -> Vec3 {
         Vec3(f32::max(a.0, b.0), f32::max(a.1, b.1), f32::max(a.2, b.2))
+    }
+
+    pub fn min_component(self) -> f32 {
+        f32::min(self.0, f32::min(self.1, self.2))
+    }
+
+    pub fn max_component(self) -> f32 {
+        f32::max(self.0, f32::max(self.1, self.2))
     }
 
     pub fn zero() -> Vec3 {
@@ -185,6 +192,14 @@ impl From<[f32; 3]> for Vec3 {
 impl From<&[f32; 3]> for Vec3 {
     fn from(value: &[f32; 3]) -> Self {
         Vec3(value[0], value[1], value[2])
+    }
+}
+
+impl Hash for Vec3 {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.to_bits().hash(state);
+        self.1.to_bits().hash(state);
+        self.2.to_bits().hash(state);
     }
 }
 

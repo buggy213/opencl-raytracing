@@ -403,10 +403,7 @@ pub(super) mod gltf {
                 id
             };
 
-            let pbr_material = Material::GLTFMetallicRoughness {
-                base_color: base_color_tex,
-                metallic_roughness: metallic_roughness_tex,
-            };
+            let pbr_material = todo!("find a more suitable material");
 
             materials.push(pbr_material);
 

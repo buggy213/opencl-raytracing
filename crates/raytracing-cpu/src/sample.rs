@@ -58,6 +58,13 @@ impl CpuSampler {
         }
     }
 
+    pub(crate) fn one_off_sampler(seed: u64) -> Self {
+        CpuSampler::Independent { 
+            seed, 
+            rng: rand_pcg::Pcg32::new(seed, 0) 
+        }
+    }
+
     // unlike pbrt, we don't expose starting dimension; sampling using `rand` is opaque - not possible to know
     // how many values were consumed by RNG. it seems like a pretty niche use case anyways. it's still possible
     // to start at a particular `sample_index`
@@ -205,6 +212,18 @@ pub(crate) fn sample_cosine_hemisphere(u: Vec2) -> (Vec3, f32) {
     let z = f32::sqrt(1.0 - d.0 * d.0 - d.1 * d.1);
     let h = Vec3(d.0, d.1, z);
     (h, z / f32::consts::PI)
+}
+
+// samples x for e^{-ax} in the range [0, +infty) using inverse CDF
+pub(crate) fn sample_exponential(u: f32, a: f32) -> f32 {
+    -f32::ln(1.0 - u) / a
+}
+
+pub(crate) fn power_heuristic(n_a: u32, p_a: f32, n_b: u32, p_b: f32) -> f32 {
+    let w_a = (n_a as f32 * p_a).powi(2);
+    let w_b = (n_b as f32 * p_b).powi(2);
+
+    w_a / (w_a + w_b)
 }
 
 // https://graphics.pixar.com/library/MultiJitteredSampling/paper.pdf
