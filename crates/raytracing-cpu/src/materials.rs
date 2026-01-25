@@ -1,9 +1,11 @@
-use std::f32;
+use std::{f32, hash::{Hash, Hasher}};
 
+use bitflags::bitflags;
 use raytracing::{geometry::{Complex, Vec2, Vec3}, materials::Material, scene};
+use rustc_hash::FxHasher;
 use tracing::warn;
 
-use crate::{accel, ray::{Ray, RayDifferentials}, sample::{self, CpuSampler}, texture::CpuTextures};
+use crate::{accel, materials::microfacet::{torrance_sparrow_pdf, torrance_sparrow_refl_pdf}, ray::{Ray, RayDifferentials}, sample::{self, CpuSampler, power_heuristic, sample_exponential}, texture::CpuTextures};
 
 #[derive(Debug)]
 pub(crate) struct BsdfSample {
@@ -11,9 +13,29 @@ pub(crate) struct BsdfSample {
     pub(crate) bsdf: Vec3,
     pub(crate) pdf: f32,
 
-    // tracks whether this sample represents a specular component of 
-    // bsdf; only gltf material returns both true / false at the moment
-    pub(crate) specular: bool,
+    // which component this sample represents
+    // only one flag should be set; checked by conversion to ValidBsdfSample
+    pub(crate) component: BsdfComponentFlags,
+}
+
+// helper to prevent bad values from propagating into render output from BSDF evaluation
+pub(crate) enum ValidBsdfSample {
+    ValidSample(BsdfSample),
+    ValidNullSample,
+    InvalidSample
+}
+
+impl From<BsdfSample> for ValidBsdfSample {
+    fn from(value: BsdfSample) -> Self {
+        let bad = |f: f32| f.is_infinite() || f.is_nan();
+        let bad_vec = |v: Vec3| bad(v.0) || bad(v.1) || bad(v.2);
+        if bad_vec(value.bsdf) || bad(value.pdf) || value.pdf <= 0.0 || bad_vec(value.wi) || value.component.bits().count_ones() != 1 {
+            warn!("bad bsdfsample generated");
+            return Self::InvalidSample;
+        }
+
+        Self::ValidSample(value)
+    }
 }
 
 // Corresponds to `Material` evaluated at a specific point
@@ -42,19 +64,70 @@ pub enum CpuBsdf {
         alpha_y: f32,
     },
 
-    GLTFMetallicRoughness {
-        base_color: Vec3,
-        metallic: f32,
-        alpha: f32,
+    LayeredBsdf(Box<LayeredBsdf>)
+}
+
+struct LayeredBsdf {
+    top: CpuBsdf,
+    bottom: CpuBsdf,
+    n_samples: u32,
+    max_depth: u32,
+    thickness: f32,
+    albedo: Vec3,
+    g: f32,
+}
+
+impl LayeredBsdf {
+    #[allow(non_snake_case, reason = "physics convention")]
+    fn Tr(dz: f32, w: Vec3) -> f32 {
+        let distance = f32::abs(dz / w.z());
+        f32::exp(-distance)
+    }
+}
+
+bitflags! {
+    #[derive(Debug, Clone, Copy)]
+    pub(crate) struct BsdfComponentFlags : u8 {
+        const NONSPECULAR_REFLECTION = 1 << 0;
+        const SPECULAR_REFLECTION = 1 << 2;
+        const NONSPECULAR_TRANSMISSION = 1 << 3;
+        const SPECULAR_TRANSMISSION = 1 << 5;
+        
+        const REFLECTION = BsdfComponentFlags::NONSPECULAR_REFLECTION.bits() | BsdfComponentFlags::SPECULAR_REFLECTION.bits();
+        const TRANSMISSION = BsdfComponentFlags::NONSPECULAR_TRANSMISSION.bits() | BsdfComponentFlags::SPECULAR_TRANSMISSION.bits();
+        const SPECULAR = BsdfComponentFlags::SPECULAR_REFLECTION.bits() | BsdfComponentFlags::SPECULAR_TRANSMISSION.bits();
+        const NONSPECULAR = BsdfComponentFlags::NONSPECULAR_REFLECTION.bits() | BsdfComponentFlags::NONSPECULAR_TRANSMISSION.bits();
+    }
+}
+
+impl BsdfComponentFlags {
+    pub(crate) fn is_specular(self) -> bool {
+        self.intersects(Self::SPECULAR)
+    }
+
+    pub(crate) fn is_nonspecular(self) -> bool {
+        self.intersects(Self::NONSPECULAR)
+    }
+
+    pub(crate) fn is_reflection(self) -> bool {
+        self.intersects(Self::REFLECTION)
+    }
+
+    pub(crate) fn is_transmission(self) -> bool {
+        self.intersects(Self::TRANSMISSION)
     }
 }
 
 impl CpuBsdf {
-    // local coordinates, wo and wi both in upper hemisphere
+    // local coordinates, shading normal along +z
     pub(crate) fn evaluate_bsdf(&self, wo: Vec3, wi: Vec3) -> Vec3 {
         match self {
             CpuBsdf::Diffuse { albedo } => {
-                *albedo / f32::consts::PI
+                if wo.z() * wi.z() < 0.0 {
+                    Vec3::zero()
+                } else {
+                    *albedo / f32::consts::PI
+                }
             },
 
             // these are perfectly specular materials, so their
@@ -63,6 +136,7 @@ impl CpuBsdf {
             // normal means 
             CpuBsdf::SmoothDielectric { .. } => Vec3::zero(),
             CpuBsdf::SmoothConductor { .. } => Vec3::zero(),
+
             CpuBsdf::RoughConductor { 
                 eta, 
                 kappa,
@@ -91,19 +165,199 @@ impl CpuBsdf {
                     *alpha_y
                 )
             },
-            CpuBsdf::GLTFMetallicRoughness { 
-                base_color, 
-                metallic, 
-                alpha 
-            } => {
-                gltf_pbr::bsdf(
-                    wo, 
-                    wi, 
-                    *base_color, 
-                    *metallic, 
-                    *alpha
-                )
+
+            CpuBsdf::LayeredBsdf(inner) => {
+                let LayeredBsdf { 
+                    top, 
+                    bottom,
+                    n_samples, 
+                    max_depth,
+                    thickness, 
+                    albedo,
+                    g 
+                } = inner.as_ref();
+                let (n_samples, max_depth, thickness, albedo, g) = (*n_samples, *max_depth, *thickness, *albedo, *g);
+
+                let mut f = Vec3::zero();
+                
+                // we will always assume material to be two-sided (i.e. incident ray always impinges on top layer, regardless of surface normal)
+                let (wo, wi) = if wo.z() < 0.0 {
+                    (-wo, -wi)
+                }
+                else {
+                    (wo, wi)
+                };
+
+                let enter_interface = top;
+                let (exit_interface, non_exit_interface, exit_z) = if wi.z() < 0.0 {
+                    (bottom, top, 0.0)
+                } else {
+                    (top, bottom, thickness)
+                };
+
+                // account for singular reflection
+                if wo.z() * wi.z() > 0.0 {
+                    f += (n_samples as f32) * enter_interface.evaluate_bsdf(wo, wi);
+                }
+
+                let mut hasher = FxHasher::default();
+                wi.hash(&mut hasher);
+                wo.hash(&mut hasher);
+                
+                let seed = hasher.finish();
+                let mut sampler = CpuSampler::one_off_sampler(seed);
+
+                for _ in 0..n_samples {
+                    // TODO: this needs to account for non-symmetry
+                    let ValidBsdfSample::ValidSample(enter) = enter_interface.sample_bsdf(wo, BsdfComponentFlags::TRANSMISSION, &mut sampler) else {
+                        continue;
+                    };
+
+                    let ValidBsdfSample::ValidSample(exit) = exit_interface.sample_bsdf(wi, BsdfComponentFlags::TRANSMISSION, &mut sampler) else {
+                        continue;
+                    };
+
+                    let mut beta = exit.bsdf * f32::abs(exit.wi.z()) / exit.pdf;
+                    let mut z = thickness;
+                    let mut w = enter.wi;
+
+                    for depth in 0..max_depth {
+                        if depth > 3 && beta.max_component() < 0.25 {
+                            let q = f32::max(0.0, beta.max_component());
+                            if sampler.sample_uniform() < q {
+                                break;
+                            }
+
+                            beta /= 1.0 - q
+                        }
+
+                        if albedo == Vec3::zero() {
+                            z = if z == thickness { 0.0 } else { thickness };
+                            beta *= LayeredBsdf::Tr(thickness, w);
+                        }
+                        else {
+                            let sigma_t = 1.0;
+                            let dz = sample_exponential(sampler.sample_uniform(), sigma_t / f32::abs(w.z()));
+                            let zp = if w.z() > 0.0 { z + dz } else { z - dz };
+
+                            if 0.0 < zp && zp < thickness {
+                                // we sampled a scattering event between the two layers
+                                // we use MIS between the distribution of directions from exit interface's BTDF and that given by phase function
+                                let wt = if exit_interface.is_delta_bsdf() {
+                                    1.0
+                                } else {
+                                    sample::power_heuristic(1, exit.pdf, 1, phase_function::pdf(-w, -exit.wi, g))
+                                };
+
+                                f += beta * albedo * phase_function::p(-w, -exit.wi, g) * wt * LayeredBsdf::Tr(zp - exit_z, exit.wi) * exit.bsdf / exit.pdf;
+                                
+                                let u = sampler.sample_uniform2();
+                                let phase_sample = phase_function::sample_p(-w, g, u);
+                                
+                                beta *= albedo * phase_sample.p / phase_sample.pdf;
+                                w = phase_sample.wi;
+                                z = zp;
+
+                                let facing_exit = (z < exit_z && w.z() > 0.0) || (z > exit_z && w.z() < 0.0);
+                                if !exit_interface.is_delta_bsdf() && facing_exit {
+                                    let exit_f = exit_interface.evaluate_bsdf(-w, wi);
+                                    if exit_f != Vec3::zero() {
+                                        let exit_pdf = exit_interface.evaluate_pdf(-w, wi, BsdfComponentFlags::TRANSMISSION);
+                                        let wt = sample::power_heuristic(1, phase_sample.pdf, 1, exit_pdf);
+
+                                        f += beta * LayeredBsdf::Tr(zp - exit_z, phase_sample.wi) * exit_f * wt;
+                                    }
+                                }
+
+                                continue;
+                            }
+                            z = f32::clamp(zp, 0.0, thickness);
+                        }
+
+                        if z == exit_z {
+                            let ValidBsdfSample::ValidSample(exit_reflect_sample) = exit_interface.sample_bsdf(-w, BsdfComponentFlags::REFLECTION, &mut sampler) else {
+                                break;
+                            };
+
+                            beta *= exit_reflect_sample.bsdf * exit_reflect_sample.bsdf.z().abs() / exit_reflect_sample.pdf;
+                            w = exit_reflect_sample.wi;
+                        }
+                        else {
+                            if !non_exit_interface.is_delta_bsdf() {
+                                let wt = if non_exit_interface.is_delta_bsdf() {
+                                    1.0
+                                }
+                                else {
+                                    power_heuristic(1, exit.pdf, 1, non_exit_interface.evaluate_pdf(-w, -exit.wi, BsdfComponentFlags::REFLECTION))
+                                };
+
+                                f += beta * non_exit_interface.evaluate_bsdf(-w, -exit.wi) * exit.wi.z().abs() * wt * LayeredBsdf::Tr(thickness, exit.wi) * exit.bsdf / exit.pdf;
+                            }
+
+                            // sample new direction from non_exit_interface
+                            let ValidBsdfSample::ValidSample(non_exit_sample) = non_exit_interface.sample_bsdf(-w, BsdfComponentFlags::REFLECTION, &mut sampler) else {
+                                break
+                            };
+
+                            beta *= non_exit_sample.bsdf * non_exit_sample.wi.z().abs() / non_exit_sample.pdf;
+                            w = non_exit_sample.wi;
+
+                            if !exit_interface.is_delta_bsdf() {
+                                let exit_f  = exit_interface.evaluate_bsdf(-w, wi);
+                                if exit_f != Vec3::zero() {
+                                    let exit_pdf = exit_interface.evaluate_pdf(-w, wi, BsdfComponentFlags::all());
+                                    let wt = if non_exit_interface.is_delta_bsdf() {
+                                        1.0
+                                    }
+                                    else {
+                                        power_heuristic(1, non_exit_sample.pdf, 1, exit_pdf)
+                                    };
+
+                                    f += beta * LayeredBsdf::Tr(thickness, non_exit_sample.wi) * exit_f * wt;
+                                }
+                            }
+                            
+                        }
+                    }
+                }
+
+                f / (n_samples as f32)
             }
+            
+        }
+    }
+
+    pub(crate) fn evaluate_pdf(&self, wo: Vec3, wi: Vec3, component: BsdfComponentFlags) -> f32 {
+        match self {
+            CpuBsdf::Diffuse { .. } => {
+                if !component.contains(BsdfComponentFlags::NONSPECULAR_REFLECTION) {
+                    return 0.0;
+                }
+
+                if wo.z() * wi.z() > 0.0 {
+                    1.0 / (2.0 * f32::consts::PI)
+                }
+                else {
+                    0.0
+                }
+            },
+
+            // see note in `evaluate_bsdf`
+            CpuBsdf::SmoothDielectric { .. } => 0.0,
+            CpuBsdf::SmoothConductor { .. } => 0.0,
+
+            CpuBsdf::RoughConductor { alpha_x, alpha_y, .. } => {
+                if !component.contains(BsdfComponentFlags::NONSPECULAR_REFLECTION) {
+                    return 0.0;
+                }
+
+                torrance_sparrow_refl_pdf(wo, wi, *alpha_x, *alpha_y)
+            },
+            CpuBsdf::RoughDielectric { eta, alpha_x, alpha_y } => {    
+                torrance_sparrow_pdf(wo, wi, *eta, *alpha_x, *alpha_y, component)
+            },
+
+            CpuBsdf::LayeredBsdf(_) => todo!("implement pdf for LayeredBsdf"),
         }
     }
 
@@ -112,9 +366,19 @@ impl CpuBsdf {
     // more samples than others, so only *within* a single material (which will likely lead to similar 
     // subsequent bsdf sampling / similar light sampling later) do we try to ensure this; otherwise
     // every material would take the same number of dimensions as the maximum of all materials
-    pub(crate) fn sample_bsdf(&self, wo: Vec3, sampler: &mut CpuSampler) -> BsdfSample {
+    pub(crate) fn sample_bsdf(
+        &self, 
+        wo: Vec3,
+        component: BsdfComponentFlags,
+        sampler: &mut CpuSampler
+    ) -> ValidBsdfSample {
         match self {
             CpuBsdf::Diffuse { albedo } => {
+                if !component.contains(BsdfComponentFlags::NONSPECULAR_REFLECTION) {
+                    warn!("invalid bsdf component for diffuse bsdf");
+                    return ValidBsdfSample::InvalidSample;
+                }
+
                 // cosine-weighted hemisphere sampling
                 let u = sampler.sample_uniform2();
                 let (wi, pdf) = sample::sample_cosine_hemisphere(u);
@@ -122,33 +386,44 @@ impl CpuBsdf {
                     wi,
                     bsdf: *albedo / f32::consts::PI,
                     pdf,
-                    specular: false,
-                }
+                    component: BsdfComponentFlags::NONSPECULAR_REFLECTION,
+                }.into()
             },
 
             CpuBsdf::SmoothDielectric { eta } => {
+                if !component.intersects(BsdfComponentFlags::SPECULAR_REFLECTION | BsdfComponentFlags::SPECULAR_TRANSMISSION) {
+                    warn!("invalid bsdf component for smooth dielectric");
+                    return ValidBsdfSample::InvalidSample;
+                }
+
                 let normal = Vec3(0.0, 0.0, 1.0);
 
                 #[allow(non_snake_case, reason = "physics convention")]
                 let R = fresnel_dielectric(wo.z(), *eta);
+                
                 #[allow(non_snake_case, reason = "physics convention")]
                 let T = 1.0 - R;
+
+                let p_reflect = if component.contains(BsdfComponentFlags::SPECULAR_REFLECTION) { R } else { 0.0 };
+                let p_transmit = if component.contains(BsdfComponentFlags::SPECULAR_TRANSMISSION) { T } else { 0.0 };
+
+                let p_total = p_reflect + p_transmit;
 
                 // we randomly choose to sample the Dirac in the reflected direction,
                 // or in the refracted direction, proportional to calculated reflection
                 // and transmission coefficients
                 let sample = sampler.sample_uniform();
-                let bsdf_sample = if sample < R {
+                let bsdf_sample = if sample * p_total < p_reflect {
                     let reflection_dir = Vec3::reflect(wo, normal);
                     let cos_theta = reflection_dir.z().abs();
                     let f = R / cos_theta;
-                    let pdf = R;
+                    let pdf = R / p_total;
                     
                     BsdfSample {
                         wi: reflection_dir,
                         bsdf: Vec3(f, f, f),
                         pdf,
-                        specular: true,
+                        component: BsdfComponentFlags::SPECULAR_REFLECTION,
                     }
                 }
                 else {
@@ -160,12 +435,7 @@ impl CpuBsdf {
                             fresnel_dielectric should return 1.0"
                         );
                         
-                        return BsdfSample {
-                            wi: wo,
-                            bsdf: Vec3::zero(),
-                            pdf: 1.0,
-                            specular: true,
-                        }
+                        return ValidBsdfSample::InvalidSample;
                     };
 
                     // PBRT 4ed 9.5.2
@@ -182,19 +452,23 @@ impl CpuBsdf {
                     let cos_theta = refract_dir.z().abs();
                     let f = (T / cos_theta) / (eta * eta);
 
-                    let pdf = T;
+                    let pdf = T / p_total;
                     BsdfSample {
                         wi: refract_dir,
                         bsdf: Vec3(f, f, f),
                         pdf,
-                        specular: true,
+                        component: BsdfComponentFlags::SPECULAR_TRANSMISSION,
                     }
                 };
 
-                bsdf_sample
+                bsdf_sample.into()
             },
 
             CpuBsdf::SmoothConductor { eta, kappa } => {
+                if !component.contains(BsdfComponentFlags::SPECULAR_REFLECTION) {
+                    warn!("invalid bsdf component for smooth conductor");
+                }
+
                 let normal = Vec3(0.0, 0.0, 1.0);
                 let reflection_dir = Vec3::reflect(wo, normal);
                 let f_r = fresnel_complex(wo.z(), Complex(eta.0, kappa.0)) / wo.z();
@@ -208,8 +482,8 @@ impl CpuBsdf {
                     wi: reflection_dir,
                     bsdf: f,
                     pdf,
-                    specular: true
-                }
+                    component: BsdfComponentFlags::SPECULAR_REFLECTION
+                }.into()
             },
 
             CpuBsdf::RoughConductor { 
@@ -218,6 +492,10 @@ impl CpuBsdf {
                 alpha_x, 
                 alpha_y 
             } => {
+                if !component.contains(BsdfComponentFlags::REFLECTION) {
+                    warn!("invalid bsdf component for rough conductor");
+                }
+
                 microfacet::torrance_sparrow_refl_sample(
                     wo, 
                     *eta, 
@@ -233,27 +511,144 @@ impl CpuBsdf {
                 alpha_x, 
                 alpha_y 
             } => {
+                if component.is_empty() {
+                    warn!("invalid bsdf component for rough dielectric")
+                }
+
                 microfacet::torrance_sparrow_sample(
                     wo, 
                     *eta, 
                     *alpha_x, 
                     *alpha_y,
+                    component,
                     sampler,
                 )
             },
 
-            CpuBsdf::GLTFMetallicRoughness { 
-                base_color, 
-                metallic, 
-                alpha 
-            } => {
-                gltf_pbr::sample_f(
-                    wo, 
-                    *base_color, 
-                    *metallic, 
-                    *alpha,
-                    sampler,
-                )
+            CpuBsdf::LayeredBsdf(inner) => {
+                let LayeredBsdf { 
+                    top, 
+                    bottom, 
+                    n_samples, 
+                    max_depth, 
+                    thickness, 
+                    albedo, 
+                    g 
+                } = inner.as_ref();
+                let (&n_samples, &max_depth, &thickness, &albedo, &g) = (n_samples, max_depth, thickness, albedo, g);
+                let (wo, flip_wi) = if wo.z() < 0.0 {
+                    (-wo, true)
+                } else {
+                    (wo, false)
+                };
+
+                let enter_sample = top.sample_bsdf(wo, BsdfComponentFlags::all(), sampler);
+                let ValidBsdfSample::ValidSample(enter_sample) = enter_sample else {
+                    return enter_sample;
+                };
+
+                if enter_sample.component.is_reflection() {
+                    return BsdfSample {
+                        wi: -enter_sample.wi,
+                        ..enter_sample
+                    }.into();
+                }
+
+                let mut specular_path = enter_sample.component.is_specular();
+
+                let mut w = enter_sample.wi;
+                let mut f = enter_sample.bsdf * enter_sample.wi.z().abs();
+                let mut pdf = enter_sample.pdf;
+                let mut z = thickness;
+
+                for depth in 0..max_depth {
+                    let rr_beta = f.max_component() / pdf;
+                    if depth > 3 && rr_beta < 0.25 {
+                        let q = f32::max(0.0, 1.0 - rr_beta);
+                        if sampler.sample_uniform() < q {
+                            return ValidBsdfSample::ValidNullSample;
+                        }
+
+                        pdf *= 1.0 - q;
+                    }
+
+                    if w.z() == 0.0 {
+                        return ValidBsdfSample::ValidNullSample;
+                    }
+        
+                    if albedo != Vec3::zero() {
+                        // Sample potential scattering event in layered medium
+                        let sigma_t = 1.0;
+                        let dz = sample::sample_exponential(sampler.sample_uniform(), sigma_t / w.z().abs());
+                        let zp = if w.z() > 0.0 { z + dz } else { z - dz };
+                        
+                        if zp == z {
+                            warn!("sampled zero distance in layeredbsdf");
+                            return ValidBsdfSample::InvalidSample;
+                        }
+
+                        if 0.0 < zp && zp < thickness {
+                            // Update path state for valid scattering event between interfaces
+                            let phase_sample = phase_function::sample_p(-w, g, sampler.sample_uniform2());
+                            if phase_sample.wi.z() == 0.0 {
+                                return ValidBsdfSample::ValidNullSample;
+                            }
+                            
+                            f *= albedo * phase_sample.p;
+                            pdf *= phase_sample.pdf;
+                            specular_path = false;
+                            w = phase_sample.wi;
+                            z = zp;
+        
+                            continue;
+                        }
+                        z = f32::clamp(zp, 0.0, thickness);
+                        
+                    } else {
+                        z = if z == thickness { 0.0 } else { thickness };
+                        f *= LayeredBsdf::Tr(thickness, w);
+                    }
+                    
+                    let interface = if z == 0.0 { bottom } else { top };
+        
+                    // Sample interface BSDF to determine new path direction
+                    let interface_sample = interface.sample_bsdf(-w, BsdfComponentFlags::all(), sampler);
+                    let ValidBsdfSample::ValidSample(interface_sample) = interface_sample else {
+                        return interface_sample;
+                    };
+
+                    f *= interface_sample.bsdf;
+                    pdf *= interface_sample.pdf;
+                    specular_path &= interface_sample.component.is_specular();
+                    w = interface_sample.wi;
+        
+                    // Return sample if path has left the layers
+                    if interface_sample.component.is_transmission() {
+                        let same_direction = wo.z() * w.z() > 0.0;
+                        let sampled_component = match (same_direction, specular_path) {
+                            (true, true) => BsdfComponentFlags::SPECULAR_REFLECTION,
+                            (true, false) => BsdfComponentFlags::NONSPECULAR_REFLECTION,
+                            (false, true) => BsdfComponentFlags::SPECULAR_TRANSMISSION,
+                            (false, false) => BsdfComponentFlags::NONSPECULAR_TRANSMISSION,
+                        };
+
+                        if flip_wi {
+                            w = -w;
+                        }
+                        return BsdfSample {
+                            wi: w,
+                            bsdf: f,
+                            pdf,
+                            component: sampled_component,
+                        }.into();
+                    }
+        
+                    // Scale f by cosine term after scattering at the interface
+                    f *= interface_sample.wi.z().abs();
+                }
+
+                // didn't escape layer sandwich before hitting max_depth
+                ValidBsdfSample::ValidNullSample
             }
         }
     }
@@ -266,7 +661,7 @@ impl CpuBsdf {
             CpuBsdf::SmoothConductor { .. } => true,
             CpuBsdf::RoughConductor { .. } => false,
             CpuBsdf::RoughDielectric { .. } => false,
-            CpuBsdf::GLTFMetallicRoughness { .. } => false,
+            CpuBsdf::LayeredBsdf { .. } => false,
         }
     }
 }
@@ -447,22 +842,6 @@ impl CpuMaterial for Material {
                 CpuBsdf::RoughDielectric { eta, alpha_x, alpha_y }
             }
 
-            Material::GLTFMetallicRoughness { base_color, metallic_roughness } => {
-                let base_color = textures.sample(*base_color, eval_ctx);
-                let base_color = Vec3(base_color.0, base_color.1, base_color.2);
-
-                let metallic_roughness = textures.sample(*metallic_roughness, eval_ctx);
-                let metallic = metallic_roughness.b().clamp(0.0, 1.0);
-                let roughness = metallic_roughness.g().clamp(0.0, 1.0);
-                let alpha = roughness * roughness;
-                
-                CpuBsdf::GLTFMetallicRoughness { 
-                    base_color, 
-                    metallic, 
-                    alpha
-                }
-            }
-
             _ => todo!("support new material")
         }
     }
@@ -474,7 +853,8 @@ impl CpuMaterial for Material {
             Material::SmoothConductor { .. } => return None,
             Material::RoughDielectric { .. } => return None,
             Material::RoughConductor { .. } => return None,
-            Material::GLTFMetallicRoughness { base_color, metallic_roughness: _ } => base_color,
+            Material::CoatedDiffuse => todo!(),
+            Material::CoatedConductor => todo!(),
         };
 
         textures.texture_mip_level(main_tex, eval_ctx)
@@ -558,7 +938,7 @@ mod microfacet {
     use raytracing::geometry::{Complex, Vec2, Vec3};
     use tracing::warn;
 
-    use crate::{materials::{BsdfSample, fresnel_complex, fresnel_dielectric}, sample::{self, CpuSampler}};
+    use crate::{materials::{BsdfComponentFlags, BsdfSample, ValidBsdfSample, fresnel_complex, fresnel_dielectric}, sample::{self, CpuSampler}};
 
     // PBRT 4ed 9.6.1
     // represents relative differential area of microfacets pointing in a particular direction
@@ -701,7 +1081,7 @@ mod microfacet {
         alpha_x: f32,
         alpha_y: f32,
         sampler: &mut CpuSampler,
-    ) -> BsdfSample {
+    ) -> ValidBsdfSample {
         let u = sampler.sample_uniform2();
         let wm = sample_wm(wo, alpha_x, alpha_y, u);
         let wi = Vec3::reflect(wo, wm);
@@ -711,7 +1091,7 @@ mod microfacet {
         // account for first-order scattering events in microfacet model
         // pbrt notes that this leads to energy loss and is thus not fully physical
         if wo.z() * wi.z() < 0.0 {
-            return BsdfSample { wi, bsdf: Vec3::zero(), pdf: 1.0, specular: false };
+            return ValidBsdfSample::ValidNullSample;
         }
 
         let pdf = torrance_sparrow_refl_pdf(
@@ -734,8 +1114,8 @@ mod microfacet {
             wi, 
             bsdf, 
             pdf,
-            specular: false
-        }
+            component: BsdfComponentFlags::NONSPECULAR_REFLECTION
+        }.into()
     }
 
     // PBRT 4ed 9.7
@@ -745,6 +1125,7 @@ mod microfacet {
         eta: f32,
         alpha_x: f32,
         alpha_y: f32,
+        component: BsdfComponentFlags,
     ) -> f32 {
         let reflect = wo.z() * wi.z() > 0.0;
         let eta_wm = if !reflect {
@@ -783,13 +1164,17 @@ mod microfacet {
         #[allow(non_snake_case, reason = "physics convention")]
         let T = 1.0 - R;
 
+        let p_reflect = if component.contains(BsdfComponentFlags::NONSPECULAR_REFLECTION) { R } else { 0.0 };
+        let p_transmit = if component.contains(BsdfComponentFlags::NONSPECULAR_TRANSMISSION) { T } else { 0.0 };
+        let p_total = p_reflect + p_transmit;
+
         if reflect {
-            R * visible_distribution(wo, wm, alpha_x, alpha_y) / (4.0 * Vec3::dot(wo, wm).abs())
+            (p_reflect / p_total) * visible_distribution(wo, wm, alpha_x, alpha_y) / (4.0 * Vec3::dot(wo, wm).abs())
         }
         else {
             let denom = (Vec3::dot(wi, wm) + Vec3::dot(wo, wm) / eta_wm).powi(2);
             let dwm_dwi = Vec3::dot(wi, wm).abs() / denom;
-            T * visible_distribution(wo, wm, alpha_x, alpha_y) * dwm_dwi
+            (p_transmit / p_total) * visible_distribution(wo, wm, alpha_x, alpha_y) * dwm_dwi
         }
     }
 
@@ -857,25 +1242,31 @@ mod microfacet {
         eta: f32,
         alpha_x: f32,
         alpha_y: f32,
+        component: BsdfComponentFlags,
         sampler: &mut CpuSampler,
-    ) -> BsdfSample {
+    ) -> ValidBsdfSample {
         let u = sampler.sample_uniform2();
         let wm = sample_wm(wo, alpha_x, alpha_y, u);
          
         #[allow(non_snake_case, reason = "physics convention")]
         let R = fresnel_dielectric(Vec3::dot(wo, wm), eta);
         #[allow(non_snake_case, reason = "physics convention")]
-        let _T = 1.0 - R;
+        let T = 1.0 - R;
 
-        let wi = if sampler.sample_uniform() < R {
+        let p_reflect = if component.contains(BsdfComponentFlags::REFLECTION) { R } else { 0.0 };
+        let p_transmit = if component.contains(BsdfComponentFlags::TRANSMISSION) { T } else { 0.0 };
+
+        let p_total = p_reflect + p_transmit;
+
+        let (wi, reflected) = if sampler.sample_uniform() * p_total < p_reflect {
             let wi = Vec3::reflect(wo, wm);
 
             // see analogous comment in `torrance_sparrow_refl_sample`
             if wo.z() * wi.z() < 0.0 {
-                return BsdfSample { wi, bsdf: Vec3::zero(), pdf: 1.0, specular: false, }
+                return ValidBsdfSample::ValidNullSample;
             }
 
-            wi
+            (wi, true)
         }
         else {
             let wi = super::refract(
@@ -891,7 +1282,7 @@ mod microfacet {
                     fresnel_dielectric should return 1.0"
                 );
 
-                return BsdfSample { wi: Vec3(0.0, 0.0, 1.0), bsdf: Vec3::zero(), pdf: 1.0, specular: false, }
+                return ValidBsdfSample::InvalidSample;
             };
 
             if wo.z() * wi.z() > 0.0 || wi.z() == 0.0 {
@@ -900,10 +1291,10 @@ mod microfacet {
                     a valid transmission direction"
                 );
 
-                return BsdfSample { wi, bsdf: Vec3::zero(), pdf: 1.0, specular: false, }
+                return ValidBsdfSample::InvalidSample;
             }
 
-            wi
+            (wi, false)
         };
 
         let pdf = torrance_sparrow_pdf(
@@ -911,7 +1302,8 @@ mod microfacet {
             wi, 
             eta, 
             alpha_x, 
-            alpha_y
+            alpha_y,
+            component
         );
 
         let bsdf = torrance_sparrow_bsdf(
@@ -922,230 +1314,79 @@ mod microfacet {
             alpha_y
         );
 
+        let chosen_component = if reflected {
+            BsdfComponentFlags::NONSPECULAR_REFLECTION
+        } else {
+            BsdfComponentFlags::NONSPECULAR_TRANSMISSION
+        };
+
         BsdfSample {
             wi,
             bsdf,
             pdf,
-            specular: false,
-        }
+            component: chosen_component,
+        }.into()
     }
 }
 
 
-mod gltf_pbr {
-    // the gltf metallic-roughness material essentially 
-    // describes a parametetric mix material between diffuse and 
-    // specular components.
-
-    // note: the spec notes that their sample implementation 
-    // violates energy conservation and reciprocity; thus using it
-    // is actually in violation of GLTF spec (since it requires offline
-    // physically-based renderers, which this project certainly is, to
-    // have a physically plausible bsdf). however, they also leave
-    // what the correct behavior is totally unspecified so...
-
-    // roughness near 0 is treated as a special case to avoid
-    // numerical problems 
+mod phase_function {
+    //! Implements the Henyey-Greenstein phase function
+    //! (pbrt 4ed 11.3.1)
+    
     use std::f32;
 
-    use raytracing::geometry::Vec3;
+    use raytracing::geometry::{Vec2, Vec3};
 
-    use crate::{materials::BsdfSample, sample::{self, CpuSampler}};
+    use crate::geometry;
 
-    #[allow(non_snake_case, reason = "gltf spec")]
-    fn D(wm: Vec3, alpha: f32) -> f32 {
-        super::microfacet::distribution(wm, alpha, alpha)
+    fn henyey_greenstein(cos_theta: f32, g: f32) -> f32 {
+        let denom = 1.0 + g * g + 2.0 * g * cos_theta;
+        f32::consts::FRAC_1_PI * 0.25 * (1.0 - g * g) / (denom * f32::sqrt(denom))
     }
 
-    #[allow(non_snake_case, reason = "gltf spec")]
-    fn G(wo: Vec3, wi: Vec3, alpha: f32) -> f32 {
-        super::microfacet::G(wo, wi, alpha, alpha)
+    #[derive(Debug, Clone, Copy)]
+    pub(super) struct PhaseFunctionSample {
+        pub(super) wi: Vec3,
+        pub(super) p: f32,
+        pub(super) pdf: f32
     }
 
-    fn specular_brdf(alpha: f32, wo: Vec3, wi: Vec3) -> f32 {
-        let half = if wo + wi == Vec3::zero() {
-            return 0.0;
+    fn sample_henyey_greenstein(wo: Vec3, g: f32, u: Vec2) -> PhaseFunctionSample {
+        let cos_theta = if f32::abs(g) < 1.0e-3 {
+            1.0 - 2.0 * u.0
         }
         else {
-            (wo + wi).unit()
+            let term = (1.0 - g * g) / (1.0 + g - 2.0 * g * u.0);
+            -1.0 / (2.0 * g) * (1.0 + g * g - term * term)
         };
 
-        D(half, alpha) * G(wo, wi, alpha) / (4.0 * wo.z().abs() * wi.z().abs())
-    }
+        let phi = 2.0 * f32::consts::PI * u.1;
+        let sin_theta = f32::sqrt(1.0 - cos_theta * cos_theta);
 
-    fn conductor_fresnel(f0: Vec3, bsdf: Vec3, cos_theta: f32) -> Vec3 {
-        bsdf * (f0 + (Vec3(1.0, 1.0, 1.0) - f0) * (1.0 - cos_theta).powi(5))
-    }
-
-    fn fresnel_mix_factor(ior: f32, cos_theta: f32) -> f32 {
-        let f0 = ((1.0 - ior) / (1.0 + ior)).powi(2);
-        let fr = f0 + (1.0 - f0) * (1.0 - cos_theta).powi(5);
+        let direction_wo = Vec3(f32::cos(phi) * sin_theta, f32::sin(phi) * sin_theta, cos_theta);
+        let (wo_x, wo_y) = geometry::make_orthonormal_basis(direction_wo);
         
-        fr
-    }
-
-    fn fresnel_mix(ior: f32, base: Vec3, layer: Vec3, cos_theta: f32) -> Vec3 {
-        let f = fresnel_mix_factor(ior, cos_theta);
-        f * layer + (1.0 - f) * base
-    }
-
-    pub(super) fn pdf(
-        wo: Vec3,
-        wi: Vec3,
-        metallic: f32,
-        alpha: f32,
-    ) -> f32 {
-        if alpha < 1.0e-4 {
-            // the material is effectively smooth, so the specular component is a delta
-            // thus, we only need to consider the diffuse component, since it should be impossible
-            // to call pdf with exactly the mirror direction of wo
-            // (sample_f needs to ensure it handles effectively smooth case also, or else return wrong pdf)
-            let dielectric_fresnel_mix = fresnel_mix_factor(1.5, wo.z());
-            let specular_prob = metallic + (1.0 - metallic) * dielectric_fresnel_mix;
-            let diffuse_prob = 1.0 - specular_prob;
-
-            let diffuse_pdf = wi.z();
-
-            return diffuse_prob * diffuse_pdf;
-        }
-
-        let wm = if wo + wi == Vec3::zero() {
-            return 0.0;
-        } else {
-            (wo + wi).unit()
-        };
+        let wi = direction_wo.0 * wo_x + direction_wo.1 * wo_y + direction_wo.2 * wo;
         
-        let dielectric_fresnel_mix = fresnel_mix_factor(1.5, Vec3::dot(wo, wm));
+        let p = henyey_greenstein(cos_theta, g);
 
-        // there are two 2 cases, corresponding to specular_prob and diffuse_prob 
-        // 1. we sampled wi as a result of dielectric reflection or metallic reflection
-        // 2. we sampled wi as a result of diffuse - this can only happen if z > 0
-        let specular_prob = metallic + (1.0 - metallic) * dielectric_fresnel_mix;
-        let diffuse_prob = 1.0 - specular_prob;
-
-        let specular_pdf = super::microfacet::visible_distribution(wo, wm, alpha, alpha) / (4.0 * Vec3::dot(wo, wm).abs());
-        let diffuse_pdf = wi.z();
-
-        specular_prob * specular_pdf + diffuse_prob * diffuse_pdf
+        PhaseFunctionSample { 
+            wi, 
+            p,
+            pdf: p // sampling distribution matches real distribution exactly
+        }
     }
 
-    // direct transcription of GLTF spec B.3.5
-    pub(super) fn bsdf(
-        wo: Vec3,
-        wi: Vec3,
-        base_color: Vec3,
-        metallic: f32,
-        alpha: f32,
-    ) -> Vec3 {
-        if alpha < 1.0e-4 {
-            // effectively smooth case; see comment in `gltf_pbr::pdf`
-            let dielectric_fresnel_mix = fresnel_mix_factor(1.5, wo.z());
-            let diffuse_factor = (1.0 - metallic) * (1.0 - dielectric_fresnel_mix);
-            return diffuse_factor * base_color * f32::consts::FRAC_1_PI;
-        }
-
-        let c_diff = metallic * Vec3::zero() + (1.0 - metallic) * base_color;
-        let f0 = metallic * base_color + (1.0 - metallic) * Vec3(0.04, 0.04, 0.04);
-        
-        let half = if wo + wi == Vec3::zero() {
-            return Vec3::zero();
-        } else {
-            (wo + wi).unit()
-        };
-
-        let fresnel = f0 + (Vec3(1.0, 1.0, 1.0) - f0) * (1.0 - Vec3::dot(wo, half).abs()).powi(5);
-        let f_diffuse = (Vec3(1.0, 1.0, 1.0) - fresnel) * (f32::consts::FRAC_1_PI) * c_diff;
-        let f_specular = fresnel * specular_brdf(alpha, wo, wi);
-
-        f_diffuse + f_specular
+    pub(super) fn p(wo: Vec3, wi: Vec3, g: f32) -> f32 {
+        henyey_greenstein(Vec3::dot(wo, wi), g)
     }
 
-    pub(super) fn sample_f(
-        wo: Vec3,
-        base_color: Vec3,
-        metallic: f32,
-        alpha: f32,
-        sampler: &mut CpuSampler,
-    ) -> BsdfSample {
-        if alpha < 1.0e-4 {
-            // effectively smooth case
-            // we need to stochastically return the specular component or the diffuse component
-            // we also treat this as effectively separate from non-smooth case for the purposes
-            // of maintaining "sample coherence" with stratified samplers
-            let dielectric_fresnel_mix = fresnel_mix_factor(1.5, wo.z());
-            let specular_prob = metallic + (1.0 - metallic) * dielectric_fresnel_mix;
-            
-            let u1 = sampler.sample_uniform();
-            let u2 = sampler.sample_uniform2();
-            if u1 < specular_prob {
-                // specular_brdf reduces to 1.0 across all wavelengths in the case that it's fully smooth
-                let metal_component = metallic * conductor_fresnel(base_color, Vec3(1.0, 1.0, 1.0), wo.z());
-                let dielectric_specular_component = (1.0 - metallic) * dielectric_fresnel_mix * Vec3(1.0, 1.0, 1.0);
-                return BsdfSample { 
-                    wi: Vec3(-wo.0, -wo.1, wo.2), 
-                    bsdf: metal_component + dielectric_specular_component, 
-                    pdf: specular_prob, // includes delta
-                    specular: true,
-                }
-            }
-            else {
-                let (wi, wi_pdf) = sample::sample_cosine_hemisphere(u2);
-                return BsdfSample { 
-                    wi, 
-                    bsdf: (1.0 - specular_prob) * base_color * f32::consts::FRAC_1_PI, 
-                    pdf: (1.0 - specular_prob) * wi_pdf, 
-                    specular: false, 
-                }
-            }
-        }
+    pub(super) fn sample_p(wo: Vec3, g: f32, u: Vec2) -> PhaseFunctionSample {
+        sample_henyey_greenstein(wo, g, u)
+    }
 
-        let wm = super::microfacet::sample_wm(wo, alpha, alpha, sampler.sample_uniform2());
-        let specular_wi = Vec3::reflect(wo, wm);
-        let (diffuse_wi, _) = sample::sample_cosine_hemisphere(sampler.sample_uniform2());
-
-        let dielectric_fresnel_mix = fresnel_mix_factor(1.5, Vec3::dot(wo, wm));
-
-        // we stochastically sample the direction according to mix probabilities
-        // however, our pdf needs to account for all the ways that a direction could've been chosen
-        let u1 = sampler.sample_uniform();
-        let u2 = sampler.sample_uniform();
-        let wi = if u1 < metallic {
-            // metal
-            specular_wi
-        }
-        else {
-            // dielectric
-            if u2 < dielectric_fresnel_mix {
-                // reflection
-                specular_wi
-            }
-            else {
-                // diffuse
-                diffuse_wi
-            }
-        };
-
-        // invalid sample (higher-order scattering event)
-        // don't waste effort computing actual bsdf / pdf
-        if wi.z() < 0.0 {
-            return BsdfSample { wi, bsdf: Vec3::zero(), pdf: 1.0, specular: false, }
-        }
-
-        let bsdf = bsdf(
-            wo,
-            wi,
-            base_color,
-            metallic,
-            alpha
-        );
-
-        let pdf = pdf(
-            wo,
-            wi,
-            metallic,
-            alpha
-        );
-
-        BsdfSample { wi, bsdf, pdf, specular: false }
+    pub(super) fn pdf(wo: Vec3, wi: Vec3, g: f32) -> f32 {
+        p(wo, wi, g)
     }
 }

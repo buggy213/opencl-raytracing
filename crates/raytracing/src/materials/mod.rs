@@ -18,7 +18,6 @@ pub enum Material {
         kappa: TextureId,
     },
 
-    //
     RoughDielectric {
         // same interpretation as for SmoothDielectric
         eta: TextureId,
@@ -38,13 +37,12 @@ pub enum Material {
         roughness: TextureId,
     },
 
-    GLTFMetallicRoughness {
-        // R, G, B are as usual. Alpha is ignored for now
-        base_color: TextureId,
-        // roughness in G channel, metallicness in B channel
-        metallic_roughness: TextureId,
-    },
+    CoatedDiffuse,
+    CoatedConductor,
 }
+
+#[derive(Debug, Clone, Copy)]
+pub struct MaterialId(pub u32);
 
 mod image;
 mod texture;

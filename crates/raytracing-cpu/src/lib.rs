@@ -9,7 +9,7 @@ use ray::Ray;
 use raytracing::{geometry::{AABB, Matrix4x4, Vec2, Vec3}, renderer::{AOVFlags, RaytracerSettings, RenderOutput}, scene::{Camera, Scene}};
 use tracing::{info, warn};
 
-use crate::{accel::TraversalCache, lights::environment_light_radiance, materials::MaterialEvalContext, ray::RayDifferentials, sample::CpuSampler, scene::CpuAccelerationStructures, texture::CpuTextures};
+use crate::{accel::TraversalCache, lights::environment_light_radiance, materials::{BsdfComponentFlags, MaterialEvalContext}, ray::RayDifferentials, sample::CpuSampler, scene::CpuAccelerationStructures, texture::CpuTextures};
 
 mod ray;
 mod accel;
@@ -320,21 +320,27 @@ fn ray_radiance(
         // indirect illumination
         // wi and wo can be facing opposite the normal (e.g. reflection inside a glass sphere)
         // cos_theta terms need to use absolute value to account for this
-        let bsdf_sample = bsdf.sample_bsdf(wo, sampler);
-        let cos_theta = bsdf_sample.wi.z().abs();
-        path_weight *= bsdf_sample.bsdf * cos_theta / bsdf_sample.pdf;
+        let bsdf_sample = match bsdf.sample_bsdf(wo, BsdfComponentFlags::all(), sampler) {
+            materials::ValidBsdfSample::ValidSample(bsdf_sample) => bsdf_sample,
+            materials::ValidBsdfSample::ValidNullSample => {
+                break;
+            }
+            materials::ValidBsdfSample::InvalidSample => {
+                warn!("invalid sample generated (this shouldn't in main loop)");
+                break;
+            }
+        };
 
-        specular_bounce = bsdf_sample.specular;
-        
         // if we sampled a bsdf value of zero, terminate this ray
         // TODO: use russian roulette termination condition
-        if bsdf_sample.bsdf == Vec3::zero() {
+        if bsdf_sample.bsdf == Vec3::zero() || bsdf_sample.pdf == 0.0 {
             break;
         }
 
-        if cfg!(debug_assertions) && bsdf_sample.pdf == 0.0 {
-            warn!("pdf of 0.0 encountered");
-        }
+        let cos_theta = bsdf_sample.wi.z().abs();
+        path_weight *= bsdf_sample.bsdf * cos_theta / bsdf_sample.pdf;
+
+        specular_bounce = bsdf_sample.component.is_specular();
 
         let world_dir = o2w.apply_vector(bsdf_sample.wi);
         let new_ray = Ray {
