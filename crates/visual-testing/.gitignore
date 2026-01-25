@@ -3,4 +3,5 @@ outputs/
 .venv/
 uv.lock
 __pycache__/
+perf_history.jsonl
 

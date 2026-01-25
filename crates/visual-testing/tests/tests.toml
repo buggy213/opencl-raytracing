@@ -1,0 +1,49 @@
+# Test specification for rttest
+# See README.md for full TOML format reference.
+
+# Default render settings for all tests (can be overridden per-test)
+[defaults]
+
+# Basic geometry tests
+[[test]]
+name = "sphere"
+builtin_scene = "sphere"
+
+[[test]]
+name = "cube"
+builtin_scene = "cube"
+
+[[test]]
+name = "cube_orthographic"
+builtin_scene = "cube_orthographic"
+
+[[test]]
+name = "checkered_plane"
+builtin_scene = "checkered_plane"
+
+# Material tests
+[[test]]
+name = "dielectric"
+builtin_scene = "dielectric"
+
+[[test]]
+name = "metal"
+builtin_scene = "metal"
+
+[[test]]
+name = "rough_metal"
+builtin_scene = "rough_metal"
+
+[[test]]
+name = "rough_dielectric"
+builtin_scene = "rough_dielectric"
+
+# Camera tests
+[[test]]
+name = "out_of_focus_sphere"
+builtin_scene = "out_of_focus_sphere"
+
+# Lighting tests
+[[test]]
+name = "environment_light"
+builtin_scene = "environment_light"

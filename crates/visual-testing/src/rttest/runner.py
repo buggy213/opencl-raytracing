@@ -1,10 +1,13 @@
 """Test runner: invokes the CLI and orchestrates test execution."""
 
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from . import diff
+from .perf import PerfRecord
+from .test_spec import TestSpec
 
 
 @dataclass
@@ -17,6 +20,8 @@ class TestResult:
     missing_reference: bool = False  # output exists but no reference to compare
     output_path: Path | None = None
     reference_path: Path | None = None
+    render_time_seconds: float | None = None
+    perf_record: PerfRecord | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -28,32 +33,41 @@ class TestResult:
             "missing_reference": self.missing_reference,
             "output_path": str(self.output_path) if self.output_path else None,
             "reference_path": str(self.reference_path) if self.reference_path else None,
+            "render_time_seconds": self.render_time_seconds,
         }
 
 
 def run_tests(
-    scenes: list[str],
+    tests: list[TestSpec],
     cli_binary: str,
     renderer_args: list[str],
     output_dir: Path,
     reference_dir: Path,
     tolerance: float,
     bless_mode: bool,
+    perf_mode: bool = False,
+    perf_only: bool = False,
+    backend: str = "cpu",
+    scenes_dir: Path | None = None,
 ) -> list[TestResult]:
-    """Run visual tests for the given scenes."""
+    """Run visual tests for the given test specs."""
     output_dir.mkdir(parents=True, exist_ok=True)
     reference_dir.mkdir(parents=True, exist_ok=True)
 
     results = []
-    for scene in scenes:
+    for test in tests:
         result = run_single_test(
-            scene=scene,
+            test=test,
             cli_binary=cli_binary,
             renderer_args=renderer_args,
             output_dir=output_dir,
             reference_dir=reference_dir,
             tolerance=tolerance,
             bless_mode=bless_mode,
+            perf_mode=perf_mode,
+            perf_only=perf_only,
+            backend=backend,
+            scenes_dir=scenes_dir,
         )
         results.append(result)
 
@@ -61,15 +75,22 @@ def run_tests(
 
 
 def run_single_test(
-    scene: str,
+    test: TestSpec,
     cli_binary: str,
     renderer_args: list[str],
     output_dir: Path,
     reference_dir: Path,
     tolerance: float,
     bless_mode: bool,
+    perf_mode: bool = False,
+    perf_only: bool = False,
+    backend: str = "cpu",
+    scenes_dir: Path | None = None,
 ) -> TestResult:
     """Run a single visual test."""
+    from .perf import create_perf_record
+
+    scene = test.name
     output_path = output_dir / f"{scene}.exr"
     reference_path = reference_dir / f"{scene}.exr"
 
@@ -77,15 +98,34 @@ def run_single_test(
     if output_path.exists():
         output_path.unlink()
 
-    # build CLI command
-    cmd = [
-        cli_binary,
-        "--scene-name", scene,
-        "-o", str(output_path),
-    ]
-    cmd.extend(renderer_args)
+    # build CLI command based on test spec
+    cmd = [cli_binary]
 
-    # run render
+    if test.builtin_scene:
+        cmd.extend(["--scene-name", test.builtin_scene])
+    elif test.scene_path:
+        scene_path = test.scene_path
+        if scenes_dir and not Path(scene_path).is_absolute():
+            scene_path = str(scenes_dir / scene_path)
+        cmd.extend(["--scene", scene_path])
+    else:
+        return TestResult(
+            scene=scene,
+            passed=False,
+            error="test has neither builtin_scene nor scene_path",
+            output_path=output_path,
+            reference_path=reference_path,
+        )
+
+    cmd.extend(["-o", str(output_path)])
+
+    # apply per-test settings on top of base renderer args
+    final_renderer_args = test.get_renderer_args(renderer_args)
+    cmd.extend(final_renderer_args)
+
+    # run render with timing
+    render_time: float | None = None
+    start_time = time.perf_counter()
     try:
         result = subprocess.run(
             cmd,
@@ -93,6 +133,7 @@ def run_single_test(
             text=True,
             timeout=300,  # 5 minute timeout
         )
+        render_time = time.perf_counter() - start_time
     except subprocess.TimeoutExpired:
         return TestResult(
             scene=scene,
@@ -117,6 +158,7 @@ def run_single_test(
             error=f"render failed: {result.stderr}",
             output_path=output_path,
             reference_path=reference_path,
+            render_time_seconds=render_time,
         )
 
     if not output_path.exists():
@@ -126,6 +168,28 @@ def run_single_test(
             error="render produced no output",
             output_path=output_path,
             reference_path=reference_path,
+            render_time_seconds=render_time,
+        )
+
+    # create perf record if in perf mode
+    perf_record = None
+    if perf_mode and render_time is not None:
+        perf_record = create_perf_record(
+            scene=scene,
+            render_time_seconds=render_time,
+            renderer_args=final_renderer_args,
+            backend=backend,
+        )
+
+    # perf-only mode: skip visual comparison
+    if perf_only:
+        return TestResult(
+            scene=scene,
+            passed=True,
+            output_path=output_path,
+            reference_path=reference_path,
+            render_time_seconds=render_time,
+            perf_record=perf_record,
         )
 
     # bless mode: copy output to reference
@@ -139,6 +203,8 @@ def run_single_test(
             max_diff=0.0,
             output_path=output_path,
             reference_path=reference_path,
+            render_time_seconds=render_time,
+            perf_record=perf_record,
         )
 
     # compare against reference
@@ -149,6 +215,8 @@ def run_single_test(
             missing_reference=True,
             output_path=output_path,
             reference_path=reference_path,
+            render_time_seconds=render_time,
+            perf_record=perf_record,
         )
 
     try:
@@ -160,6 +228,8 @@ def run_single_test(
             error=f"comparison failed: {e}",
             output_path=output_path,
             reference_path=reference_path,
+            render_time_seconds=render_time,
+            perf_record=perf_record,
         )
 
     passed = comparison.mse <= tolerance
@@ -171,48 +241,8 @@ def run_single_test(
         max_diff=comparison.max_diff,
         output_path=output_path,
         reference_path=reference_path,
+        render_time_seconds=render_time,
+        perf_record=perf_record,
     )
 
 
-def print_results(results: list[TestResult]):
-    """Print test results in a human-readable format."""
-    print()
-    print("=" * 60)
-    print("VISUAL TEST RESULTS")
-    print("=" * 60)
-    print()
-
-    passed_count = sum(1 for r in results if r.passed)
-    failed_count = sum(1 for r in results if not r.passed and not r.error and not r.missing_reference)
-    new_count = sum(1 for r in results if r.missing_reference)
-    error_count = sum(1 for r in results if r.error)
-
-    for result in results:
-        if result.error:
-            status = "ERROR"
-            details = result.error
-            icon = "!"
-        elif result.passed:
-            status = "PASS"
-            details = ""
-            icon = "✓"
-        elif result.missing_reference:
-            status = "NEW"
-            details = "no reference (needs blessing)"
-            icon = "?"
-        else:
-            status = "FAIL"
-            details = f"MSE={result.mse:.6e}, max_diff={result.max_diff:.6e}"
-            icon = "✗"
-
-        print(f"  {icon} {result.scene:30} {status:6} {details}")
-
-    print()
-    print("-" * 60)
-    print(f"  {passed_count} passed, {failed_count} failed, {new_count} new, {error_count} errors")
-    print("-" * 60)
-
-    needs_blessing = [r for r in results if not r.passed and not r.error]
-    if needs_blessing:
-        print()
-        print("To review and bless, run with --bless")
