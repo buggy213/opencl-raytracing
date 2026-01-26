@@ -12,6 +12,7 @@ pub use primitive::{
 };
 
 pub use scene::gltf::scene_from_gltf_file;
+pub use pbrt::scene_from_pbrt_file;
 
 pub use scene::Scene;
 pub(crate) use scene::SceneBuilder;
