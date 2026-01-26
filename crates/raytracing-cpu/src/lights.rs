@@ -90,12 +90,17 @@ pub(crate) fn sample_light(
             let shadow_ray = Ray { origin: p_world, direction: dir_world / d, };
             
             // no backface emission
-            let n0 = emitter.normals[tri.0 as usize];
-            let n1 = emitter.normals[tri.1 as usize];
-            let n2 = emitter.normals[tri.2 as usize];
+            let n = if emitter.normals.is_empty() {
+                Vec3::cross(p1 - p0, p2 - p0).unit()
+            }
+            else {
+                let n0 = emitter.normals[tri.0 as usize];
+                let n1 = emitter.normals[tri.1 as usize];
+                let n2 = emitter.normals[tri.2 as usize];
+            
+                Vec3::normalized(bary.0 * n0 + bary.1 * n1 + bary.2 * n2)
+            };
 
-            let n = bary.0 * n0 + bary.1 * n1 + bary.2 * n2;
-            let n = n.unit();
             let radiance = if Vec3::dot(dir_world, n) < 0.0 {
                 Vec3::zero()
             }

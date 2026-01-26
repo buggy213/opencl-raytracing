@@ -123,6 +123,7 @@ impl Mesh {
                     v.nz.unwrap_or(0.0),
                 ));
             }
+
             if has_uvs {
                 uvs.push(Vec2(v.u.unwrap_or(0.0), v.v.unwrap_or(0.0)));
             }

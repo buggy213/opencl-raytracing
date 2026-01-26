@@ -235,14 +235,22 @@ fn ray_mesh_intersect(
     let p0 = mesh.vertices[i0 as usize];
     let p1 = mesh.vertices[i1 as usize];
     let p2 = mesh.vertices[i2 as usize];
-    let n0 = mesh.normals[i0 as usize];
-    let n1 = mesh.normals[i1 as usize];
-    let n2 = mesh.normals[i2 as usize];
-
+    
     let (t, u, v) = ray_triangle_intersect(p0, p1, p2, o_ray, t_min, t_max)?;
 
     let w = 1.0 - u - v;
-    let n = Vec3::normalized(w * n0 + u * n1 + v * n2);
+
+    let n = if mesh.normals.is_empty() {
+        Vec3::cross(p1 - p0, p2 - p0).unit()
+    }
+    else {
+        let n0 = mesh.normals[i0 as usize];
+        let n1 = mesh.normals[i1 as usize];
+        let n2 = mesh.normals[i2 as usize];
+
+        Vec3::normalized(w * n0 + u * n1 + v * n2)    
+    };
+    
     let (uv, dpdu, dpdv) = {
         let (uv0, uv1, uv2) = if mesh.uvs.is_empty() {
             // if uvs are not provided, then using these values as uv coords 
