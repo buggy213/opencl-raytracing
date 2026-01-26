@@ -37,8 +37,16 @@ pub enum Material {
         roughness: TextureId,
     },
 
-    CoatedDiffuse,
-    CoatedConductor,
+    // diffuse, covered by a variable thickness / albedo layer with dielectric interface on surface
+    CoatedDiffuse {
+        diffuse_albedo: TextureId,
+        
+        dielectric_eta: TextureId,
+        dielectric_roughness: Option<TextureId>,
+
+        thickness: TextureId,
+        coat_albedo: TextureId,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]

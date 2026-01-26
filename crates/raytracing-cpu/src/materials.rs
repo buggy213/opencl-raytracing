@@ -39,7 +39,8 @@ impl From<BsdfSample> for ValidBsdfSample {
 }
 
 // Corresponds to `Material` evaluated at a specific point
-pub enum CpuBsdf {
+#[derive(Debug)]
+pub(crate) enum CpuBsdf {
     Diffuse { 
         albedo: Vec3
     },
@@ -67,7 +68,8 @@ pub enum CpuBsdf {
     LayeredBsdf(Box<LayeredBsdf>)
 }
 
-struct LayeredBsdf {
+#[derive(Debug)]
+pub(crate) struct LayeredBsdf {
     top: CpuBsdf,
     bottom: CpuBsdf,
     n_samples: u32,
@@ -89,9 +91,9 @@ bitflags! {
     #[derive(Debug, Clone, Copy)]
     pub(crate) struct BsdfComponentFlags : u8 {
         const NONSPECULAR_REFLECTION = 1 << 0;
-        const SPECULAR_REFLECTION = 1 << 2;
-        const NONSPECULAR_TRANSMISSION = 1 << 3;
-        const SPECULAR_TRANSMISSION = 1 << 5;
+        const SPECULAR_REFLECTION = 1 << 1;
+        const NONSPECULAR_TRANSMISSION = 1 << 2;
+        const SPECULAR_TRANSMISSION = 1 << 3;
         
         const REFLECTION = BsdfComponentFlags::NONSPECULAR_REFLECTION.bits() | BsdfComponentFlags::SPECULAR_REFLECTION.bits();
         const TRANSMISSION = BsdfComponentFlags::NONSPECULAR_TRANSMISSION.bits() | BsdfComponentFlags::SPECULAR_TRANSMISSION.bits();
@@ -195,6 +197,10 @@ impl CpuBsdf {
                     (top, bottom, thickness)
                 };
 
+                if !enter_interface.components().is_transmission() || !exit_interface.components().is_transmission() {
+                    return Vec3::zero();
+                }
+
                 // account for singular reflection
                 if wo.z() * wi.z() > 0.0 {
                     f += (n_samples as f32) * enter_interface.evaluate_bsdf(wo, wi);
@@ -209,6 +215,8 @@ impl CpuBsdf {
 
                 for _ in 0..n_samples {
                     // TODO: this needs to account for non-symmetry
+                    // dbg!(&enter_interface);
+                    // dbg!(&exit_interface);
                     let ValidBsdfSample::ValidSample(enter) = enter_interface.sample_bsdf(wo, BsdfComponentFlags::TRANSMISSION, &mut sampler) else {
                         continue;
                     };
@@ -375,7 +383,9 @@ impl CpuBsdf {
         match self {
             CpuBsdf::Diffuse { albedo } => {
                 if !component.contains(BsdfComponentFlags::NONSPECULAR_REFLECTION) {
-                    warn!("invalid bsdf component for diffuse bsdf");
+                    // warn!("invalid bsdf component for diffuse bsdf");
+                    // dbg!(component);
+                    // panic!();
                     return ValidBsdfSample::InvalidSample;
                 }
 
@@ -529,13 +539,13 @@ impl CpuBsdf {
                 let LayeredBsdf { 
                     top, 
                     bottom, 
-                    n_samples, 
+                    n_samples: _, 
                     max_depth, 
                     thickness, 
                     albedo, 
                     g 
                 } = inner.as_ref();
-                let (&n_samples, &max_depth, &thickness, &albedo, &g) = (n_samples, max_depth, thickness, albedo, g);
+                let (&max_depth, &thickness, &albedo, &g) = (max_depth, thickness, albedo, g);
                 let (wo, flip_wi) = if wo.z() < 0.0 {
                     (-wo, true)
                 } else {
@@ -549,7 +559,7 @@ impl CpuBsdf {
 
                 if enter_sample.component.is_reflection() {
                     return BsdfSample {
-                        wi: -enter_sample.wi,
+                        wi: if flip_wi { -enter_sample.wi } else { enter_sample.wi },
                         ..enter_sample
                     }.into();
                 }
@@ -598,6 +608,7 @@ impl CpuBsdf {
                             pdf *= phase_sample.pdf;
                             specular_path = false;
                             w = phase_sample.wi;
+                            assert!(f32::abs(w.length() - 1.0) < 1.0e-4);
                             z = zp;
         
                             continue;
@@ -612,6 +623,7 @@ impl CpuBsdf {
                     let interface = if z == 0.0 { bottom } else { top };
         
                     // Sample interface BSDF to determine new path direction
+                    assert!(f32::abs(w.length() - 1.0) < 1.0e-4);
                     let interface_sample = interface.sample_bsdf(-w, BsdfComponentFlags::all(), sampler);
                     let ValidBsdfSample::ValidSample(interface_sample) = interface_sample else {
                         return interface_sample;
@@ -662,6 +674,17 @@ impl CpuBsdf {
             CpuBsdf::RoughConductor { .. } => false,
             CpuBsdf::RoughDielectric { .. } => false,
             CpuBsdf::LayeredBsdf { .. } => false,
+        }
+    }
+
+    pub(crate) fn components(&self) -> BsdfComponentFlags {
+        match self {
+            CpuBsdf::Diffuse { .. } => BsdfComponentFlags::NONSPECULAR_REFLECTION,
+            CpuBsdf::SmoothDielectric { .. } => BsdfComponentFlags::SPECULAR_REFLECTION | BsdfComponentFlags::SPECULAR_TRANSMISSION,
+            CpuBsdf::SmoothConductor { .. } => BsdfComponentFlags::SPECULAR_REFLECTION,
+            CpuBsdf::RoughConductor { .. } => BsdfComponentFlags::NONSPECULAR_REFLECTION,
+            CpuBsdf::RoughDielectric { .. } => BsdfComponentFlags::NONSPECULAR_REFLECTION | BsdfComponentFlags::NONSPECULAR_TRANSMISSION,
+            CpuBsdf::LayeredBsdf(_) => todo!(),
         }
     }
 }
@@ -842,6 +865,48 @@ impl CpuMaterial for Material {
                 CpuBsdf::RoughDielectric { eta, alpha_x, alpha_y }
             }
 
+            Material::CoatedDiffuse { 
+                diffuse_albedo, 
+                dielectric_eta, 
+                dielectric_roughness, 
+                thickness, 
+                coat_albedo 
+            } => {
+                let diffuse_albedo = {
+                    let v = textures.sample(*diffuse_albedo, eval_ctx);
+                    Vec3(v.0, v.1, v.2)
+                };
+
+                let bottom = CpuBsdf::Diffuse { albedo: diffuse_albedo };
+                
+                let dielectric_eta = textures.sample(*dielectric_eta, eval_ctx).0;
+                let top = if let Some(dielectric_roughness) = *dielectric_roughness {
+                    let roughness = textures.sample(dielectric_roughness, eval_ctx);
+                    CpuBsdf::RoughDielectric { eta: dielectric_eta, alpha_x: roughness.0.sqrt(), alpha_y: roughness.1.sqrt() }
+                }
+                else {
+                    CpuBsdf::SmoothDielectric { eta: dielectric_eta }
+                };
+
+                let thickness = textures.sample(*thickness, eval_ctx).0;
+                let coat_albedo = {
+                    let v = textures.sample(*coat_albedo, eval_ctx);
+                    Vec3(v.0, v.1, v.2)
+                };
+
+                let layered_bsdf = LayeredBsdf {
+                    top,
+                    bottom,
+                    n_samples: 8,
+                    max_depth: 8,
+                    thickness,
+                    albedo: coat_albedo,
+                    g: 0.0,
+                };
+
+                CpuBsdf::LayeredBsdf(Box::new(layered_bsdf))
+            }
+
             _ => todo!("support new material")
         }
     }
@@ -853,8 +918,7 @@ impl CpuMaterial for Material {
             Material::SmoothConductor { .. } => return None,
             Material::RoughDielectric { .. } => return None,
             Material::RoughConductor { .. } => return None,
-            Material::CoatedDiffuse => todo!(),
-            Material::CoatedConductor => todo!(),
+            Material::CoatedDiffuse { .. } => return None,
         };
 
         textures.texture_mip_level(main_tex, eval_ctx)
@@ -878,6 +942,11 @@ fn refract(mut eta: f32, wo: Vec3, mut normal: Vec3) -> Option<Vec3> {
 
     let cos_theta_t = (1.0 - sin_theta_2_t).sqrt();
     Some(-wo / eta + (cos_theta_i / eta - cos_theta_t) * normal)
+}
+
+#[test]
+fn test_refract() {
+
 }
 
 // fraction of reflected light from Fresnel equations
@@ -1286,12 +1355,9 @@ mod microfacet {
             };
 
             if wo.z() * wi.z() > 0.0 || wi.z() == 0.0 {
-                warn!(
-                    "weird floating point things happened; wi doesn't represent \
-                    a valid transmission direction"
-                );
-
-                return ValidBsdfSample::InvalidSample;
+                // this is analogous to check in reflection case, 
+                // and leads to loss of energy
+                return ValidBsdfSample::ValidNullSample;
             }
 
             (wi, false)
@@ -1365,8 +1431,7 @@ mod phase_function {
         let sin_theta = f32::sqrt(1.0 - cos_theta * cos_theta);
 
         let direction_wo = Vec3(f32::cos(phi) * sin_theta, f32::sin(phi) * sin_theta, cos_theta);
-        let (wo_x, wo_y) = geometry::make_orthonormal_basis(direction_wo);
-        
+        let (wo_x, wo_y) = geometry::make_orthonormal_basis(wo);
         let wi = direction_wo.0 * wo_x + direction_wo.1 * wo_y + direction_wo.2 * wo;
         
         let p = henyey_greenstein(cos_theta, g);

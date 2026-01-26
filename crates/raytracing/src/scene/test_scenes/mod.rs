@@ -13,6 +13,7 @@ use crate::{
 
 mod assets {
     pub(super) const LAKE_PIER_ENVIRONMENT: &[u8] = include_bytes!("assets/lake_pier_1k.exr");
+    pub(super) const BUNNY_PLY: &[u8] = include_bytes!("assets/bunny.ply");
 }
 
 // helpers for basic meshes
@@ -517,6 +518,33 @@ pub fn out_of_focus_sphere_scene() -> Scene {
     scene_builder.build()
 }
 
+pub fn coated_diffuse_bunny_scene() -> Scene {
+    let mut cornell_box = cornell_box();
+
+    let bunny_mesh = Mesh::from_ply_reader(std::io::Cursor::new(assets::BUNNY_PLY))
+        .expect("failed to load bunny.ply");
+    let bunny = Shape::TriangleMesh(bunny_mesh);
+
+    // CoatedDiffuse: red diffuse base with clear coat
+    let diffuse_albedo = cornell_box.add_constant_texture(Vec4(0.8, 0.2, 0.2, 1.0));
+    let dielectric_eta = cornell_box.add_constant_texture(Vec4(1.5, 0.0, 0.0, 0.0));
+    let roughness = cornell_box.add_constant_texture(Vec4(0.1, 0.1, 0.0, 0.0));
+    let thickness = cornell_box.add_constant_texture(Vec4(0.5, 0.0, 0.0, 0.0));
+    let coat_albedo = cornell_box.add_constant_texture(Vec4(1.0, 1.0, 1.0, 1.0));
+
+    let coated_diffuse = cornell_box.add_material(Material::CoatedDiffuse {
+        diffuse_albedo,
+        dielectric_eta,
+        dielectric_roughness: Some(roughness),
+        thickness,
+        coat_albedo,
+    });
+
+    cornell_box.add_shape_at_position(bunny, coated_diffuse, Vec3(0.0, 0.0, 0.25));
+
+    cornell_box.build()
+}
+
 pub fn environment_lighting_scene() -> Scene {
     let mut scene_builder = SceneBuilder::new();
 
@@ -645,6 +673,11 @@ pub const fn all_test_scenes() -> &'static [TestScene] {
             name: "environment_light",
             scene_func: environment_lighting_scene,
             settings_func: RaytracerSettings::default
-        }
+        },
+        TestScene {
+            name: "coated_diffuse_bunny",
+            scene_func: coated_diffuse_bunny_scene,
+            settings_func: RaytracerSettings::default,
+        },
     ]
 }

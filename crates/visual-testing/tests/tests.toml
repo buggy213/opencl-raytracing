@@ -47,3 +47,7 @@ builtin_scene = "out_of_focus_sphere"
 [[test]]
 name = "environment_light"
 builtin_scene = "environment_light"
+
+[[test]]
+name = "coated_diffuse_bunny"
+builtin_scene = "coated_diffuse_bunny"

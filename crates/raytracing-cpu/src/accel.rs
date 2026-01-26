@@ -164,7 +164,7 @@ pub(crate) fn traverse_bvh(
 
                             hit_info = Some(HitInfo { 
                                 t: global_t, 
-                                uv: intersect_result.uv, // TODO: uvs 
+                                uv: intersect_result.uv,
                                 point: global_point, 
                                 normal: global_normal, 
                                 dpdu: global_dpdu,

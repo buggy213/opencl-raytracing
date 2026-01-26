@@ -23,10 +23,27 @@ pub(crate) fn make_orthonormal_basis(z: Vec3) -> (Vec3, Vec3) {
 fn test_make_orthonormal_basis() {
     let z = Vec3(0.262, -0.151, 0.370).unit();
     let (x, y) = make_orthonormal_basis(z);
+
+    // check that they are unit length
     assert!(f32::abs(1.0 - x.length()) < 1.0e-8);
     assert!(f32::abs(1.0 - y.length()) < 1.0e-8);
+
+    // x cross y should be z
     let x_cross_y = Vec3::cross(x, y);
-    assert!((z - x_cross_y).length() < 1.0e-6)
+    assert!((z - x_cross_y).length() < 1.0e-6);
+
+    // y cross z should be x
+    let y_cross_z = Vec3::cross(y, z);
+    assert!((x - y_cross_z).length() < 1.0e-6);
+
+    // x cross z should be -y
+    let x_cross_z = Vec3::cross(x, z);
+    assert!((x_cross_z + y).length() < 1.0e-6);
+
+    // mutually orthogonal
+    assert!(Vec3::dot(x, y).abs() < 1.0e-7);
+    assert!(Vec3::dot(x, z).abs() < 1.0e-7);
+    assert!(Vec3::dot(y, z).abs() < 1.0e-7);
 }
 
 // return range of t at which ray intersects an AABB (possibly including negative values of t), 
