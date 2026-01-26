@@ -91,7 +91,7 @@ pub(crate) fn sample_light(
             
             // no backface emission
             let n = if emitter.normals.is_empty() {
-                Vec3::cross(p1 - p0, p2 - p0).unit()
+                Vec3::cross(p2 - p0, p1 - p0).unit()
             }
             else {
                 let n0 = emitter.normals[tri.0 as usize];

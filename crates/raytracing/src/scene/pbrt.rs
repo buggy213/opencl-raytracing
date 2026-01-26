@@ -670,7 +670,8 @@ fn parse_transform_directive(toks: &mut TokenStream, state: &mut ParserState) ->
 
     toks.expect("]")?;
 
-    let mat = Matrix4x4::from(m);
+    // PBRT uses column-major matrix format
+    let mat = Matrix4x4::from(m).transposed();
     let transform = Transform::from(mat);
     state.current_transform = transform;
 
@@ -687,7 +688,8 @@ fn parse_concat_transform_directive(toks: &mut TokenStream, state: &mut ParserSt
 
     toks.expect("]")?;
 
-    let mat = Matrix4x4::from(m);
+    // PBRT uses column-major matrix format
+    let mat = Matrix4x4::from(m).transposed();
     let transform = Transform::from(mat);
     state.current_transform = state.current_transform.compose(transform);
 
@@ -726,7 +728,7 @@ fn parse_camera_directive(
                 camera_position,
                 target,
                 up,
-                true,
+                false,
                 fov_rad,
                 state.film_width,
                 state.film_height,
@@ -742,7 +744,7 @@ fn parse_camera_directive(
                 camera_position,
                 target,
                 up,
-                true,
+                false,
                 state.film_width,
                 state.film_height,
                 1.0 / state.film_width.min(state.film_height) as f32,
@@ -759,7 +761,7 @@ fn parse_camera_directive(
                 camera_position,
                 target,
                 up,
-                true,
+                false,
                 (90.0_f32).to_radians(),
                 state.film_width,
                 state.film_height,
@@ -1095,21 +1097,7 @@ fn parse_shape_directive(
             let normals: Vec<Vec3> = if let Some(n) = params.get_normal3s("N") {
                 n.iter().map(|n| Vec3(n[0], n[1], n[2])).collect()
             } else {
-                // Generate per-vertex normals from face normals
-                let mut normals = vec![Vec3::zero(); vertices.len()];
-                for tri in &tris {
-                    let p0 = vertices[tri.0 as usize];
-                    let p1 = vertices[tri.1 as usize];
-                    let p2 = vertices[tri.2 as usize];
-                    let face_normal = Vec3::cross(p1 - p0, p2 - p0);
-                    normals[tri.0 as usize] = normals[tri.0 as usize] + face_normal;
-                    normals[tri.1 as usize] = normals[tri.1 as usize] + face_normal;
-                    normals[tri.2 as usize] = normals[tri.2 as usize] + face_normal;
-                }
-                for n in &mut normals {
-                    *n = n.unit();
-                }
-                normals
+                Vec::new()
             };
 
             let uvs: Vec<Vec2> = if let Some(uv) = params.get_point2s("uv") {

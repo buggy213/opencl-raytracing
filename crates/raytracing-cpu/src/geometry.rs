@@ -241,7 +241,8 @@ fn ray_mesh_intersect(
     let w = 1.0 - u - v;
 
     let n = if mesh.normals.is_empty() {
-        Vec3::cross(p1 - p0, p2 - p0).unit()
+        // assumes CCW winding order being the default
+        Vec3::cross(p2 - p0, p1 - p0).unit()
     }
     else {
         let n0 = mesh.normals[i0 as usize];

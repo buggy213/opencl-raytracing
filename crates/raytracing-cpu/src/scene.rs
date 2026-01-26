@@ -21,7 +21,7 @@ pub(crate) fn prepare_cpu_acceleration_structures(scene: &Scene) -> CpuAccelerat
         transform: Transform,
         bvhs: &mut Vec<DepthFirstLinearizedBVH>,
         bvh_transforms: &mut Vec<Transform>,
-        scene: &Scene, 
+        scene: &Scene,
         aggregate_primitive_index: AggregatePrimitiveIndex
     ) -> usize {
         let mut bvh_builder = BVH2Builder::new();
@@ -34,11 +34,11 @@ pub(crate) fn prepare_cpu_acceleration_structures(scene: &Scene) -> CpuAccelerat
                 Primitive::Aggregate(_) => {
                     let aggregate_index = primitive_index.try_into().unwrap();
                     let sub_bvh_index = recursive_helper(
-                        embree, 
+                        embree,
                         child_transform.compose(transform.clone()),
-                        bvhs, 
+                        bvhs,
                         bvh_transforms,
-                        scene, 
+                        scene,
                         aggregate_index
                     );
                     let bounds = bvhs[sub_bvh_index].bounds();
@@ -58,11 +58,11 @@ pub(crate) fn prepare_cpu_acceleration_structures(scene: &Scene) -> CpuAccelerat
     }
 
     recursive_helper(
-        &embree, 
-        Transform::identity(), 
-        &mut bvhs, 
-        &mut bvh_transforms, 
-        scene, 
+        &embree,
+        Transform::identity(),
+        &mut bvhs,
+        &mut bvh_transforms,
+        scene,
         scene.root_index()
     );
 
