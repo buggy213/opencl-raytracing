@@ -93,7 +93,12 @@ impl From<Matrix4x4> for Transform {
 }
 
 impl Transform {
-    pub fn look_at(camera_pos: Vec3, target_pos: Vec3, up: Vec3) -> Transform {
+    pub fn look_at(
+        camera_pos: Vec3, 
+        target_pos: Vec3, 
+        up: Vec3,
+        swap_handedness: bool
+    ) -> Transform {
         // affine transform
         let a41 = 0.0;
         let a42 = 0.0;
@@ -111,18 +116,22 @@ impl Transform {
         let a23 = view_direction_world.y();
         let a33 = view_direction_world.z();
 
-        // x from (y cross z)
-        let right = Vec3::cross(view_direction_world, up).unit();
-        let a11 = right.x();
-        let a21 = right.y();
-        let a31 = right.z();
+        let camera_x = -Vec3::cross(view_direction_world, up).unit();
+        let a11 = camera_x.x();
+        let a21 = camera_x.y();
+        let a31 = camera_x.z();
 
-        // y from (z cross x)
-        let down = Vec3::cross(view_direction_world, right);
-        let a12 = down.x();
-        let a22 = down.y();
-        let a32: f32 = down.z();
+        let camera_y = Vec3::cross(view_direction_world, camera_x);
+        let a12 = camera_y.x();
+        let a22 = camera_y.y();
+        let a32 = camera_y.z();
 
+        let (a11, a21, a31) = if swap_handedness {
+            (-a11, -a21, -a31)
+        } else {
+            (a11, a21, a31)
+        };
+        
         #[rustfmt::skip]
         let camera_to_world = Matrix4x4::create(
             a11, a12, a13, a14,

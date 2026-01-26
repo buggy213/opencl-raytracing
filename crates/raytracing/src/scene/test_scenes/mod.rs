@@ -165,6 +165,7 @@ pub fn sphere_scene() -> Scene {
         Vec3(0.0, 0.0, 0.0),
         Vec3(0.0, 0.0, -3.0),
         Vec3(0.0, 1.0, 0.0),
+        false,
         (45.0_f32).to_radians(),
         400,
         400,
@@ -192,6 +193,7 @@ pub fn cube_scene() -> Scene {
         Vec3(1.0, 0.75, -1.0),
         Vec3(0.0, 0.0, -3.0),
         Vec3(0.0, 1.0, 0.0),
+        false,
         (45.0_f32).to_radians(),
         400,
         400,
@@ -217,6 +219,7 @@ pub fn cube_orthographic_scene() -> Scene {
         Vec3(1.0, 0.75, -1.0),
         Vec3(0.0, 0.0, -3.0),
         Vec3(0.0, 1.0, 0.0),
+        false,
         400,
         400,
         2.5 / 400.0,
@@ -282,6 +285,7 @@ pub fn checkered_plane_scene() -> Scene {
             0.22 - f32::sin(y_angle) * lookat_dist,
         ),
         Vec3(0.0, 0.0, 1.0),
+        false,
         (40.0_f32).to_radians(),
         480,
         270,
@@ -378,6 +382,7 @@ fn cornell_box() -> SceneBuilder {
         Vec3(0.0, front + 3.4, 0.4),
         Vec3(0.0, 0.0, h / 2.0),
         Vec3(0.0, 0.0, 1.0),
+        false,
         (37.8_f32).to_radians(),
         500,
         500,
@@ -507,6 +512,7 @@ pub fn out_of_focus_sphere_scene() -> Scene {
         Vec3(0.0, 0.0, 0.0),
         Vec3(0.0, 0.0, -5.0),
         Vec3(0.0, 1.0, 0.0),
+        false,
         (45.0_f32).to_radians(),
         400,
         400,
@@ -584,10 +590,12 @@ pub fn environment_lighting_scene() -> Scene {
         Vec3(0.0, 0.0, 0.0),
         Vec3(0.0, 1.0, 0.0),
         Vec3(0.0, 0.0, 1.0),
+        false,
         (37.8_f32).to_radians(),
         500,
         500,
     );
+    
     scene_builder.add_camera(camera);
 
     scene_builder.build()

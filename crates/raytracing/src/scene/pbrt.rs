@@ -1,7 +1,7 @@
 //! PBRT Scene File Importer
 //!
 //! Parses a subset of PBRT v3/v4 scene files to produce a `Scene`. This is not a
-//! feature complete system at all, since much of the functionality is still 
+//! feature complete system at all, since much of the functionality is still
 //! missing from the renderer.
 //!
 //! # Supported Directives
@@ -25,6 +25,7 @@
 //! ## Shapes
 //! - `Shape "sphere"` - With `radius` parameter
 //! - `Shape "trianglemesh"` - With `P` (positions), `indices`, optional `N` (normals), `uv`
+//! - `Shape "plymesh"` - PLY file loading
 //!
 //! ## Lights
 //! - `LightSource "point"` - With `I` (intensity) parameter
@@ -44,10 +45,7 @@
 //! - Media/volumes
 //! - Most sampler, integrator, and film parameters (ignored)
 
-use std::{
-    collections::HashMap,
-    path::Path,
-};
+use std::path::Path;
 
 use tracing::warn;
 
@@ -100,28 +98,40 @@ impl std::error::Error for ParseError {}
 
 #[derive(Debug, Clone)]
 enum ParameterValue {
-    Integer(Vec<i32>),
-    Float(Vec<f32>),
-    Point2(Vec<[f32; 2]>),
-    Vector2(Vec<[f32; 2]>),
-    Point3(Vec<[f32; 3]>),
-    Vector3(Vec<[f32; 3]>),
-    Normal3(Vec<[f32; 3]>),
-    Rgb(Vec<[f32; 3]>),
-    Bool(Vec<bool>),
-    String(Vec<String>),
-    Texture(Vec<String>),
+    Integer(i32),
+    Integers(Vec<i32>),
+    Float(f32),
+    Floats(Vec<f32>),
+    Point2([f32; 2]),
+    Point2s(Vec<[f32; 2]>),
+    Point3([f32; 3]),
+    Point3s(Vec<[f32; 3]>),
+    Vector3([f32; 3]),
+    Vector3s(Vec<[f32; 3]>),
+    Normal3([f32; 3]),
+    Normal3s(Vec<[f32; 3]>),
+    Rgb([f32; 3]),
+    Bool(bool),
+    String(String),
+    Texture(String),
 }
 
 #[derive(Debug, Clone, Default)]
 struct ParameterList {
-    params: HashMap<String, ParameterValue>,
+    params: Vec<(String, ParameterValue)>,
 }
 
 impl ParameterList {
+    fn get(&self, name: &str) -> Option<&ParameterValue> {
+        self.params.iter().find(|(n, _)| n == name).map(|(_, v)| v)
+    }
+
     fn get_float(&self, name: &str) -> Option<f32> {
-        match self.params.get(name)? {
-            ParameterValue::Float(v) if !v.is_empty() => Some(v[0]),
+        match self.get(name)? {
+            ParameterValue::Float(v) => Some(*v),
+            ParameterValue::Floats(v) if !v.is_empty() => Some(v[0]),
+            ParameterValue::Integer(v) => Some(*v as f32),
+            ParameterValue::Integers(v) if !v.is_empty() => Some(v[0] as f32),
             _ => None,
         }
     }
@@ -131,8 +141,9 @@ impl ParameterList {
     }
 
     fn get_integer(&self, name: &str) -> Option<i32> {
-        match self.params.get(name)? {
-            ParameterValue::Integer(v) if !v.is_empty() => Some(v[0]),
+        match self.get(name)? {
+            ParameterValue::Integer(v) => Some(*v),
+            ParameterValue::Integers(v) if !v.is_empty() => Some(v[0]),
             _ => None,
         }
     }
@@ -142,44 +153,56 @@ impl ParameterList {
     }
 
     fn get_integers(&self, name: &str) -> Option<&[i32]> {
-        match self.params.get(name)? {
-            ParameterValue::Integer(v) => Some(v),
+        match self.get(name)? {
+            ParameterValue::Integers(v) => Some(v),
             _ => None,
         }
     }
 
-    fn get_floats(&self, name: &str) -> Option<&[f32]> {
-        match self.params.get(name)? {
-            ParameterValue::Float(v) => Some(v),
+    fn get_point3(&self, name: &str) -> Option<[f32; 3]> {
+        match self.get(name)? {
+            ParameterValue::Point3(v) => Some(*v),
+            ParameterValue::Point3s(v) if !v.is_empty() => Some(v[0]),
             _ => None,
         }
     }
 
     fn get_point3s(&self, name: &str) -> Option<&[[f32; 3]]> {
-        match self.params.get(name)? {
-            ParameterValue::Point3(v) => Some(v),
+        match self.get(name)? {
+            ParameterValue::Point3s(v) => Some(v),
+            ParameterValue::Point3(v) => Some(std::slice::from_ref(v)),
             _ => None,
         }
     }
 
     fn get_normal3s(&self, name: &str) -> Option<&[[f32; 3]]> {
-        match self.params.get(name)? {
-            ParameterValue::Normal3(v) => Some(v),
+        match self.get(name)? {
+            ParameterValue::Normal3s(v) => Some(v),
+            ParameterValue::Normal3(v) => Some(std::slice::from_ref(v)),
             _ => None,
         }
     }
 
     fn get_point2s(&self, name: &str) -> Option<&[[f32; 2]]> {
-        match self.params.get(name)? {
-            ParameterValue::Point2(v) => Some(v),
+        match self.get(name)? {
+            ParameterValue::Point2s(v) => Some(v),
+            ParameterValue::Point2(v) => Some(std::slice::from_ref(v)),
+            _ => None,
+        }
+    }
+
+    fn get_floats(&self, name: &str) -> Option<&[f32]> {
+        match self.get(name)? {
+            ParameterValue::Floats(v) => Some(v),
+            ParameterValue::Float(v) => Some(std::slice::from_ref(v)),
             _ => None,
         }
     }
 
     fn get_rgb(&self, name: &str) -> Option<Vec3> {
-        match self.params.get(name)? {
-            ParameterValue::Rgb(v) if !v.is_empty() => Some(Vec3(v[0][0], v[0][1], v[0][2])),
-            ParameterValue::Float(v) if v.len() >= 3 => Some(Vec3(v[0], v[1], v[2])),
+        match self.get(name)? {
+            ParameterValue::Rgb(v) => Some(Vec3(v[0], v[1], v[2])),
+            ParameterValue::Floats(v) if v.len() >= 3 => Some(Vec3(v[0], v[1], v[2])),
             _ => None,
         }
     }
@@ -189,28 +212,15 @@ impl ParameterList {
     }
 
     fn get_string(&self, name: &str) -> Option<&str> {
-        match self.params.get(name)? {
-            ParameterValue::String(v) if !v.is_empty() => Some(&v[0]),
-            ParameterValue::Texture(v) if !v.is_empty() => Some(&v[0]),
+        match self.get(name)? {
+            ParameterValue::String(v) => Some(v),
             _ => None,
         }
-    }
-
-    fn get_bool(&self, name: &str) -> Option<bool> {
-        match self.params.get(name)? {
-            ParameterValue::Bool(v) if !v.is_empty() => Some(v[0]),
-            _ => None,
-        }
-    }
-
-    fn get_bool_or(&self, name: &str, default: bool) -> bool {
-        self.get_bool(name).unwrap_or(default)
     }
 
     fn get_texture(&self, name: &str) -> Option<&str> {
-        match self.params.get(name)? {
-            ParameterValue::Texture(v) if !v.is_empty() => Some(&v[0]),
-            ParameterValue::String(v) if !v.is_empty() => Some(&v[0]),
+        match self.get(name)? {
+            ParameterValue::Texture(v) => Some(v),
             _ => None,
         }
     }
@@ -228,8 +238,8 @@ struct ParserState {
     attribute_stack: Vec<AttributeState>,
     film_width: usize,
     film_height: usize,
-    named_materials: HashMap<String, MaterialIndex>,
-    named_textures: HashMap<String, TextureId>,
+    named_materials: Vec<(String, MaterialIndex)>,
+    named_textures: Vec<(String, TextureId)>,
     current_material: Option<MaterialIndex>,
     area_light_radiance: Option<Vec3>,
     in_world_block: bool,
@@ -244,8 +254,8 @@ impl ParserState {
             attribute_stack: Vec::new(),
             film_width: 640,
             film_height: 480,
-            named_materials: HashMap::new(),
-            named_textures: HashMap::new(),
+            named_materials: Vec::new(),
+            named_textures: Vec::new(),
             current_material: None,
             area_light_radiance: None,
             in_world_block: false,
@@ -271,89 +281,81 @@ impl ParserState {
             warn!("AttributeEnd without matching AttributeBegin");
         }
     }
-}
 
-fn strip_comments(input: &str) -> String {
-    let mut result = String::with_capacity(input.len());
-    for line in input.lines() {
-        if let Some(pos) = line.find('#') {
-            result.push_str(&line[..pos]);
-        } else {
-            result.push_str(line);
-        }
-        result.push('\n');
-    }
-    result
-}
-
-fn tokenize(input: &str) -> Vec<String> {
-    let mut tokens = Vec::new();
-    let mut chars = input.chars().peekable();
-
-    while let Some(&c) = chars.peek() {
-        if c.is_whitespace() {
-            chars.next();
-            continue;
-        }
-
-        if c == '"' {
-            chars.next();
-            let mut s = String::new();
-            while let Some(&c) = chars.peek() {
-                if c == '"' {
-                    chars.next();
-                    break;
-                }
-                s.push(c);
-                chars.next();
-            }
-            tokens.push(format!("\"{}\"", s));
-        } else if c == '[' {
-            tokens.push("[".to_string());
-            chars.next();
-        } else if c == ']' {
-            tokens.push("]".to_string());
-            chars.next();
-        } else {
-            let mut word = String::new();
-            while let Some(&c) = chars.peek() {
-                if c.is_whitespace() || c == '[' || c == ']' || c == '"' {
-                    break;
-                }
-                word.push(c);
-                chars.next();
-            }
-            if !word.is_empty() {
-                tokens.push(word);
-            }
-        }
+    fn get_named_material(&self, name: &str) -> Option<MaterialIndex> {
+        self.named_materials.iter().find(|(n, _)| n == name).map(|(_, v)| *v)
     }
 
-    tokens
+    fn get_named_texture(&self, name: &str) -> Option<TextureId> {
+        self.named_textures.iter().find(|(n, _)| n == name).map(|(_, v)| *v)
+    }
 }
 
-struct TokenStream {
-    tokens: Vec<String>,
+struct TokenStream<'a> {
+    input: &'a str,
     pos: usize,
 }
 
-impl TokenStream {
-    fn new(tokens: Vec<String>) -> Self {
-        TokenStream { tokens, pos: 0 }
+impl<'a> TokenStream<'a> {
+    fn new(input: &'a str) -> Self {
+        TokenStream { input, pos: 0 }
     }
 
-    fn peek(&self) -> Option<&str> {
-        self.tokens.get(self.pos).map(|s| s.as_str())
-    }
-
-    fn next(&mut self) -> Option<&str> {
-        if self.pos < self.tokens.len() {
-            let tok = &self.tokens[self.pos];
-            self.pos += 1;
-            Some(tok)
-        } else {
-            None
+    fn skip_whitespace_and_comments(&mut self) {
+        let bytes = self.input.as_bytes();
+        while self.pos < bytes.len() {
+            let c = bytes[self.pos];
+            if c == b'#' {
+                while self.pos < bytes.len() && bytes[self.pos] != b'\n' {
+                    self.pos += 1;
+                }
+            } else if c.is_ascii_whitespace() {
+                self.pos += 1;
+            } else {
+                break;
+            }
         }
+    }
+
+    fn peek(&mut self) -> Option<&'a str> {
+        self.skip_whitespace_and_comments();
+        if self.pos >= self.input.len() {
+            return None;
+        }
+
+        let bytes = self.input.as_bytes();
+        let start = self.pos;
+
+        if bytes[start] == b'"' {
+            let mut end = start + 1;
+            while end < bytes.len() && bytes[end] != b'"' {
+                end += 1;
+            }
+            if end < bytes.len() {
+                end += 1; // include closing quote
+            }
+            Some(&self.input[start..end])
+        } else if bytes[start] == b'[' {
+            Some(&self.input[start..start + 1])
+        } else if bytes[start] == b']' {
+            Some(&self.input[start..start + 1])
+        } else {
+            let mut end = start;
+            while end < bytes.len() {
+                let c = bytes[end];
+                if c.is_ascii_whitespace() || c == b'[' || c == b']' || c == b'"' || c == b'#' {
+                    break;
+                }
+                end += 1;
+            }
+            Some(&self.input[start..end])
+        }
+    }
+
+    fn next(&mut self) -> Option<&'a str> {
+        let tok = self.peek()?;
+        self.pos += tok.len();
+        Some(tok)
     }
 
     fn expect(&mut self, expected: &str) -> Result<(), ParseError> {
@@ -366,15 +368,11 @@ impl TokenStream {
             None => Err(ParseError::UnexpectedEOF),
         }
     }
-
-    fn is_eof(&self) -> bool {
-        self.pos >= self.tokens.len()
-    }
 }
 
-fn parse_quoted_string(tok: &str) -> Result<String, ParseError> {
+fn parse_quoted_string(tok: &str) -> Result<&str, ParseError> {
     if tok.starts_with('"') && tok.ends_with('"') && tok.len() >= 2 {
-        Ok(tok[1..tok.len() - 1].to_string())
+        Ok(&tok[1..tok.len() - 1])
     } else {
         Err(ParseError::BadString)
     }
@@ -390,24 +388,14 @@ fn parse_integer(tok: &str) -> Result<i32, ParseError> {
         .map_err(|_| ParseError::BadInteger(tok.to_string()))
 }
 
-fn parse_float_or_int_as_float(tok: &str) -> Result<f32, ParseError> {
-    if let Ok(f) = tok.parse::<f32>() {
-        Ok(f)
-    } else if let Ok(i) = tok.parse::<i32>() {
-        Ok(i as f32)
-    } else {
-        Err(ParseError::BadFloat(tok.to_string()))
-    }
-}
-
-fn parse_type_string(toks: &mut TokenStream) -> Result<String, ParseError> {
+fn parse_type_string<'a>(toks: &mut TokenStream<'a>) -> Result<&'a str, ParseError> {
     let tok = toks.next().ok_or(ParseError::UnexpectedEOF)?;
     parse_quoted_string(tok)
 }
 
-fn parse_floats(toks: &mut TokenStream) -> Result<f32, ParseError> {
+fn parse_single_float(toks: &mut TokenStream) -> Result<f32, ParseError> {
     let tok = toks.next().ok_or(ParseError::UnexpectedEOF)?;
-    parse_float_or_int_as_float(tok)
+    parse_float(tok)
 }
 
 fn parse_parameter_list(toks: &mut TokenStream) -> Result<ParameterList, ParseError> {
@@ -421,14 +409,14 @@ fn parse_parameter_list(toks: &mut TokenStream) -> Result<ParameterList, ParseEr
         let type_name = parse_quoted_string(toks.next().unwrap())?;
         let parts: Vec<&str> = type_name.split_whitespace().collect();
         if parts.len() != 2 {
-            return Err(ParseError::BadParameter(type_name));
+            return Err(ParseError::BadParameter(type_name.to_string()));
         }
 
         let param_type = parts[0];
         let param_name = parts[1].to_string();
 
         let value = parse_parameter_value(toks, param_type)?;
-        params.params.insert(param_name, value);
+        params.params.push((param_name, value));
     }
 
     Ok(params)
@@ -444,233 +432,153 @@ fn parse_parameter_value(toks: &mut TokenStream, param_type: &str) -> Result<Par
         "integer" => {
             let mut values = Vec::new();
             while let Some(tok) = toks.peek() {
-                if tok == "]" {
+                if tok == "]" || tok.starts_with('"') {
                     break;
                 }
-                if tok.starts_with('"') {
-                    break;
-                }
-                let v = parse_integer(toks.next().unwrap())?;
-                values.push(v);
+                values.push(parse_integer(toks.next().unwrap())?);
                 if !has_brackets {
                     break;
                 }
             }
-            ParameterValue::Integer(values)
+            if values.len() == 1 {
+                ParameterValue::Integer(values[0])
+            } else {
+                ParameterValue::Integers(values)
+            }
         }
         "float" => {
             let mut values = Vec::new();
             while let Some(tok) = toks.peek() {
-                if tok == "]" {
+                if tok == "]" || tok.starts_with('"') {
                     break;
                 }
-                if tok.starts_with('"') {
-                    break;
-                }
-                let v = parse_float_or_int_as_float(toks.next().unwrap())?;
-                values.push(v);
+                values.push(parse_float(toks.next().unwrap())?);
                 if !has_brackets {
                     break;
                 }
             }
-            ParameterValue::Float(values)
+            if values.len() == 1 {
+                ParameterValue::Float(values[0])
+            } else {
+                ParameterValue::Floats(values)
+            }
         }
         "point2" => {
             let mut values = Vec::new();
             while let Some(tok) = toks.peek() {
-                if tok == "]" {
+                if tok == "]" || tok.starts_with('"') {
                     break;
                 }
-                if tok.starts_with('"') {
-                    break;
-                }
-                let x = parse_float_or_int_as_float(toks.next().unwrap())?;
-                let y = parse_float_or_int_as_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
+                let x = parse_float(toks.next().unwrap())?;
+                let y = parse_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
                 values.push([x, y]);
                 if !has_brackets {
                     break;
                 }
             }
-            ParameterValue::Point2(values)
-        }
-        "vector2" => {
-            let mut values = Vec::new();
-            while let Some(tok) = toks.peek() {
-                if tok == "]" {
-                    break;
-                }
-                if tok.starts_with('"') {
-                    break;
-                }
-                let x = parse_float_or_int_as_float(toks.next().unwrap())?;
-                let y = parse_float_or_int_as_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
-                values.push([x, y]);
-                if !has_brackets {
-                    break;
-                }
+            if values.len() == 1 {
+                ParameterValue::Point2(values[0])
+            } else {
+                ParameterValue::Point2s(values)
             }
-            ParameterValue::Vector2(values)
         }
         "point3" | "point" => {
             let mut values = Vec::new();
             while let Some(tok) = toks.peek() {
-                if tok == "]" {
+                if tok == "]" || tok.starts_with('"') {
                     break;
                 }
-                if tok.starts_with('"') {
-                    break;
-                }
-                let x = parse_float_or_int_as_float(toks.next().unwrap())?;
-                let y = parse_float_or_int_as_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
-                let z = parse_float_or_int_as_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
+                let x = parse_float(toks.next().unwrap())?;
+                let y = parse_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
+                let z = parse_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
                 values.push([x, y, z]);
                 if !has_brackets {
                     break;
                 }
             }
-            ParameterValue::Point3(values)
+            if values.len() == 1 {
+                ParameterValue::Point3(values[0])
+            } else {
+                ParameterValue::Point3s(values)
+            }
         }
         "vector3" | "vector" => {
             let mut values = Vec::new();
             while let Some(tok) = toks.peek() {
-                if tok == "]" {
+                if tok == "]" || tok.starts_with('"') {
                     break;
                 }
-                if tok.starts_with('"') {
-                    break;
-                }
-                let x = parse_float_or_int_as_float(toks.next().unwrap())?;
-                let y = parse_float_or_int_as_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
-                let z = parse_float_or_int_as_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
+                let x = parse_float(toks.next().unwrap())?;
+                let y = parse_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
+                let z = parse_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
                 values.push([x, y, z]);
                 if !has_brackets {
                     break;
                 }
             }
-            ParameterValue::Vector3(values)
+            if values.len() == 1 {
+                ParameterValue::Vector3(values[0])
+            } else {
+                ParameterValue::Vector3s(values)
+            }
         }
         "normal3" | "normal" => {
             let mut values = Vec::new();
             while let Some(tok) = toks.peek() {
-                if tok == "]" {
+                if tok == "]" || tok.starts_with('"') {
                     break;
                 }
-                if tok.starts_with('"') {
-                    break;
-                }
-                let x = parse_float_or_int_as_float(toks.next().unwrap())?;
-                let y = parse_float_or_int_as_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
-                let z = parse_float_or_int_as_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
+                let x = parse_float(toks.next().unwrap())?;
+                let y = parse_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
+                let z = parse_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
                 values.push([x, y, z]);
                 if !has_brackets {
                     break;
                 }
             }
-            ParameterValue::Normal3(values)
+            if values.len() == 1 {
+                ParameterValue::Normal3(values[0])
+            } else {
+                ParameterValue::Normal3s(values)
+            }
         }
         "rgb" | "color" => {
-            let mut values = Vec::new();
-            while let Some(tok) = toks.peek() {
-                if tok == "]" {
-                    break;
-                }
-                if tok.starts_with('"') {
-                    break;
-                }
-                let r = parse_float_or_int_as_float(toks.next().unwrap())?;
-                let g = parse_float_or_int_as_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
-                let b = parse_float_or_int_as_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
-                values.push([r, g, b]);
-                if !has_brackets {
-                    break;
-                }
-            }
-            ParameterValue::Rgb(values)
+            let r = parse_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
+            let g = parse_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
+            let b = parse_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
+            ParameterValue::Rgb([r, g, b])
         }
         "bool" => {
-            let mut values = Vec::new();
-            while let Some(tok) = toks.peek() {
-                if tok == "]" {
-                    break;
-                }
-                if tok.starts_with('"') && !tok.contains("true") && !tok.contains("false") {
-                    break;
-                }
-                let tok = toks.next().unwrap();
-                let tok_clean = tok.trim_matches('"');
-                let v = match tok_clean {
-                    "true" => true,
-                    "false" => false,
-                    _ => return Err(ParseError::BadBool(tok.to_string())),
-                };
-                values.push(v);
-                if !has_brackets {
-                    break;
-                }
-            }
-            ParameterValue::Bool(values)
+            let tok = toks.next().ok_or(ParseError::UnexpectedEOF)?;
+            let tok_clean = tok.trim_matches('"');
+            let v = match tok_clean {
+                "true" => true,
+                "false" => false,
+                _ => return Err(ParseError::BadBool(tok.to_string())),
+            };
+            ParameterValue::Bool(v)
         }
         "string" => {
-            let mut values = Vec::new();
-            while let Some(tok) = toks.peek() {
-                if tok == "]" {
-                    break;
-                }
-                if !tok.starts_with('"') {
-                    break;
-                }
-                let s = parse_quoted_string(toks.next().unwrap())?;
-                values.push(s);
-                if !has_brackets {
-                    break;
-                }
-            }
-            ParameterValue::String(values)
+            let tok = toks.next().ok_or(ParseError::UnexpectedEOF)?;
+            let s = parse_quoted_string(tok)?;
+            ParameterValue::String(s.to_string())
         }
         "texture" => {
-            let mut values = Vec::new();
-            while let Some(tok) = toks.peek() {
-                if tok == "]" {
-                    break;
-                }
-                if !tok.starts_with('"') {
-                    break;
-                }
-                let s = parse_quoted_string(toks.next().unwrap())?;
-                values.push(s);
-                if !has_brackets {
-                    break;
-                }
-            }
-            ParameterValue::Texture(values)
+            let tok = toks.next().ok_or(ParseError::UnexpectedEOF)?;
+            let s = parse_quoted_string(tok)?;
+            ParameterValue::Texture(s.to_string())
         }
         "spectrum" => {
             warn!("spectrum parameters not fully supported, treating as RGB");
-            let mut values = Vec::new();
-            while let Some(tok) = toks.peek() {
-                if tok == "]" {
-                    break;
-                }
-                if tok.starts_with('"') {
-                    break;
-                }
-                let r = parse_float_or_int_as_float(toks.next().unwrap())?;
-                let g = parse_float_or_int_as_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
-                let b = parse_float_or_int_as_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
-                values.push([r, g, b]);
-                if !has_brackets {
-                    break;
-                }
-            }
-            ParameterValue::Rgb(values)
+            let r = parse_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
+            let g = parse_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
+            let b = parse_float(toks.next().ok_or(ParseError::UnexpectedEOF)?)?;
+            ParameterValue::Rgb([r, g, b])
         }
         _ => {
             warn!("unknown parameter type '{}', skipping", param_type);
             while let Some(tok) = toks.peek() {
-                if tok == "]" {
-                    break;
-                }
-                if tok.starts_with('"') {
+                if tok == "]" || tok.starts_with('"') {
                     break;
                 }
                 toks.next();
@@ -678,7 +586,7 @@ fn parse_parameter_value(toks: &mut TokenStream, param_type: &str) -> Result<Par
                     break;
                 }
             }
-            ParameterValue::Float(Vec::new())
+            ParameterValue::Float(0.0)
         }
     };
 
@@ -694,32 +602,34 @@ fn parse_identity_directive(state: &mut ParserState) {
 }
 
 fn parse_lookat_directive(toks: &mut TokenStream, state: &mut ParserState) -> Result<(), ParseError> {
-    let eye_x = parse_floats(toks)?;
-    let eye_y = parse_floats(toks)?;
-    let eye_z = parse_floats(toks)?;
+    let eye_x = parse_single_float(toks)?;
+    let eye_y = parse_single_float(toks)?;
+    let eye_z = parse_single_float(toks)?;
 
-    let look_x = parse_floats(toks)?;
-    let look_y = parse_floats(toks)?;
-    let look_z = parse_floats(toks)?;
+    let look_x = parse_single_float(toks)?;
+    let look_y = parse_single_float(toks)?;
+    let look_z = parse_single_float(toks)?;
 
-    let up_x = parse_floats(toks)?;
-    let up_y = parse_floats(toks)?;
-    let up_z = parse_floats(toks)?;
+    let up_x = parse_single_float(toks)?;
+    let up_y = parse_single_float(toks)?;
+    let up_z = parse_single_float(toks)?;
 
     let eye = Vec3(eye_x, eye_y, eye_z);
     let look = Vec3(look_x, look_y, look_z);
     let up = Vec3(up_x, up_y, up_z);
 
-    let look_at_transform = Transform::look_at(eye, look, up);
+    // pbrt uses a left-handed coordinate system, so we apply a handedness-swap within camera2world transform
+    // to make outputs look the same
+    let look_at_transform = Transform::look_at(eye, look, up, true);
     state.current_transform = state.current_transform.compose(look_at_transform.invert());
 
     Ok(())
 }
 
 fn parse_translate_directive(toks: &mut TokenStream, state: &mut ParserState) -> Result<(), ParseError> {
-    let x = parse_floats(toks)?;
-    let y = parse_floats(toks)?;
-    let z = parse_floats(toks)?;
+    let x = parse_single_float(toks)?;
+    let y = parse_single_float(toks)?;
+    let z = parse_single_float(toks)?;
 
     let translate_transform = Transform::translate(Vec3(x, y, z));
     state.current_transform = state.current_transform.compose(translate_transform);
@@ -728,9 +638,9 @@ fn parse_translate_directive(toks: &mut TokenStream, state: &mut ParserState) ->
 }
 
 fn parse_scale_directive(toks: &mut TokenStream, state: &mut ParserState) -> Result<(), ParseError> {
-    let x = parse_floats(toks)?;
-    let y = parse_floats(toks)?;
-    let z = parse_floats(toks)?;
+    let x = parse_single_float(toks)?;
+    let y = parse_single_float(toks)?;
+    let z = parse_single_float(toks)?;
 
     let scale_transform = Transform::scale(Vec3(x, y, z));
     state.current_transform = state.current_transform.compose(scale_transform);
@@ -739,10 +649,10 @@ fn parse_scale_directive(toks: &mut TokenStream, state: &mut ParserState) -> Res
 }
 
 fn parse_rotate_directive(toks: &mut TokenStream, state: &mut ParserState) -> Result<(), ParseError> {
-    let angle = parse_floats(toks)?;
-    let x = parse_floats(toks)?;
-    let y = parse_floats(toks)?;
-    let z = parse_floats(toks)?;
+    let angle = parse_single_float(toks)?;
+    let x = parse_single_float(toks)?;
+    let y = parse_single_float(toks)?;
+    let z = parse_single_float(toks)?;
 
     let rotate_transform = Transform::rotate(angle.to_radians(), Vec3(x, y, z));
     state.current_transform = state.current_transform.compose(rotate_transform);
@@ -755,7 +665,7 @@ fn parse_transform_directive(toks: &mut TokenStream, state: &mut ParserState) ->
 
     let mut m = [0.0f32; 16];
     for v in &mut m {
-        *v = parse_floats(toks)?;
+        *v = parse_single_float(toks)?;
     }
 
     toks.expect("]")?;
@@ -772,7 +682,7 @@ fn parse_concat_transform_directive(toks: &mut TokenStream, state: &mut ParserSt
 
     let mut m = [0.0f32; 16];
     for v in &mut m {
-        *v = parse_floats(toks)?;
+        *v = parse_single_float(toks)?;
     }
 
     toks.expect("]")?;
@@ -802,7 +712,7 @@ fn parse_camera_directive(
     let camera_type = parse_type_string(toks)?;
     let params = parse_parameter_list(toks)?;
 
-    let camera = match camera_type.as_str() {
+    let camera = match camera_type {
         "perspective" => {
             let fov = params.get_float_or("fov", 90.0);
             let fov_rad = fov.to_radians();
@@ -811,11 +721,12 @@ fn parse_camera_directive(
             let camera_position = camera_to_world.apply_point(Vec3(0.0, 0.0, 0.0));
             let target = camera_to_world.apply_point(Vec3(0.0, 0.0, 1.0));
             let up = camera_to_world.apply_vector(Vec3(0.0, 1.0, 0.0));
-
+            
             Camera::lookat_camera_perspective(
                 camera_position,
                 target,
                 up,
+                true,
                 fov_rad,
                 state.film_width,
                 state.film_height,
@@ -831,6 +742,7 @@ fn parse_camera_directive(
                 camera_position,
                 target,
                 up,
+                true,
                 state.film_width,
                 state.film_height,
                 1.0 / state.film_width.min(state.film_height) as f32,
@@ -847,6 +759,7 @@ fn parse_camera_directive(
                 camera_position,
                 target,
                 up,
+                true,
                 (90.0_f32).to_radians(),
                 state.film_width,
                 state.film_height,
@@ -867,7 +780,7 @@ fn resolve_texture(
     default: Vec3,
 ) -> TextureId {
     if let Some(tex_name) = params.get_texture(param_name) {
-        if let Some(&tex_id) = state.named_textures.get(tex_name) {
+        if let Some(tex_id) = state.get_named_texture(tex_name) {
             return tex_id;
         }
     }
@@ -884,7 +797,7 @@ fn resolve_float_texture(
     default: f32,
 ) -> TextureId {
     if let Some(tex_name) = params.get_texture(param_name) {
-        if let Some(&tex_id) = state.named_textures.get(tex_name) {
+        if let Some(tex_id) = state.get_named_texture(tex_name) {
             return tex_id;
         }
     }
@@ -901,7 +814,7 @@ fn parse_material_directive(
     let material_type = parse_type_string(toks)?;
     let params = parse_parameter_list(toks)?;
 
-    let material = create_material(&material_type, &params, state, builder)?;
+    let material = create_material(material_type, &params, state, builder)?;
     state.current_material = Some(builder.add_material(material));
 
     Ok(())
@@ -960,8 +873,34 @@ fn create_material(
             }
         }
         "coateddiffuse" => {
-            let albedo = resolve_texture(state, builder, params, "reflectance", Vec3(0.5, 0.5, 0.5));
-            Material::Diffuse { albedo }
+            let diffuse_albedo = resolve_texture(state, builder, params, "reflectance", Vec3(0.5, 0.5, 0.5));
+            let coat_eta = params.get_float_or("eta", 1.5);
+            let dielectric_eta = builder.add_constant_texture(Vec4(coat_eta, 0.0, 0.0, 0.0));
+
+            let roughness = params.get_float("roughness");
+            let uroughness = params.get_float("uroughness");
+            let vroughness = params.get_float("vroughness");
+            let dielectric_roughness = if roughness.is_some() || uroughness.is_some() || vroughness.is_some() {
+                let u = uroughness.or(roughness).unwrap_or(0.0);
+                let v = vroughness.or(roughness).unwrap_or(0.0);
+                Some(builder.add_constant_texture(Vec4(u, v, 0.0, 0.0)))
+            } else {
+                None
+            };
+
+            let thickness_val = params.get_float_or("thickness", 0.01);
+            let thickness = builder.add_constant_texture(Vec4(thickness_val, 0.0, 0.0, 0.0));
+
+            let coat_albedo_color = params.get_rgb_or("albedo", Vec3(1.0, 1.0, 1.0));
+            let coat_albedo = builder.add_constant_texture(Vec4(coat_albedo_color.0, coat_albedo_color.1, coat_albedo_color.2, 1.0));
+
+            Material::CoatedDiffuse {
+                diffuse_albedo,
+                dielectric_eta,
+                dielectric_roughness,
+                thickness,
+                coat_albedo,
+            }
         }
         "coatedconductor" => {
             let eta = resolve_texture(state, builder, params, "conductor.eta", Vec3(0.2, 0.2, 0.2));
@@ -1017,7 +956,7 @@ fn parse_make_named_material_directive(
     let material_type = params.get_string("type").unwrap_or("diffuse");
     let material = create_material(material_type, &params, state, builder)?;
     let material_id = builder.add_material(material);
-    state.named_materials.insert(name, material_id);
+    state.named_materials.push((name.to_string(), material_id));
 
     Ok(())
 }
@@ -1028,7 +967,7 @@ fn parse_named_material_directive(
 ) -> Result<(), ParseError> {
     let name = parse_type_string(toks)?;
 
-    if let Some(&material_id) = state.named_materials.get(&name) {
+    if let Some(material_id) = state.get_named_material(name) {
         state.current_material = Some(material_id);
     } else {
         warn!("unknown named material '{}', using current material", name);
@@ -1048,7 +987,7 @@ fn parse_texture_directive(
     let tex_type = parse_type_string(toks)?;
     let params = parse_parameter_list(toks)?;
 
-    let texture = match tex_type.as_str() {
+    let texture = match tex_type {
         "constant" => {
             let value = params.get_rgb_or("value", Vec3(1.0, 1.0, 1.0));
             Texture::ConstantTexture {
@@ -1106,7 +1045,7 @@ fn parse_texture_directive(
     };
 
     let tex_id = builder.add_texture(texture);
-    state.named_textures.insert(name, tex_id);
+    state.named_textures.push((name.to_string(), tex_id));
 
     Ok(())
 }
@@ -1115,6 +1054,7 @@ fn parse_shape_directive(
     toks: &mut TokenStream,
     state: &mut ParserState,
     builder: &mut SceneBuilder,
+    base_path: &Path,
 ) -> Result<(), ParseError> {
     let shape_type = parse_type_string(toks)?;
     let params = parse_parameter_list(toks)?;
@@ -1124,7 +1064,7 @@ fn parse_shape_directive(
         builder.add_material(Material::Diffuse { albedo })
     });
 
-    let shape = match shape_type.as_str() {
+    let shape = match shape_type {
         "sphere" => {
             let radius = params.get_float_or("radius", 1.0);
             Shape::Sphere {
@@ -1155,7 +1095,21 @@ fn parse_shape_directive(
             let normals: Vec<Vec3> = if let Some(n) = params.get_normal3s("N") {
                 n.iter().map(|n| Vec3(n[0], n[1], n[2])).collect()
             } else {
-                Vec::new()
+                // Generate per-vertex normals from face normals
+                let mut normals = vec![Vec3::zero(); vertices.len()];
+                for tri in &tris {
+                    let p0 = vertices[tri.0 as usize];
+                    let p1 = vertices[tri.1 as usize];
+                    let p2 = vertices[tri.2 as usize];
+                    let face_normal = Vec3::cross(p1 - p0, p2 - p0);
+                    normals[tri.0 as usize] = normals[tri.0 as usize] + face_normal;
+                    normals[tri.1 as usize] = normals[tri.1 as usize] + face_normal;
+                    normals[tri.2 as usize] = normals[tri.2 as usize] + face_normal;
+                }
+                for n in &mut normals {
+                    *n = n.unit();
+                }
+                normals
             };
 
             let uvs: Vec<Vec2> = if let Some(uv) = params.get_point2s("uv") {
@@ -1178,10 +1132,16 @@ fn parse_shape_directive(
             Shape::TriangleMesh(mesh)
         }
         "plymesh" => {
-            warn!("plymesh not supported, creating placeholder sphere");
-            Shape::Sphere {
-                center: Vec3(0.0, 0.0, 0.0),
-                radius: 1.0,
+            let filename = params.get_string("filename")
+                .ok_or_else(|| ParseError::MissingParameter("filename".to_string()))?;
+            let ply_path = base_path.join(filename);
+
+            match Mesh::from_ply(&ply_path) {
+                Ok(mesh) => Shape::TriangleMesh(mesh),
+                Err(e) => {
+                    warn!("failed to load PLY file '{}': {}", filename, e);
+                    return Ok(());
+                }
             }
         }
         "disk" => {
@@ -1215,13 +1175,13 @@ fn parse_light_source_directive(
     let light_type = parse_type_string(toks)?;
     let params = parse_parameter_list(toks)?;
 
-    match light_type.as_str() {
+    match light_type {
         "point" => {
             let intensity = params.get_rgb_or("I", Vec3(1.0, 1.0, 1.0));
             let scale = params.get_float_or("scale", 1.0);
             let from = params
-                .get_point3s("from")
-                .map(|p| Vec3(p[0][0], p[0][1], p[0][2]))
+                .get_point3("from")
+                .map(|p| Vec3(p[0], p[1], p[2]))
                 .unwrap_or(Vec3(0.0, 0.0, 0.0));
 
             let position = state.current_transform.apply_point(from);
@@ -1238,12 +1198,12 @@ fn parse_light_source_directive(
             let scale = params.get_float_or("scale", 1.0);
 
             let from = params
-                .get_point3s("from")
-                .map(|p| Vec3(p[0][0], p[0][1], p[0][2]))
+                .get_point3("from")
+                .map(|p| Vec3(p[0], p[1], p[2]))
                 .unwrap_or(Vec3(0.0, 0.0, 1.0));
             let to = params
-                .get_point3s("to")
-                .map(|p| Vec3(p[0][0], p[0][1], p[0][2]))
+                .get_point3("to")
+                .map(|p| Vec3(p[0], p[1], p[2]))
                 .unwrap_or(Vec3(0.0, 0.0, 0.0));
 
             let direction = (to - from).unit();
@@ -1262,8 +1222,8 @@ fn parse_light_source_directive(
         "spot" => {
             let intensity = params.get_rgb_or("I", Vec3(1.0, 1.0, 1.0));
             let from = params
-                .get_point3s("from")
-                .map(|p| Vec3(p[0][0], p[0][1], p[0][2]))
+                .get_point3("from")
+                .map(|p| Vec3(p[0], p[1], p[2]))
                 .unwrap_or(Vec3(0.0, 0.0, 0.0));
 
             let position = state.current_transform.apply_point(from);
@@ -1317,117 +1277,94 @@ fn skip_directive(toks: &mut TokenStream) -> Result<(), ParseError> {
     Ok(())
 }
 
-fn load_and_preprocess(filepath: &Path) -> Result<String, ParseError> {
-    let content = std::fs::read_to_string(filepath)
-        .map_err(|e| ParseError::FileError(format!("{}: {}", filepath.display(), e)))?;
-
-    Ok(strip_comments(&content))
-}
-
-fn parse_include_directive(
-    toks: &mut TokenStream,
-    base_path: &Path,
-    all_tokens: &mut Vec<String>,
-    insert_pos: &mut usize,
-) -> Result<(), ParseError> {
-    let include_path_str = parse_type_string(toks)?;
-    let include_path = base_path.join(&include_path_str);
-
-    let included_content = load_and_preprocess(&include_path)?;
-    let included_tokens = tokenize(&included_content);
-
-    for tok in included_tokens.into_iter().rev() {
-        all_tokens.insert(*insert_pos, tok);
-    }
-
-    Ok(())
-}
-
 pub fn scene_from_pbrt_file(filepath: &Path) -> Result<Scene, ParseError> {
     let base_path = filepath.parent().unwrap_or(Path::new("."));
 
-    let content = load_and_preprocess(filepath)?;
-    let mut all_tokens = tokenize(&content);
+    let content = std::fs::read_to_string(filepath)
+        .map_err(|e| ParseError::FileError(format!("{}: {}", filepath.display(), e)))?;
 
+    parse_pbrt_string(&content, base_path)
+}
+
+fn parse_pbrt_string(content: &str, base_path: &Path) -> Result<Scene, ParseError> {
     let mut state = ParserState::new();
     let mut builder = SceneBuilder::new();
 
-    let mut pos = 0;
-    while pos < all_tokens.len() {
-        let tok = &all_tokens[pos];
-        pos += 1;
+    parse_pbrt_content(content, base_path, &mut state, &mut builder)?;
 
-        let mut temp_stream = TokenStream {
-            tokens: all_tokens.clone(),
-            pos,
-        };
+    if !state.has_camera {
+        warn!("no camera in scene");
+        todo!("error?");
+    }
 
-        match tok.as_str() {
+    if !state.has_lights {
+        warn!("no lights found in scene, adding default light");
+        todo!("error?")
+    }
+
+    Ok(builder.build())
+}
+
+fn parse_pbrt_content(
+    content: &str,
+    base_path: &Path,
+    state: &mut ParserState,
+    builder: &mut SceneBuilder,
+) -> Result<(), ParseError> {
+    let mut toks = TokenStream::new(content);
+
+    while let Some(directive) = toks.next() {
+        match directive {
             "Identity" => {
-                parse_identity_directive(&mut state);
+                parse_identity_directive(state);
             }
             "LookAt" => {
-                parse_lookat_directive(&mut temp_stream, &mut state)?;
-                pos = temp_stream.pos;
+                parse_lookat_directive(&mut toks, state)?;
             }
             "Translate" => {
-                parse_translate_directive(&mut temp_stream, &mut state)?;
-                pos = temp_stream.pos;
+                parse_translate_directive(&mut toks, state)?;
             }
             "Scale" => {
-                parse_scale_directive(&mut temp_stream, &mut state)?;
-                pos = temp_stream.pos;
+                parse_scale_directive(&mut toks, state)?;
             }
             "Rotate" => {
-                parse_rotate_directive(&mut temp_stream, &mut state)?;
-                pos = temp_stream.pos;
+                parse_rotate_directive(&mut toks, state)?;
             }
             "Transform" => {
-                parse_transform_directive(&mut temp_stream, &mut state)?;
-                pos = temp_stream.pos;
+                parse_transform_directive(&mut toks, state)?;
             }
             "ConcatTransform" => {
-                parse_concat_transform_directive(&mut temp_stream, &mut state)?;
-                pos = temp_stream.pos;
+                parse_concat_transform_directive(&mut toks, state)?;
             }
             "Film" => {
-                parse_film_directive(&mut temp_stream, &mut state)?;
-                pos = temp_stream.pos;
+                parse_film_directive(&mut toks, state)?;
             }
             "Camera" => {
-                parse_camera_directive(&mut temp_stream, &mut state, &mut builder)?;
-                pos = temp_stream.pos;
+                parse_camera_directive(&mut toks, state, builder)?;
             }
             "Material" => {
-                parse_material_directive(&mut temp_stream, &mut state, &mut builder)?;
-                pos = temp_stream.pos;
+                parse_material_directive(&mut toks, state, builder)?;
             }
             "MakeNamedMaterial" => {
-                parse_make_named_material_directive(&mut temp_stream, &mut state, &mut builder)?;
-                pos = temp_stream.pos;
+                parse_make_named_material_directive(&mut toks, state, builder)?;
             }
             "NamedMaterial" => {
-                parse_named_material_directive(&mut temp_stream, &mut state)?;
-                pos = temp_stream.pos;
+                parse_named_material_directive(&mut toks, state)?;
             }
             "Texture" => {
-                parse_texture_directive(&mut temp_stream, &mut state, &mut builder, base_path)?;
-                pos = temp_stream.pos;
+                parse_texture_directive(&mut toks, state, builder, base_path)?;
             }
             "Shape" => {
-                parse_shape_directive(&mut temp_stream, &mut state, &mut builder)?;
-                pos = temp_stream.pos;
+                parse_shape_directive(&mut toks, state, builder, base_path)?;
             }
             "LightSource" => {
-                parse_light_source_directive(&mut temp_stream, &mut state, &mut builder)?;
-                pos = temp_stream.pos;
+                parse_light_source_directive(&mut toks, state, builder)?;
             }
             "AreaLightSource" => {
-                parse_area_light_source_directive(&mut temp_stream, &mut state)?;
-                pos = temp_stream.pos;
+                parse_area_light_source_directive(&mut toks, state)?;
             }
             "WorldBegin" => {
-                parse_world_begin(&mut state);
+                parse_world_begin(state);
             }
             "WorldEnd" => {
                 break;
@@ -1445,34 +1382,29 @@ pub fn scene_from_pbrt_file(filepath: &Path) -> Result<Scene, ParseError> {
                 state.pop_attributes();
             }
             "Include" => {
-                let include_path_str = parse_type_string(&mut temp_stream)?;
-                pos = temp_stream.pos;
+                let include_path_str = parse_type_string(&mut toks)?;
+                let include_path = base_path.join(include_path_str);
 
-                let include_path = base_path.join(&include_path_str);
-                let included_content = load_and_preprocess(&include_path)?;
-                let included_tokens = tokenize(&included_content);
+                let included_content = std::fs::read_to_string(&include_path)
+                    .map_err(|e| ParseError::FileError(format!("{}: {}", include_path.display(), e)))?;
 
-                for tok in included_tokens.into_iter().rev() {
-                    all_tokens.insert(pos, tok);
-                }
+                let include_base = include_path.parent().unwrap_or(base_path);
+                parse_pbrt_content(&included_content, include_base, state, builder)?;
             }
             "Sampler" | "Integrator" | "PixelFilter" | "Accelerator" | "ColorSpace" => {
-                skip_directive(&mut temp_stream)?;
-                pos = temp_stream.pos;
+                skip_directive(&mut toks)?;
             }
             "ReverseOrientation" => {
                 // ignored
             }
             "ObjectBegin" | "ObjectEnd" | "ObjectInstance" => {
-                if tok.as_str() == "ObjectBegin" || tok.as_str() == "ObjectInstance" {
-                    skip_directive(&mut temp_stream)?;
-                    pos = temp_stream.pos;
+                if directive == "ObjectBegin" || directive == "ObjectInstance" {
+                    skip_directive(&mut toks)?;
                 }
                 warn!("instancing (ObjectBegin/End/Instance) not supported");
             }
             "MediumInterface" | "MakeNamedMedium" => {
-                skip_directive(&mut temp_stream)?;
-                pos = temp_stream.pos;
+                skip_directive(&mut toks)?;
                 warn!("media/volumes not supported");
             }
             other => {
@@ -1484,24 +1416,5 @@ pub fn scene_from_pbrt_file(filepath: &Path) -> Result<Scene, ParseError> {
         }
     }
 
-    if !state.has_camera {
-        builder.add_camera(Camera::lookat_camera_perspective(
-            Vec3(0.0, 0.0, 0.0),
-            Vec3(0.0, 0.0, -1.0),
-            Vec3(0.0, 1.0, 0.0),
-            (90.0_f32).to_radians(),
-            state.film_width,
-            state.film_height,
-        ));
-    }
-
-    if !state.has_lights {
-        warn!("no lights found in scene, adding default light");
-        builder.add_light(Light::DirectionLight {
-            direction: Vec3(0.0, 0.0, -1.0),
-            radiance: Vec3(1.0, 1.0, 1.0),
-        });
-    }
-
-    Ok(builder.build())
+    Ok(())
 }

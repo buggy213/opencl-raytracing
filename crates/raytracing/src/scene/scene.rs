@@ -403,7 +403,8 @@ pub(super) mod gltf {
                 id
             };
 
-            let pbr_material = todo!("find a more suitable material");
+            // TODO: find a more suitable material
+            let pbr_material = Material::Diffuse { albedo: base_color_tex };
 
             materials.push(pbr_material);
 

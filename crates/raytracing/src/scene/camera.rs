@@ -83,7 +83,7 @@ impl Camera {
             yfov
         };
         let invt: f32 = 1.0 / f32::tan(fov / 2.0);
-        let fov_scale: Transform = Transform::scale(Vec3(-invt, invt, 1.0)); // not sure why flipping x coordinate is required, but oh well
+        let fov_scale: Transform = Transform::scale(Vec3(-invt, -invt, 1.0)); // flip both X and Y to match raster convention (Y=0 at top)
                                                                              // if image is wide, screen space x ranges from -1 to 1 and screen space y ranges from -k to k where k is proportionally smaller
                                                                              // if image is tall, screen space x ranges from -k to k and screen space y ranges from -1 to 1 where k is proportionally smaller
         let screen_space_top_left: Vec3 = if wide {
@@ -200,8 +200,9 @@ impl Camera {
     pub fn lookat_camera_perspective(
         camera_position: Vec3,
         target: Vec3,
-
         up: Vec3,
+        swap_handedness: bool,
+
         yfov: f32, // radians
         raster_width: usize,
         raster_height: usize,
@@ -217,7 +218,7 @@ impl Camera {
             raster_height,
         );
 
-        let camera_to_world = Transform::look_at(camera_position, target, up);
+        let camera_to_world = Transform::look_at(camera_position, target, up, swap_handedness);
         let world_to_camera = camera_to_world.invert();
         let raster_to_camera = camera_to_raster.invert();
 
@@ -238,8 +239,9 @@ impl Camera {
     pub fn lookat_camera_orthographic(
         camera_position: Vec3,
         target: Vec3,
-
         up: Vec3,
+        swap_handedness: bool,
+
         raster_width: usize,
         raster_height: usize,
         raster_to_screen_ratio: f32,
@@ -259,7 +261,7 @@ impl Camera {
             screen_space_height,
         );
 
-        let camera_to_world = Transform::look_at(camera_position, target, up);
+        let camera_to_world = Transform::look_at(camera_position, target, up, swap_handedness);
         let world_to_camera = camera_to_world.invert();
         let raster_to_camera = camera_to_raster.invert();
 
@@ -285,6 +287,8 @@ impl Camera {
         camera_position: Vec3,
         target: Vec3,
         up: Vec3,
+        swap_handedness: bool,
+
         yfov: f32, // radians
         raster_width: usize,
         raster_height: usize,
@@ -302,7 +306,7 @@ impl Camera {
             raster_height,
         );
 
-        let camera_to_world = Transform::look_at(camera_position, target, up);
+        let camera_to_world = Transform::look_at(camera_position, target, up, swap_handedness);
         let world_to_camera = camera_to_world.invert();
         let raster_to_camera = camera_to_raster.invert();
 
@@ -323,4 +327,9 @@ impl Camera {
             raster_to_camera,
         }
     }
+}
+
+#[test]
+fn test_coordinate_system() {
+    todo!("write a test to ensure coordinate system matches expectations");
 }

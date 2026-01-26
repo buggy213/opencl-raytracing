@@ -813,8 +813,8 @@ pub fn render_single_pixel(
     single_pixel_sampler.start_sample((x, y), sample_index);
 
     let (ray, ray_differentials) = generate_ray(
-        &scene.camera, 
-        x, 
+        &scene.camera,
+        x,
         y,
         &mut single_pixel_sampler,
         raytracer_settings.samples_per_pixel
