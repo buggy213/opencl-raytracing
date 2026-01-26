@@ -1,0 +1,47 @@
+# Simple test scene for the PBRT parser
+
+Film "rgb"
+    "integer xresolution" [ 400 ]
+    "integer yresolution" [ 400 ]
+
+LookAt 0 0 4  0 0 0  0 1 0
+Camera "perspective" "float fov" [ 45 ]
+
+WorldBegin
+
+# Light
+LightSource "point" "rgb I" [ 100 100 100 ]
+    "point3 from" [ 2 2 2 ]
+
+# A red sphere
+AttributeBegin
+    Translate 0 0 0
+    Material "diffuse" "rgb reflectance" [ 0.8 0.2 0.2 ]
+    Shape "sphere" "float radius" [ 1 ]
+AttributeEnd
+
+# A blue sphere
+AttributeBegin
+    Translate 2 0 0
+    Material "diffuse" "rgb reflectance" [ 0.2 0.2 0.8 ]
+    Shape "sphere" "float radius" [ 0.5 ]
+AttributeEnd
+
+# Floor (triangle mesh)
+AttributeBegin
+    Material "diffuse" "rgb reflectance" [ 0.5 0.5 0.5 ]
+    Shape "trianglemesh"
+        "point3 P" [
+            -5 -1 -5
+             5 -1 -5
+             5 -1  5
+            -5 -1  5
+        ]
+        "normal N" [
+            0 1 0
+            0 1 0
+            0 1 0
+            0 1 0
+        ]
+        "integer indices" [ 0 1 2  0 2 3 ]
+AttributeEnd

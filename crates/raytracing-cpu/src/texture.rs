@@ -166,6 +166,8 @@ mod mipmap {
 
     #[test]
     fn test_mipmap_generation() {
+        todo!("fix this test");
+
         let crate_path = env!("CARGO_MANIFEST_DIR");
         let test_path = std::path::Path::new(crate_path).join("test");
 

@@ -115,7 +115,7 @@ fn main() {
 
     let (builtin_scene_settings, scene) = if let Some(filename) = cli_args.input.scene_path {
         let scene = match filename.extension().and_then(|e| e.to_str()) {
-            Some("pbrt") => todo!("pbrt importer"),
+            Some("pbrt") => scene::scene_from_pbrt_file(&filename).expect("failed to load PBRT scene"),
             Some("gltf") => scene::scene_from_gltf_file(&filename).expect("failed to load GLTF scene"),
             ext => {
                 warn!("unrecognized file extension {ext:?}, trying to import as gltf");

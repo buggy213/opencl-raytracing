@@ -232,21 +232,21 @@ pub(crate) fn permute(mut index: u32, length: u32, seed: u32) -> u32 {
     let mask = length.next_power_of_two() - 1;
     loop {
         index ^= seed;
-        index *= 0xe170893d;
+        index = index.wrapping_mul(0xe170893d);
         index ^= seed >> 16;
         index ^= (index & mask) >> 4;
         index ^= seed >> 8;
-        index *= 0x0929eb3f;
+        index = index.wrapping_mul(0x0929eb3f);
         index ^= seed >> 23;
         index ^= (index & mask) >> 1;
-        index *= 1 | seed >> 27;
-        index *= 0x6935fa69;
-        index ^= (index & mask) >> 11; 
-        index *= 0x74dcb303;
-        index ^= (index & mask) >> 2; 
-        index *= 0x9e501cc3;
-        index ^= (index & mask) >> 2; 
-        index *= 0xc860a3df;
+        index = index.wrapping_mul(1 | seed >> 27);
+        index = index.wrapping_mul(0x6935fa69);
+        index ^= (index & mask) >> 11;
+        index = index.wrapping_mul(0x74dcb303);
+        index ^= (index & mask) >> 2;
+        index = index.wrapping_mul(0x9e501cc3);
+        index ^= (index & mask) >> 2;
+        index = index.wrapping_mul(0xc860a3df);
         index &= mask;
         index ^= index >> 5;
 
