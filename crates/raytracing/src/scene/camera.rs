@@ -131,12 +131,16 @@ impl Camera {
     pub fn from_gltf_camera_node(camera_node: &gltf::Node, raster_height: usize) -> Camera {
         let gltf_camera: gltf::Camera = camera_node.camera().unwrap();
         let (camera_position, camera_rotation, _) = camera_node.transform().decomposed();
-
+        
         let mut camera_to_world_matrix: Matrix4x4 = Matrix4x4 {
             data: camera_node.transform().matrix(),
         };
         camera_to_world_matrix.transpose();
-        let camera_to_world: Transform = Transform::from(camera_to_world_matrix);
+        let camera_to_world: Transform = {
+            let flip_y = Transform::scale(Vec3(1.0, -1.0, 1.0));
+            flip_y.compose(Transform::from(camera_to_world_matrix))
+        };
+        
         let world_to_camera_matrix: Matrix4x4 = camera_to_world_matrix.invert().unwrap();
         let world_to_camera: Transform = Transform::from(world_to_camera_matrix);
         let camera_type;
