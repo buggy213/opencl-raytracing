@@ -4,6 +4,8 @@ use bitflags::bitflags_match;
 use clap::Parser;
 
 use raytracing::scene::test_scenes;
+
+mod tui;
 use raytracing::{
     renderer::{AOVFlags, RaytracerSettings, RenderOutput},
     sampling::Sampler,
@@ -14,6 +16,9 @@ use tracing::warn;
 
 #[derive(Debug, clap::Parser)]
 struct CommandLineArguments {
+    #[arg(short, long, help = "Launch interactive TUI for configuration")]
+    interactive: bool,
+
     #[command(flatten)]
     input: InputScene,
 
@@ -108,12 +113,29 @@ fn main() {
         return;
     }
 
+    // Handle interactive mode
+    let cli_args = if cli_args.interactive {
+        match tui::run() {
+            Ok(Some(args)) => args,
+            Ok(None) => {
+                println!("Render cancelled.");
+                return;
+            }
+            Err(e) => {
+                eprintln!("TUI error: {}", e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        cli_args
+    };
+
     if cli_args.input.scene_path.is_none() && cli_args.input.scene_name.is_none() {
         eprintln!("error: either --scene-path or --scene-name is required");
         std::process::exit(1);
     }
 
-    let (builtin_scene_settings, scene) = if let Some(filename) = cli_args.input.scene_path {
+    let (builtin_scene_settings, scene) = if let Some(filename) = cli_args.input.scene_path.clone() {
         let scene = match filename.extension().and_then(|e| e.to_str()) {
             Some("pbrt") => scene::scene_from_pbrt_file(&filename).expect("failed to load PBRT scene"),
             Some("gltf") | Some("glb") => scene::scene_from_gltf_file(&filename).expect("failed to load GLTF scene"),
@@ -381,8 +403,8 @@ fn save_to_exr(render_output: RenderOutput, aov_flags: AOVFlags, output_path: &P
             AOVFlags::MIP_LEVEL => {
                 if let Some(ref mip_level) = render_output.mip_level {
                     raytracing_cpu::utils::exr::channel_from_f32_array(
-                        &mut channels, 
-                        "Mip Level", 
+                        &mut channels,
+                        "Mip Level",
                         &mip_level
                     );
                 }

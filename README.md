@@ -109,6 +109,9 @@ Options:
   -h, --help  Print help
 ```
 
+### Interactive mode
+CLI also has the `--interactive` flag, which allows you to set these different settings within a user-friendly terminal interface. All of the same settings are exposed. 
+
 ## Tests
 
 - **Unit tests**: Typically used for math and utility routines. Run with `cargo test`.
