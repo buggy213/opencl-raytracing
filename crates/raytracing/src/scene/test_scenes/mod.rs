@@ -527,7 +527,7 @@ pub fn out_of_focus_sphere_scene() -> Scene {
 pub fn coated_diffuse_bunny_scene() -> Scene {
     let mut cornell_box = cornell_box();
 
-    let bunny_mesh = Mesh::from_ply_reader(std::io::Cursor::new(assets::BUNNY_PLY))
+    let bunny_mesh = Mesh::from_ply_reader(std::io::Cursor::new(assets::BUNNY_PLY), false)
         .expect("failed to load bunny.ply");
     let bunny = Shape::TriangleMesh(bunny_mesh);
 

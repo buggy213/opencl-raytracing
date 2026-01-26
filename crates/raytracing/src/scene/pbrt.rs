@@ -1124,7 +1124,8 @@ fn parse_shape_directive(
                 .ok_or_else(|| ParseError::MissingParameter("filename".to_string()))?;
             let ply_path = base_path.join(filename);
 
-            match Mesh::from_ply(&ply_path) {
+            // pbrt meshes appear to have CW winding order
+            match Mesh::from_ply(&ply_path, true) {
                 Ok(mesh) => Shape::TriangleMesh(mesh),
                 Err(e) => {
                     warn!("failed to load PLY file '{}': {}", filename, e);

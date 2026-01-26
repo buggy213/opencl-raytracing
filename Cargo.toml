@@ -45,3 +45,8 @@ raytracing-cpu = { path = "crates/raytracing-cpu" }
 raytracing-optix = { path = "crates/raytracing-optix" }
 
 viewer = { path = "crates/viewer" }
+
+# speed up scene import / mesh import using release build for 
+# external dependencies
+[profile.dev.package."*"]
+opt-level = 3

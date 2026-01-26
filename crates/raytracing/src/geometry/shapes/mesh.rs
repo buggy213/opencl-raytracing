@@ -76,14 +76,14 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn from_ply<P: AsRef<Path>>(path: P) -> Result<Mesh> {
+    pub fn from_ply<P: AsRef<Path>>(path: P, swap_handedness: bool) -> Result<Mesh> {
         let file = std::fs::File::open(path.as_ref())
             .with_context(|| format!("failed to open PLY file: {:?}", path.as_ref()))?;
         let reader = std::io::BufReader::new(file);
-        Self::from_ply_reader(reader)
+        Self::from_ply_reader(reader, swap_handedness)
     }
 
-    pub fn from_ply_reader<R: BufRead>(mut reader: R) -> Result<Mesh> {
+    pub fn from_ply_reader<R: BufRead>(mut reader: R, swap_handedness: bool) -> Result<Mesh> {
         let parser = Parser::<PlyVertex>::new();
         let header = parser.read_header(&mut reader).context("failed to parse PLY header")?;
 
@@ -135,7 +135,14 @@ impl Mesh {
             if indices.len() >= 3 {
                 // Triangulate polygon using fan triangulation
                 for i in 1..indices.len() - 1 {
-                    tris.push(Vec3u(indices[0], indices[i] as u32, indices[i + 1] as u32));
+                    let tri = if swap_handedness {
+                        Vec3u(indices[0], indices[i + 1], indices[i])
+                    }
+                    else {
+                        Vec3u(indices[0], indices[i], indices[i + 1])
+                    };
+
+                    tris.push(tri);
                 }
             }
         }
