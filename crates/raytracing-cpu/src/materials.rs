@@ -287,7 +287,7 @@ impl CpuBsdf {
                                 break;
                             };
 
-                            beta *= exit_reflect_sample.bsdf * exit_reflect_sample.bsdf.z().abs() / exit_reflect_sample.pdf;
+                            beta *= exit_reflect_sample.bsdf * exit_reflect_sample.wi.z().abs() / exit_reflect_sample.pdf;
                             w = exit_reflect_sample.wi;
                         }
                         else {
