@@ -186,7 +186,7 @@ impl Default for Model {
 
             backend: Backend::Cpu,
 
-            num_threads: 8,
+            num_threads: num_cpus::get() as u32,
             ray_depth: 8,
             spp: 4,
             light_samples: 4,
@@ -277,7 +277,12 @@ impl Model {
                 if self.scene_path.is_empty() {
                     return Err("Scene path is empty".to_string());
                 }
-                cmd.push(format!("--scene-path \"{}\"", self.scene_path));
+                let absolute_scene_path = match std::fs::canonicalize(&self.scene_path) {
+                    Ok(p) => p,
+                    Err(_) => { return Err("not able to get realpath".to_string()); }
+                };
+                    
+                cmd.push(format!("--scene-path \"{}\"", absolute_scene_path.to_string_lossy()));
             }
             SceneInputType::BuiltinName => {
                 let name = &self.available_scenes[self.scene_name_index];

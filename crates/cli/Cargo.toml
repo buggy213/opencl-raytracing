@@ -18,6 +18,7 @@ serde_json = "1.0"
 
 ratatui = "0.30"
 crossterm = "0.28"
+num_cpus = { workspace = true }
 
 [features]
 default = []

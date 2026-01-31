@@ -17,4 +17,4 @@ bitflags = { workspace = true }
 
 png = "0.17.16"
 exr = { workspace = true }
-num_cpus = "1.17.0"
+num_cpus = { workspace = true }

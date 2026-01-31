@@ -34,6 +34,9 @@ bitflags = "2.10.0"
 image = "0.25.8"
 exr = "1.74.0"
 
+# runtime feature detection
+num_cpus = "1.17.0"
+
 # workspace members
 embree4 = { path = "crates/embree4" }
 embree4-sys = { path = "crates/embree4-sys" }
