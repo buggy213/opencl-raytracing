@@ -94,6 +94,10 @@ enum RenderCommand {
         x: u32,
         #[arg(help = "Pixel y coordinate")]
         y: u32,
+        #[arg(help = "Sample count")]
+        sample_count: Option<u32>,
+        #[arg(help = "Sample offset")]
+        sample_offset: Option<u32>
     },
     #[command(about = "List all builtin test scenes as JSON")]
     ListScenes,
@@ -192,8 +196,10 @@ fn main() {
 
     let render_command = cli_args.render_command;
 
-    if let Some(RenderCommand::Pixel { x, y }) = render_command {
-        for i in 0..1 {
+    if let Some(RenderCommand::Pixel { x, y, sample_count, sample_offset }) = render_command {
+        let low = sample_offset.unwrap_or(0);
+        let high = low + sample_count.unwrap_or(1);
+        for i in low..high {
             let pixel = render_single_pixel(&scene, &raytracer_settings, x, y, Some(i));
 
             println!("sample {i}");

@@ -352,6 +352,8 @@ impl Model {
             RenderMode::Pixel => RenderCommand::Pixel {
                 x: self.pixel_x,
                 y: self.pixel_y,
+                sample_count: None,
+                sample_offset: None
             },
         };
 
