@@ -451,6 +451,7 @@ pub fn rough_metal_scene() -> Scene {
     let rough_conductor_material = cornell_box.add_material(Material::RoughConductor {
         eta: ior_texture,
         kappa: kappa_texture,
+        remap_roughness: true,
         roughness: roughness_texture,
     });
 
@@ -473,6 +474,7 @@ pub fn rough_dielectric_scene() -> Scene {
     let roughness_texture = cornell_box.add_constant_texture(Vec4(0.5, 0.5, 0.0, 0.0));
     let rough_dielectric_material = cornell_box.add_material(Material::RoughDielectric {
         eta: ior_texture,
+        remap_roughness: true,
         roughness: roughness_texture,
     });
     cornell_box.add_shape_at_position(
@@ -541,6 +543,7 @@ pub fn coated_diffuse_bunny_scene() -> Scene {
     let coated_diffuse = cornell_box.add_material(Material::CoatedDiffuse {
         diffuse_albedo,
         dielectric_eta,
+        dielectric_remap_roughness: true,
         dielectric_roughness: Some(roughness),
         thickness,
         coat_albedo,

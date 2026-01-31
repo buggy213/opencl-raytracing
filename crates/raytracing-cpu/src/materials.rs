@@ -838,36 +838,61 @@ impl CpuMaterial for Material {
                 CpuBsdf::SmoothConductor { eta, kappa }
             },
 
-            Material::RoughConductor { eta, kappa, roughness } => {
+            Material::RoughConductor { eta, kappa, roughness, remap_roughness } => {
                 let eta = textures.sample(*eta, eval_ctx);
                 let kappa = textures.sample(*kappa, eval_ctx);
                 let eta = Vec3(eta.0, eta.1, eta.2);
                 let kappa = Vec3(kappa.0, kappa.1, kappa.2);
 
                 let roughness = textures.sample(*roughness, eval_ctx);
-                let alpha_x = roughness.0.sqrt();
-                let alpha_y = roughness.1.sqrt();
-                CpuBsdf::RoughConductor { 
-                    eta, 
-                    kappa,
-                    alpha_x, 
-                    alpha_y 
+                let mut alpha_x = roughness.0;
+                let mut alpha_y = roughness.1;
+
+                if *remap_roughness {
+                    alpha_x = alpha_x.sqrt();
+                    alpha_y = alpha_y.sqrt();
+                }
+
+                if f32::max(alpha_x, alpha_y) < consts::MINIMUM_ROUGHNESS {
+                    CpuBsdf::SmoothConductor { 
+                        eta, 
+                        kappa 
+                    }
+                }
+                else {
+                    CpuBsdf::RoughConductor { 
+                        eta, 
+                        kappa,
+                        alpha_x, 
+                        alpha_y 
+                    }
                 }
             }
 
-            Material::RoughDielectric { eta, roughness } => {
+            Material::RoughDielectric { eta, roughness, remap_roughness } => {
                 let eta = textures.sample(*eta, eval_ctx).r();
 
                 let roughness = textures.sample(*roughness, eval_ctx);
-                let alpha_x = roughness.0.sqrt();
-                let alpha_y = roughness.1.sqrt();
+                let mut alpha_x = roughness.0;
+                let mut alpha_y = roughness.1;
 
-                CpuBsdf::RoughDielectric { eta, alpha_x, alpha_y }
+                if *remap_roughness {
+                    alpha_x = alpha_x.sqrt();
+                    alpha_y = alpha_y.sqrt();
+                }
+
+                if f32::max(alpha_x, alpha_y) < consts::MINIMUM_ROUGHNESS {
+                    CpuBsdf::SmoothDielectric { eta }
+                }
+                else {
+                    CpuBsdf::RoughDielectric { eta, alpha_x, alpha_y }
+                }
             }
 
             Material::CoatedDiffuse { 
                 diffuse_albedo, 
                 dielectric_eta, 
+                dielectric_remap_roughness,
                 dielectric_roughness, 
                 thickness, 
                 coat_albedo 
@@ -882,7 +907,20 @@ impl CpuMaterial for Material {
                 let dielectric_eta = textures.sample(*dielectric_eta, eval_ctx).0;
                 let top = if let Some(dielectric_roughness) = *dielectric_roughness {
                     let roughness = textures.sample(dielectric_roughness, eval_ctx);
-                    CpuBsdf::RoughDielectric { eta: dielectric_eta, alpha_x: roughness.0.sqrt(), alpha_y: roughness.1.sqrt() }
+
+                    let mut alpha_x = roughness.0;
+                    let mut alpha_y = roughness.1;
+                    if *dielectric_remap_roughness {
+                        alpha_x = alpha_x.sqrt();
+                        alpha_y = alpha_y.sqrt();
+                    }
+
+                    if f32::max(alpha_x, alpha_y) < consts::MINIMUM_ROUGHNESS {
+                        CpuBsdf::SmoothDielectric { eta: dielectric_eta }    
+                    }
+                    else {
+                        CpuBsdf::RoughDielectric { eta: dielectric_eta, alpha_x, alpha_y }
+                    }
                 }
                 else {
                     CpuBsdf::SmoothDielectric { eta: dielectric_eta }
@@ -1013,7 +1051,7 @@ mod microfacet {
     // represents relative differential area of microfacets pointing in a particular direction
     // when microfacets distributed according to "ellipsoidal bumps"
     // as usual, wm is in shading coordinate frame (+z <=> normal of "macrosurface")
-    pub(super) fn distribution(wm: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
+    fn distribution(wm: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
         let cos_theta = wm.z();
         let cos_theta_2 = cos_theta * cos_theta;
         let sin_theta_2 = 1.0 - cos_theta_2;
@@ -1024,13 +1062,13 @@ mod microfacet {
         let e = (cos_phi * cos_phi) / (alpha_x * alpha_x) + (sin_phi * sin_phi) / (alpha_y * alpha_y);
         let t = (1.0 + (sin_theta_2 / cos_theta_2) * e).powi(2);
 
-        1.0 / (f32::consts::PI * alpha_x * alpha_y * cos_theta_2 * cos_theta_2 * t)
+        1.0 / (f32::consts::PI * alpha_x * alpha_y * cos_theta_2 * cos_theta_2 * t) 
     }
 
     // PBRT 4ed 9.6.2
     // part of "Smith's approximation" to masking function G1, which accounts for microfacets
     // blocking other microfacets
-    pub(super) fn lambda(w: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
+    fn lambda(w: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
         let cos_theta = w.z();
         let cos_theta_2 = cos_theta * cos_theta;
         let sin_theta_2 = 1.0 - cos_theta_2;
@@ -1044,21 +1082,21 @@ mod microfacet {
     }
 
     #[allow(non_snake_case, reason = "physics convention")]
-    pub(super) fn G1(w: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
+    fn G1(w: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
         1.0 / (1.0 + lambda(w, alpha_x, alpha_y))
     }
 
     // PBRT 4ed 9.6.3
     // an approximation to the masking-shadowing function (shadowing is masking but in the outgoing direction)
     #[allow(non_snake_case, reason = "physics convention")]
-    pub(super) fn G(wo: Vec3, wi: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
+    fn G(wo: Vec3, wi: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
         1.0 / (1.0 + lambda(wo, alpha_x, alpha_y) + lambda(wi, alpha_x, alpha_y))
     }
 
     // PBRT 4ed 9.6.4
     // distribution of normals which are visible from some direction
     // (leads to improved sampling efficiency)
-    pub(super) fn visible_distribution(w: Vec3, wm: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
+    fn visible_distribution(w: Vec3, wm: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
         let cos_theta = w.z().abs();
 
         (G1(w, alpha_x, alpha_y) / cos_theta) * 
@@ -1069,7 +1107,7 @@ mod microfacet {
     // PBRT 4ed 9.6.4
     // sample from visible normals distribution
     // figure 9.29 visually represents what this is doing
-    pub(super) fn sample_wm(w: Vec3, alpha_x: f32, alpha_y: f32, u: Vec2) -> Vec3 {
+    fn sample_wm(w: Vec3, alpha_x: f32, alpha_y: f32, u: Vec2) -> Vec3 {
         let mut wh = Vec3(alpha_x * w.x(), alpha_y * w.y(), w.z()).unit();
         if wh.z() < 0.0 { wh = -wh; }
 
@@ -1106,8 +1144,14 @@ mod microfacet {
     // off of a (general) microfacet distribution, which we specialize to trowbridge-reitz. 
     // does *not* account for refraction
 
+    fn check_roughness(alpha_x: f32, alpha_y: f32) {
+        debug_assert!(alpha_x >= super::consts::MINIMUM_ROUGHNESS && alpha_y >= super::consts::MINIMUM_ROUGHNESS, "surface is too smooth; should be handled by smooth bsdfs");
+    }
+
     // pdf
     pub(super) fn torrance_sparrow_refl_pdf(wo: Vec3, wi: Vec3, alpha_x: f32, alpha_y: f32) -> f32 {
+        check_roughness(alpha_x, alpha_y);
+
         // protect against grazing angle reflections
         if (wo + wi) == Vec3::zero() { return 0.0; } 
         let mut wm = (wo + wi).unit();
@@ -1125,6 +1169,8 @@ mod microfacet {
         alpha_x: f32, 
         alpha_y: f32, 
     ) -> Vec3 {
+        check_roughness(alpha_x, alpha_y);
+
         // protect against grazing angle reflections
         if (wo + wi) == Vec3::zero() { return Vec3::zero(); }
         let wm = (wo + wi).unit();
@@ -1151,6 +1197,8 @@ mod microfacet {
         alpha_y: f32,
         sampler: &mut CpuSampler,
     ) -> ValidBsdfSample {
+        check_roughness(alpha_x, alpha_y);
+
         let u = sampler.sample_uniform2();
         let wm = sample_wm(wo, alpha_x, alpha_y, u);
         let wi = Vec3::reflect(wo, wm);
@@ -1196,6 +1244,8 @@ mod microfacet {
         alpha_y: f32,
         component: BsdfComponentFlags,
     ) -> f32 {
+        check_roughness(alpha_x, alpha_y);
+
         let reflect = wo.z() * wi.z() > 0.0;
         let eta_wm = if !reflect {
             if wo.z() > 0.0 { eta } else { 1.0 / eta }
@@ -1254,6 +1304,8 @@ mod microfacet {
         alpha_x: f32,
         alpha_y: f32
     ) -> Vec3 {
+        check_roughness(alpha_x, alpha_y);
+
         let reflect = wo.z() * wi.z() > 0.0;
         let eta_wm = if !reflect {
             if wo.z() > 0.0 { eta } else { 1.0 / eta }
@@ -1314,6 +1366,8 @@ mod microfacet {
         component: BsdfComponentFlags,
         sampler: &mut CpuSampler,
     ) -> ValidBsdfSample {
+        check_roughness(alpha_x, alpha_y);
+
         let u = sampler.sample_uniform2();
         let wm = sample_wm(wo, alpha_x, alpha_y, u);
          
@@ -1454,4 +1508,11 @@ mod phase_function {
     pub(super) fn pdf(wo: Vec3, wi: Vec3, g: f32) -> f32 {
         p(wo, wi, g)
     }
+}
+
+// Sometimes you just need some magic numbers
+pub(crate) mod consts {
+    // minimum value for alpha_x and alpha_y in T-R microfacet model before 
+    // falling back to smooth BSDF evaluation
+    pub(crate) const MINIMUM_ROUGHNESS: f32 = 1.0e-3;
 }

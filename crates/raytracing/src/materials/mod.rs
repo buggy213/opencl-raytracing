@@ -18,6 +18,8 @@ pub enum Material {
         kappa: TextureId,
     },
 
+    // materials incorporating microfacet models of roughness
+    // note that these might return different BSDF depending on roughness level
     RoughDielectric {
         // same interpretation as for SmoothDielectric
         eta: TextureId,
@@ -25,7 +27,9 @@ pub enum Material {
         // parameterization of Trowbridge-Reitz microfacet distribution
         // R component corresponds to roughness along tangent direction
         // G component corresponds to roughness along bitangent direction
-        // these are converted into alpha_x, alpha_y by taking the square root
+        // these are converted into alpha_x, alpha_y by taking the square root if remap_roughness is true,
+        // otherwise they are used as alpha_x and alpha_y directly
+        remap_roughness: bool,
         roughness: TextureId,
     },
     RoughConductor {
@@ -34,6 +38,7 @@ pub enum Material {
         kappa: TextureId,
 
         // same interpretation as for RoughDielectric
+        remap_roughness: bool,
         roughness: TextureId,
     },
 
@@ -42,6 +47,7 @@ pub enum Material {
         diffuse_albedo: TextureId,
         
         dielectric_eta: TextureId,
+        dielectric_remap_roughness: bool,
         dielectric_roughness: Option<TextureId>,
 
         thickness: TextureId,

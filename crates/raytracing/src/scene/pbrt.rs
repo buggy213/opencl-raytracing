@@ -224,6 +224,13 @@ impl ParameterList {
             _ => None,
         }
     }
+    
+    fn get_bool(&self, name: &str) -> Option<bool> {
+        match self.get(name)? {
+            ParameterValue::Bool(b) => Some(*b),
+            _ => None
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -376,6 +383,10 @@ fn parse_quoted_string(tok: &str) -> Result<&str, ParseError> {
     } else {
         Err(ParseError::BadString)
     }
+}
+
+fn parse_bool(tok: &str) -> Result<bool, ParseError> {
+    tok.parse::<bool>().map_err(|_| ParseError::BadBool(tok.to_string()))
 }
 
 fn parse_float(tok: &str) -> Result<f32, ParseError> {
@@ -822,6 +833,45 @@ fn parse_material_directive(
     Ok(())
 }
 
+fn extract_roughness(params: &ParameterList, builder: &mut SceneBuilder, state: &ParserState) -> Option<TextureId> {
+    let roughness = params.get("roughness").is_some();
+    let anisotropic_roughness = {
+        let has_u_roughness = params.get("uroughness").is_some();
+        let has_v_roughness = params.get("vroughness").is_some();
+
+        if has_u_roughness != has_v_roughness {
+            warn!("bad anisotropic roughness description; both u and v components are required. falling back to smooth");
+            return None;
+        }
+        has_u_roughness && has_v_roughness
+    };
+
+    if roughness && anisotropic_roughness {
+        warn!("bad roughness description; both `roughness` and `uroughness/vroughness` descriptions provided. falling back to smooth");
+        return None;
+    }
+
+    if roughness {
+        Some(resolve_float_texture(state, builder, params, "roughness", 0.0))
+    }
+    else if anisotropic_roughness {
+        let uroughness = params.get_float("uroughness");
+        let vroughness = params.get_float("vroughness");
+        
+        match (uroughness, vroughness) {
+            (Some(alpha_x), Some(alpha_y)) => {
+                Some(builder.add_constant_texture(Vec4(alpha_x, alpha_y, 0.0, 0.0)))
+            }
+            _ => {
+                todo!("texture values for uroughness / vroughness")
+            }
+        }
+    }
+    else {
+        None
+    }
+}
+
 fn create_material(
     material_type: &str,
     params: &ParameterList,
@@ -829,49 +879,44 @@ fn create_material(
     builder: &mut SceneBuilder,
 ) -> Result<Material, ParseError> {
     let material = match material_type {
-        "diffuse" | "matte" => {
+        "diffuse" => {
             let albedo = resolve_texture(state, builder, params, "reflectance", Vec3(0.5, 0.5, 0.5));
             Material::Diffuse { albedo }
         }
-        "conductor" | "metal" => {
+
+        "conductor" => {
             let eta = resolve_texture(state, builder, params, "eta", Vec3(0.2, 0.2, 0.2));
             let k = resolve_texture(state, builder, params, "k", Vec3(3.0, 3.0, 3.0));
-            let roughness = params.get_float("roughness");
-            let uroughness = params.get_float("uroughness");
-            let vroughness = params.get_float("vroughness");
 
-            let is_rough = roughness.is_some() || uroughness.is_some() || vroughness.is_some();
+            let roughness_tex = extract_roughness(params, builder, state);
 
-            if is_rough {
-                let u = uroughness.or(roughness).unwrap_or(0.5);
-                let v = vroughness.or(roughness).unwrap_or(0.5);
-                let roughness_tex = builder.add_constant_texture(Vec4(u, v, 0.0, 0.0));
+            if let Some(roughness_tex) = roughness_tex {
+                let remap_roughness = params.get_bool("remaproughness").unwrap_or(true);
                 Material::RoughConductor {
                     eta,
                     kappa: k,
+                    remap_roughness,
                     roughness: roughness_tex,
                 }
             } else {
                 Material::SmoothConductor { eta, kappa: k }
             }
         }
-        "dielectric" | "glass" => {
+        "dielectric" => {
             let ior = params.get_float_or("eta", 1.5);
             let eta = builder.add_constant_texture(Vec4(ior, 0.0, 0.0, 0.0));
 
-            let roughness = params.get_float("roughness");
-            let uroughness = params.get_float("uroughness");
-            let vroughness = params.get_float("vroughness");
+            let roughness_tex = extract_roughness(params, builder, state);
 
-            let is_rough = roughness.is_some() || uroughness.is_some() || vroughness.is_some();
-
-            if is_rough {
-                let u = uroughness.or(roughness).unwrap_or(0.5);
-                let v = vroughness.or(roughness).unwrap_or(0.5);
-                let roughness_tex = builder.add_constant_texture(Vec4(u, v, 0.0, 0.0));
-                Material::RoughDielectric { eta, roughness: roughness_tex }
+            if let Some(roughness_tex) = roughness_tex {
+                let remap_roughness = params.get_bool("remaproughness").unwrap_or(true);
+                Material::RoughDielectric {
+                    eta,
+                    remap_roughness,
+                    roughness: roughness_tex,
+                }
             } else {
-                Material::SmoothDielectric { eta }
+                Material::SmoothDielectric{ eta }
             }
         }
         "coateddiffuse" => {
@@ -879,16 +924,8 @@ fn create_material(
             let coat_eta = params.get_float_or("eta", 1.5);
             let dielectric_eta = builder.add_constant_texture(Vec4(coat_eta, 0.0, 0.0, 0.0));
 
-            let roughness = params.get_float("roughness");
-            let uroughness = params.get_float("uroughness");
-            let vroughness = params.get_float("vroughness");
-            let dielectric_roughness = if roughness.is_some() || uroughness.is_some() || vroughness.is_some() {
-                let u = uroughness.or(roughness).unwrap_or(0.0);
-                let v = vroughness.or(roughness).unwrap_or(0.0);
-                Some(builder.add_constant_texture(Vec4(u, v, 0.0, 0.0)))
-            } else {
-                None
-            };
+            let dielectric_roughness = extract_roughness(params, builder, state);
+            let dielectric_remap_roughness = params.get_bool("remaproughness").unwrap_or(true);
 
             let thickness_val = params.get_float_or("thickness", 0.01);
             let thickness = builder.add_constant_texture(Vec4(thickness_val, 0.0, 0.0, 0.0));
@@ -899,44 +936,13 @@ fn create_material(
             Material::CoatedDiffuse {
                 diffuse_albedo,
                 dielectric_eta,
+                dielectric_remap_roughness,
                 dielectric_roughness,
                 thickness,
                 coat_albedo,
             }
         }
-        "coatedconductor" => {
-            let eta = resolve_texture(state, builder, params, "conductor.eta", Vec3(0.2, 0.2, 0.2));
-            let k = resolve_texture(state, builder, params, "conductor.k", Vec3(3.0, 3.0, 3.0));
-            let roughness = params.get_float_or("roughness", 0.0);
 
-            if roughness > 0.0 {
-                let roughness_tex = builder.add_constant_texture(Vec4(roughness, roughness, 0.0, 0.0));
-                Material::RoughConductor {
-                    eta,
-                    kappa: k,
-                    roughness: roughness_tex,
-                }
-            } else {
-                Material::SmoothConductor { eta, kappa: k }
-            }
-        }
-        "plastic" => {
-            let albedo = resolve_texture(state, builder, params, "Kd", Vec3(0.25, 0.25, 0.25));
-            Material::Diffuse { albedo }
-        }
-        "uber" => {
-            let albedo = resolve_texture(state, builder, params, "Kd", Vec3(0.25, 0.25, 0.25));
-            Material::Diffuse { albedo }
-        }
-        "mirror" => {
-            let eta = builder.add_constant_texture(Vec4(100.0, 100.0, 100.0, 0.0));
-            let kappa = builder.add_constant_texture(Vec4(1.0, 1.0, 1.0, 0.0));
-            Material::SmoothConductor { eta, kappa }
-        }
-        "substrate" => {
-            let albedo = resolve_texture(state, builder, params, "Kd", Vec3(0.5, 0.5, 0.5));
-            Material::Diffuse { albedo }
-        }
         other => {
             warn!("unsupported material type '{}', defaulting to diffuse gray", other);
             let albedo = builder.add_constant_texture(Vec4(0.5, 0.5, 0.5, 1.0));
