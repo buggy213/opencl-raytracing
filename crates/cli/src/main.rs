@@ -13,6 +13,9 @@ use raytracing::{
 };
 use raytracing_cpu::{CpuBackendSettings, render, render_single_pixel};
 use tracing::warn;
+use tracing_indicatif::IndicatifLayer;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 #[derive(Debug, clap::Parser)]
 struct CommandLineArguments {
@@ -104,7 +107,11 @@ enum RenderCommand {
 }
 
 fn main() {
-    tracing_subscriber::fmt::init();
+    let indicatif_layer = IndicatifLayer::new();
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_writer(indicatif_layer.get_stderr_writer()))
+        .with(indicatif_layer)
+        .init();
 
     let cli_args = CommandLineArguments::parse();
 

@@ -18,3 +18,6 @@ bitflags = { workspace = true }
 png = "0.17.16"
 exr = { workspace = true }
 num_cpus = { workspace = true }
+
+indicatif = "0.18.3"
+tracing-indicatif = "0.3.14"

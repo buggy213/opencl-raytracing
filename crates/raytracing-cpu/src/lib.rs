@@ -1,13 +1,15 @@
 #![feature(float_erf)]
 
-use std::sync::{Arc, Mutex};
+use std::{cell::Cell, fmt::Write, panic::PanicHookInfo, sync::{Arc, Mutex, mpsc::RecvTimeoutError}, time::Duration};
 
 use accel::{traverse_bvh};
+use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use lights::{light_radiance, occluded, sample_light};
 use materials::CpuMaterial;
 use ray::Ray;
 use raytracing::{geometry::{AABB, Matrix4x4, Vec2, Vec3}, renderer::{AOVFlags, RaytracerSettings, RenderOutput}, scene::{Camera, Scene}};
-use tracing::{info, warn};
+use tracing::{info, trace_span, warn};
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::{accel::TraversalCache, lights::environment_light_radiance, materials::{BsdfComponentFlags, MaterialEvalContext}, ray::RayDifferentials, sample::CpuSampler, scene::CpuAccelerationStructures, texture::CpuTextures};
 
@@ -20,6 +22,38 @@ mod sample;
 mod scene;
 mod texture;
 pub mod utils;
+
+// Useful to have info on which (pixel, sample) pair was being rendered
+// when a panic occurs so render_single_pixel can be used to reproduce the issue later
+#[derive(Debug, Clone, Copy)]
+struct RenderStatus {
+    x: u32,
+    y: u32,
+    sample: u32,
+}
+
+thread_local! {
+    static RENDER_STATUS: Cell<RenderStatus> = const { Cell::new(RenderStatus { x: 0, y: 0, sample: 0 }) };
+}
+
+static PANIC_MUTEX: Mutex<()> = Mutex::new(());
+
+fn report_render_status_on_panic() {
+    let original_hook = std::panic::take_hook();
+    
+    let new_hook = move |info: &PanicHookInfo| {
+        {
+            // we don't care if it's poisoned since it's not protecting any data, we just want mutual exclusion on stderr basically
+            let _panic_guard = PANIC_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+
+            original_hook(info);
+            let render_status = RENDER_STATUS.get();
+            eprintln!("render status associated with above panic: x = {}, y = {}, sample = {}", render_status.x, render_status.y, render_status.sample);
+        }
+    };
+    
+    std::panic::set_hook(Box::new(new_hook));
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct SceneBounds {
@@ -478,6 +512,8 @@ fn render_tile(
                 let x = (tile.x0 + i) as u32;
                 let y = (tile.y0 + j) as u32;
 
+                RENDER_STATUS.set(RenderStatus { x, y, sample: sample_index });
+
                 sampler.start_sample((x, y), sample_index as u64);
                 
                 let (camera_ray, camera_ray_differentials) = generate_ray(
@@ -531,6 +567,8 @@ fn render_aovs(
             let x = i;
             let y = j;
             sampler.start_sample((x, y), 0);
+
+            RENDER_STATUS.set(RenderStatus { x, y, sample: 0 });
             
             let (camera_ray, camera_ray_differentials) = generate_ray(
                 &context.scene.camera, 
@@ -635,6 +673,8 @@ pub fn render(
             y1: height,
         };
 
+        report_render_status_on_panic();
+
         render_tile(
             &cpu_raytracing_context,
             &mut single_threaded_sampler,
@@ -649,7 +689,7 @@ pub fn render(
         // main thread is responsible for aggregating results
         let render_jobs = create_render_jobs(scene);
 
-        let mut render_job_count = render_jobs.len();
+        let render_job_count = render_jobs.len();
         let mut radiance_buffer = vec![Vec3::zero(); width * height];
         let work_queue = Arc::new(
             Mutex::new(render_jobs)
@@ -691,6 +731,9 @@ pub fn render(
         }
         
         std::thread::scope(|scope| {
+            let result_channel_tx = result_channel_tx;
+            report_render_status_on_panic();
+
             for _ in 0..backend_settings.num_threads {
                 let thread_work_queue_handle = Arc::clone(&work_queue);
                 let thread_result_channel_tx = result_channel_tx.clone();
@@ -705,19 +748,40 @@ pub fn render(
                 });
             }
 
-            // TODO: if a thread panics, should handle this (probably also panic)
-            while render_job_count > 0 {
-                let (tile, tile_radiance) = result_channel_rx.recv()
-                    .expect("no sender (are workers gone?)");
+            // explicitly drop result_channel_tx here so that we get RecvTimeoutError::Disconnected if all
+            // child threads panic
+            drop(result_channel_tx);
+            
+            let progress_style = ProgressStyle::with_template("[{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})")
+                .unwrap()
+                .with_key("eta", |state: &ProgressState, w: &mut dyn Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
+                .progress_chars("#>-");
+            
+            
+            let render_span = trace_span!("render");
+            render_span.pb_set_style(&progress_style);
+            render_span.pb_set_length(render_job_count as u64);
+            
+            {
+                let _span_guard = render_span.enter();
+                let mut jobs_finished = 0;
+                while jobs_finished < render_job_count {
+                    render_span.pb_set_position(jobs_finished as u64);
+                    let (tile, tile_radiance) = match result_channel_rx.recv_timeout(Duration::from_millis(100)) {
+                        Ok((tile, tile_radiance)) => (tile, tile_radiance),
+                        Err(RecvTimeoutError::Timeout) => continue,
+                        Err(RecvTimeoutError::Disconnected) => { panic!("no senders left (did workers die?)") }
+                    };
 
-                merge_tile(
-                    width, 
-                    &mut radiance_buffer, 
-                    tile, 
-                    tile_radiance
-                );
+                    merge_tile(
+                        width, 
+                        &mut radiance_buffer, 
+                        tile, 
+                        tile_radiance
+                    );
 
-                render_job_count -= 1;
+                    jobs_finished += 1;
+                }
             }
         });
 
