@@ -391,7 +391,9 @@ impl CpuBsdf {
 
                 // cosine-weighted hemisphere sampling
                 let u = sampler.sample_uniform2();
-                let (wi, pdf) = sample::sample_cosine_hemisphere(u);
+                let wi = sample::sample_cosine_hemisphere(u);
+                let pdf = wi.z() / f32::consts::PI;
+                
                 BsdfSample {
                     wi,
                     bsdf: *albedo / f32::consts::PI,

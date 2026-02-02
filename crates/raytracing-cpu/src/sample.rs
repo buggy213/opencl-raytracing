@@ -207,11 +207,12 @@ pub(crate) fn sample_unit_disk_concentric(u: Vec2) -> Vec2 {
     r * Vec2(f32::cos(theta), f32::sin(theta))
 }
 
-pub(crate) fn sample_cosine_hemisphere(u: Vec2) -> (Vec3, f32) {
+// samples unit hemisphere distributed according to cos(theta) (i.e. z)
+pub(crate) fn sample_cosine_hemisphere(u: Vec2) -> Vec3 {
     let d = sample_unit_disk(u);
     let z = f32::sqrt(1.0 - d.0 * d.0 - d.1 * d.1);
-    let h = Vec3(d.0, d.1, z);
-    (h, z / f32::consts::PI)
+    
+    Vec3(d.0, d.1, z)
 }
 
 // samples x for e^{-ax} in the range [0, +infty) using inverse CDF
