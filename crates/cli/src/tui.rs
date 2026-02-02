@@ -270,7 +270,11 @@ impl Model {
     }
 
     pub fn generate_command(&self) -> Result<String, String> {
-        let mut cmd = vec!["cargo run -p cli --".to_string()];
+        let mut cmd = vec!["cargo run -p cli --release".to_string()];
+        if matches!(self.backend, Backend::Optix) {
+            cmd.push("--features optix".to_string());
+        }
+        cmd.push("--".to_string());
 
         match self.scene_input_type {
             SceneInputType::Path => {
