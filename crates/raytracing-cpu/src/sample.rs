@@ -26,8 +26,6 @@ pub(crate) enum CpuSampler {
 }
 
 impl CpuSampler {
-    const SAMPLE_SPACING: u64 = 1 << 16;
-
     pub(crate) fn from_sampler(sampler: &raytracing::sampling::Sampler, seed: Option<u64>) -> Self {
         let seed = seed.unwrap_or(42);
 
@@ -78,11 +76,9 @@ impl CpuSampler {
         match self {
             CpuSampler::Independent { rng, seed, .. } => {
                 *rng = rand_pcg::Pcg32::new(*seed, stream);
-                rng.advance(sample_index * Self::SAMPLE_SPACING);
             },
             CpuSampler::Stratified { seed, rng, dimension, sample_index: sampler_sample_index, .. } => {
                 *rng = rand_pcg::Pcg32::new(*seed, stream);
-                rng.advance(sample_index * Self::SAMPLE_SPACING);
                 
                 *dimension = 0;
                 *sampler_sample_index = sample_index as u32;
