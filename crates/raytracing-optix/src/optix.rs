@@ -30,8 +30,8 @@ pub(crate) use detail::{
     makeInstanceAccelerationStructure,
 
     OptixPipelineWrapper,
-    makeBasicPipeline,
-    launchBasicPipeline,
+    makeAovPipeline,
+    launchAovPipeline,
 
     Camera,
 };
@@ -39,10 +39,10 @@ pub(crate) use detail::{
 use detail::{
     CameraType,
     CameraTypeKind,
-    CameraType_Variant,
-    CameraType_Variant_Orthographic,
-    CameraType_Variant_PinholePerspective,
-    CameraType_Variant_ThinLensPerspective,
+    CameraType_CameraVariant,
+    CameraType_CameraVariant_Orthographic,
+    CameraType_CameraVariant_PinholePerspective,
+    CameraType_CameraVariant_ThinLensPerspective,
 };
 
 
@@ -143,24 +143,24 @@ impl From<raytracing::scene::CameraType> for CameraType {
             raytracing::scene::CameraType::Orthographic { screen_space_width, screen_space_height } => {
                 CameraType { 
                     kind: CameraTypeKind::Orthographic, 
-                    variant: CameraType_Variant { 
-                        orthographic: CameraType_Variant_Orthographic { screen_space_width, screen_space_height }
+                    variant: CameraType_CameraVariant { 
+                        orthographic: CameraType_CameraVariant_Orthographic { screen_space_width, screen_space_height }
                     } 
                 }
             },
             raytracing::scene::CameraType::PinholePerspective { yfov } => {
                 CameraType { 
                     kind: CameraTypeKind::PinholePerspective, 
-                    variant: CameraType_Variant {
-                        pinhole_perspective: CameraType_Variant_PinholePerspective { yfov }
+                    variant: CameraType_CameraVariant {
+                        pinhole_perspective: CameraType_CameraVariant_PinholePerspective { yfov }
                     } 
                 }
             },
             raytracing::scene::CameraType::ThinLensPerspective { yfov, aperture_radius, focal_distance } => {
                 CameraType { 
                     kind: CameraTypeKind::ThinLensPerspective, 
-                    variant: CameraType_Variant {
-                        thin_lens_perspective: CameraType_Variant_ThinLensPerspective { yfov, aperture_radius, focal_distance }
+                    variant: CameraType_CameraVariant {
+                        thin_lens_perspective: CameraType_CameraVariant_ThinLensPerspective { yfov, aperture_radius, focal_distance }
                     } 
                 }
             },

@@ -1,36 +1,13 @@
 // Ray-generation w/ pinhole camera; only performs primary visibility and only calculates geometric normals
 #include "params.h"
 #include "lib_types.h"
+
+#include "kernel_math.h"
 #include "kernel_types.h"
 
+#include "camera.h"
+
 #include <optix_device.h>
-
-__device__ Ray generate_ray(
-    const Camera& camera,
-    unsigned int x,
-    unsigned int y
-) {
-    switch (camera.camera_type.kind) {
-        case Orthographic:
-            return {};
-        case PinholePerspective: {
-            float xf = (float)x;
-            float yf = (float)y;
-            float3 raster_loc = make_float3(xf, yf, 0.0f);
-            float3 cam_point = camera.raster_to_camera.forward * raster_loc;
-
-            float3 world_origin = camera.camera_to_world.forward * make_float3(0.0f, 0.0f, 0.0f);
-            float3 world_point = camera.camera_to_world.forward * cam_point;
-            float3 world_dir = normalize(world_point - world_origin);
-
-            return Ray { .origin = world_origin, .direction = world_dir };
-        }
-        case ThinLensPerspective:
-            return {};
-    }
-
-    return {};
-}
 
 extern "C" __global__ void __raygen__debug() {
     uint3 dim = optixGetLaunchDimensions();
@@ -43,8 +20,8 @@ extern "C" __global__ void __raygen__debug() {
         pipeline_params.root_handle,
         ray.origin,
         ray.direction,
-        0.0f,
-        10000.0f,
+        pipeline_params.camera->near_clip,
+        pipeline_params.camera->far_clip,
         0.0f,
         (OptixVisibilityMask)(-1),
         OPTIX_RAY_FLAG_NONE,
@@ -105,9 +82,4 @@ extern "C" __global__ void __closesthit__normal_tri() {
     optixSetPayload_0(__float_as_uint(normal.x));
     optixSetPayload_1(__float_as_uint(normal.y));
     optixSetPayload_2(__float_as_uint(normal.z));
-
-    // float2 bary = optixGetTriangleBarycentrics();
-    // optixSetPayload_0(__float_as_uint(bary.x));
-    // optixSetPayload_1(__float_as_uint(bary.y));
-    // optixSetPayload_2(__float_as_uint(1.0f - bary.x - bary.y));
 }

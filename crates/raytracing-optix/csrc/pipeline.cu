@@ -7,7 +7,7 @@
 #include "optix.h"
 #include "util.h"
 
-__host__ OptixPipelineWrapper makeBasicPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData, size_t progSize) {
+__host__ OptixPipelineWrapper makeAovPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData, size_t progSize) {
     OptixModuleCompileOptions moduleCompileOptions = {};
     moduleCompileOptions.maxRegisterCount = OPTIX_COMPILE_DEFAULT_MAX_REGISTER_COUNT;
     moduleCompileOptions.optLevel = OPTIX_COMPILE_OPTIMIZATION_DEFAULT;
@@ -159,7 +159,7 @@ __host__ OptixPipelineWrapper makeBasicPipelineImpl(OptixDeviceContext ctx, cons
     };
 }
 
-__host__ void launchBasicPipelineImpl(
+__host__ void launchAovPipelineImpl(
     OptixPipelineWrapper pipelineWrapper,
     const Camera* camera,
     OptixTraversableHandle rootHandle,
@@ -265,3 +265,9 @@ __host__ void launchBasicPipelineImpl(
     cudaFree(d_missRecord);
     cudaFree(d_hitGroupRecords);
 }
+
+OptixPipelineWrapper makePathtracerPipelineImpl(OptixDeviceContext ctx, const uint8_t *progData, size_t progSize) {
+    // TODO
+}
+
+

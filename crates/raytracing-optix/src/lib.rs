@@ -34,10 +34,10 @@ pub fn render(
     let scene_as = scene::prepare_optix_acceleration_structures(optix_ctx, scene);
     let normals_kernel = optix::kernels::NORMALS;
     let normals_pipeline = unsafe { 
-        optix::makeBasicPipeline(
+        optix::makeAovPipeline(
             optix_ctx, 
             normals_kernel.as_ptr(), 
-            normals_kernel.len()
+            normals_kernel.len(),
         ) 
     };
 
@@ -50,7 +50,7 @@ pub fn render(
         buffer_size
     ];
     unsafe { 
-        optix::launchBasicPipeline(
+        optix::launchAovPipeline(
             normals_pipeline,
             &camera,
             scene_as.handle,

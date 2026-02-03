@@ -82,21 +82,21 @@ RT_API __host__ OptixAccelerationStructure makeInstanceAccelerationStructure(
     );
 }
 
-RT_API __host__ OptixPipelineWrapper makeBasicPipeline(
+RT_API __host__ OptixPipelineWrapper makeAovPipeline(
     OptixDeviceContext ctx,
     const uint8_t* progData,
     size_t progSize
 ) {
-    return makeBasicPipelineImpl(ctx, progData, progSize);
+    return makeAovPipelineImpl(ctx, progData, progSize);
 }
 
-RT_API __host__ void launchBasicPipeline(
+RT_API __host__ void launchAovPipeline(
     OptixPipelineWrapper pipelineWrapper,
     const Camera* camera,
     OptixTraversableHandle rootHandle,
     struct Vec3* normals
 ) {
-    launchBasicPipelineImpl(
+    launchAovPipelineImpl(
         pipelineWrapper,
         camera,
         rootHandle,
