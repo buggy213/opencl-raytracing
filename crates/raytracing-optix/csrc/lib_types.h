@@ -8,6 +8,7 @@
 #include <cstddef>
 #else
 #include "stddef.h"
+#include "stdbool.h"
 #endif
 
 /* Vocabulary types */
@@ -65,7 +66,7 @@ enum CameraTypeKind {
 
 struct CameraType {
     enum CameraTypeKind kind;
-    union Variant {
+    union CameraVariant {
         struct Orthographic {
             float screen_space_width;
             float screen_space_height;
@@ -103,4 +104,20 @@ struct Camera {
 // @raytracing::scene::scene::Scene
 struct Scene {
     struct Camera camera;
+};
+
+// @raytracing::sampling::Sampler
+struct Sampler
+{
+    enum SamplerKind { Independent, Stratified } kind;
+    union SamplerVariant
+    {
+        struct Independent {} independent;
+        struct Stratified
+        {
+            bool jitter;
+            unsigned int x_strata;
+            unsigned int y_strata;
+        } stratified;
+    } variant;
 };
