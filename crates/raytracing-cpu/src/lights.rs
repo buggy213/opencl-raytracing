@@ -43,7 +43,7 @@ pub(crate) fn sample_light(
                 pdf: 1.0, // contains delta
             }
         },
-        Light::DiffuseAreaLight { prim_id, radiance, transform } => {
+        Light::DiffuseAreaLight { prim_id, radiance, light_to_world } => {
             // have to sample a point on surface
             // for now, we do this in a pretty naive way
             // TODO: pbrt appears to have every triangle be a separate emitter
@@ -84,7 +84,7 @@ pub(crate) fn sample_light(
             let p2 = emitter.vertices[tri.2 as usize];
 
             let p_local = bary.0 * p0 + bary.1 * p1 + bary.2 * p2;
-            let p_world = transform.apply_point(p_local);
+            let p_world = light_to_world.apply_point(p_local);
             let dir_world = point - p_world;
             let d = dir_world.length();
             let shadow_ray = Ray { origin: p_world, direction: dir_world / d, };

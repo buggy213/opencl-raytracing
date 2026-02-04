@@ -1,7 +1,7 @@
 use tracing::warn;
 
 use crate::{
-    geometry::{Quaternion, Transform, Vec3}, materials::TextureId, scene::BasicPrimitiveIndex
+    geometry::{Matrix4x4, Quaternion, Vec3}, materials::TextureId, scene::BasicPrimitiveIndex
 };
 
 #[derive(Debug)]
@@ -23,7 +23,7 @@ pub enum Light {
 
         // uniform directional distribution
         radiance: Vec3,
-        transform: Transform,
+        light_to_world: Matrix4x4,
     },
 }
 
@@ -84,12 +84,12 @@ impl Light {
     pub fn from_emissive_geometry(
         prim_id: BasicPrimitiveIndex,
         radiance: Vec3,
-        transform: Transform,
+        light_to_world: Matrix4x4,
     ) -> Light {
         Light::DiffuseAreaLight {
             prim_id,
             radiance,
-            transform,
+            light_to_world,
         }
     }
 }

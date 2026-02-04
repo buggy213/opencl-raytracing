@@ -457,7 +457,7 @@ pub(super) mod gltf {
                             let area_light = Light::from_emissive_geometry(
                                 basic_primitive_idx,
                                 material_emissions[material_idx as usize],
-                                transform.clone(),
+                                transform.forward,
                             );
                             let area_light_idx = lights.len() as u32;
                             lights.push(area_light);
@@ -615,7 +615,7 @@ impl SceneBuilder {
             let area_light = Light::DiffuseAreaLight {
                 prim_id: basic_primitive_idx,
                 radiance,
-                transform: transform.clone(),
+                light_to_world: transform.forward
             };
             let idx = self.lights.len() as u32;
             self.lights.push(area_light);
