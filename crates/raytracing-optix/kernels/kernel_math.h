@@ -1,4 +1,5 @@
 #pragma once
+#include "lib_types.h"
 
 inline constexpr float4 float4_zero = float4 {0.0f, 0.0f, 0.0f, 0.0f };
 inline constexpr float3 float3_zero = float3 {0.0f, 0.0f, 0.0f };
@@ -196,6 +197,21 @@ inline __device__ float2 operator-(float2 a, float2 b) {
     return make_float2(a.x - b.x, a.y - b.y);
 }
 
+inline __device__ float4 operator-(float4 a)
+{
+    return make_float4(-a.x, -a.y, -a.z, -a.w);
+}
+
+inline __device__ float3 operator-(float3 a)
+{
+    return make_float3(-a.x, -a.y, -a.z);
+}
+
+inline __device__ float2 operator-(float2 a)
+{
+    return make_float2(a.x, -a.y);
+}
+
 inline __device__ bool operator==(float4 a, float4 b) {
     return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w;
 }
@@ -241,9 +257,10 @@ inline __device__ float3 normalize(float3 a) {
     return a * inv_len;
 }
 
-// left-multiply by matrix
-inline __device__ float3 operator*(const Matrix4x4& transform, float3 vector) {
-    float4 v = make_float4(vector.x, vector.y, vector.z, 1.0f);
+// @raytracing::geometry::Matrix4x4::apply_point
+inline __device__ float3 matrix4x4_apply_point(const Matrix4x4& transform, float3 point)
+{
+    float4 v = make_float4(point.x, point.y, point.z, 1.0f);
     float4 a = make_float4(transform.m[0], transform.m[1], transform.m[2], transform.m[3]);
     float4 b = make_float4(transform.m[4], transform.m[5], transform.m[6], transform.m[7]);
     float4 c = make_float4(transform.m[8], transform.m[9], transform.m[10], transform.m[11]);
@@ -255,4 +272,19 @@ inline __device__ float3 operator*(const Matrix4x4& transform, float3 vector) {
     float vd = dot(d, v);
 
     return make_float3(va / vd, vb / vd, vc / vd);
+}
+
+// @raytracing::geometry::Matrix4x4::apply_vector
+inline __device__ float3 matrix4x4_apply_vector(const Matrix4x4& transform, float3 vector)
+{
+    float3 v = make_float3(vector.x, vector.y, vector.z);
+    float3 a = make_float3(transform.m[0], transform.m[1], transform.m[2]);
+    float3 b = make_float3(transform.m[4], transform.m[5], transform.m[6]);
+    float3 c = make_float3(transform.m[8], transform.m[9], transform.m[10]);
+
+    float va = dot(a, v);
+    float vb = dot(b, v);
+    float vc = dot(c, v);
+
+    return make_float3(va, vb, vc);
 }

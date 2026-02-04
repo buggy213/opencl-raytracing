@@ -1,10 +1,12 @@
 #pragma once
 
+#include "kernel_types.h"
+
 // dead simple xor / shift based hash function. maybe not the fastest or most optimal hash function but should be
 // good enough for any rendering task
-inline __device__ unsigned long long hash_u32(
-    unsigned int data,
-    unsigned long long hash_state = 0x9e3779b97f4a7c15ULL
+inline __device__ u64 hash_u32(
+    u32 data,
+    u64 hash_state = 0x9e3779b97f4a7c15ULL
 ) {
     data *= 0xbf58476d1ce4e5b9ULL;
     data ^= data >> 32;

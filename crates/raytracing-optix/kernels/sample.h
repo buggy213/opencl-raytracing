@@ -82,6 +82,7 @@ struct OptixSampler
         switch (sampler.kind)
         {
         case Sampler::Independent:
+        default:
             return OptixSampler {
                 OptixSamplerIndependent { .seed = seed_unwrapped, .rng = RNG(seed_unwrapped, 0, 0) }
             };
