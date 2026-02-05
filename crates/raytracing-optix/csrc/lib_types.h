@@ -121,3 +121,29 @@ struct Sampler
         } stratified;
     } variant;
 };
+
+// @raytracing::lights::Light
+struct Light
+{
+    enum LightKind { PointLight, DirectionLight, DiffuseAreaLight } kind;
+    union LightVariant
+    {
+        struct PointLight
+        {
+            Vec3 position;
+            Vec3 intensity;
+        } point_light;
+        struct DirectionLight
+        {
+            Vec3 direction;
+            Vec3 radiance;
+        } direction_light;
+        struct DiffuseAreaLight
+        {
+            unsigned int prim_id;
+
+            Vec3 radiance;
+            Matrix4x4 light_to_world;
+        };
+    };
+};

@@ -1,5 +1,9 @@
 #pragma once
 
+/*
+ * Pipeline parameters for the different pipelines; shared with host C++ code
+ */
+
 #include <optix_device.h>
 
 #include "lib_types.h"
@@ -13,7 +17,7 @@ struct AovPipelineParams {
 struct PathtracerPipelineParams
 {
     float3* radiance;
-    Camera* camera;
+    Scene* scene;
     OptixTraversableHandle root_handle;
 };
 
