@@ -12,10 +12,22 @@ struct OptixAccelerationStructure {
     OptixTraversableHandle handle;
 };
 
-struct OptixPipelineWrapper {
+struct AovPipelineWrapper {
     OptixPipeline pipeline;
     OptixProgramGroup raygenProgram;
     OptixProgramGroup missProgram;
     OptixProgramGroup sphereHitProgramGroup;
     OptixProgramGroup triHitProgramGroup;
+};
+
+struct PathtracerPipelineWrapper {
+    OptixPipeline pipeline;
+    OptixProgramGroup raygenProgram;
+    OptixProgramGroup missProgramRadiance;
+    OptixProgramGroup missProgramShadow;
+
+    OptixProgramGroup hitProgramGroupShadow;
+    OptixProgramGroup diffuseHitProgramGroupRadiance;
+    // OptixProgramGroup smoothDielectricHitProgramGroupRadiance
+    // ...
 };

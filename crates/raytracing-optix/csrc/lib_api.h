@@ -39,14 +39,14 @@ RT_API struct OptixAccelerationStructure makeInstanceAccelerationStructure(
     size_t len
 );
 
-RT_API struct OptixPipelineWrapper makeAovPipeline(
+RT_API struct AovPipelineWrapper makeAovPipeline(
     OptixDeviceContext ctx,
     const uint8_t* progData,
     size_t progSize
 );
 
 RT_API void launchAovPipeline(
-    struct OptixPipelineWrapper pipelineWrapper,
+    struct AovPipelineWrapper pipelineWrapper,
     const struct Camera* camera,
     OptixTraversableHandle rootHandle,
     struct Vec3* normals

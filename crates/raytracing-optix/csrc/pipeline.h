@@ -6,12 +6,12 @@
 #include "lib_optix_types.h"
 #include "lib_types.h"
 
-OptixPipelineWrapper makeAovPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData, size_t progSize);
+AovPipelineWrapper makeAovPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData, size_t progSize);
 void launchAovPipelineImpl(
-    OptixPipelineWrapper pipeline,
+    AovPipelineWrapper pipeline,
     const Camera* camera,
     OptixTraversableHandle rootHandle,
     Vec3* normals
 );
 
-OptixPipelineWrapper makePathtracerPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData, size_t progSize);
+PathtracerPipelineWrapper makePathtracerPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData, size_t progSize);

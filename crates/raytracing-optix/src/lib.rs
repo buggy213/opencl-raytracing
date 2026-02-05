@@ -13,6 +13,7 @@ use raytracing::{
 
 mod optix;
 mod scene;
+mod sbt;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OptixBackendSettings {
