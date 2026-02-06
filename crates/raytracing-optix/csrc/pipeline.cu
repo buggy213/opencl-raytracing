@@ -6,8 +6,9 @@
 #include "lib_types.h"
 #include "optix.h"
 #include "util.h"
+#include "sbt.h"
 
-__host__ AovPipelineWrapper makeAovPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData, size_t progSize) {
+__host__ AovPipeline makeAovPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData, size_t progSize) {
     OptixModuleCompileOptions moduleCompileOptions = {};
     moduleCompileOptions.maxRegisterCount = OPTIX_COMPILE_DEFAULT_MAX_REGISTER_COUNT;
     moduleCompileOptions.optLevel = OPTIX_COMPILE_OPTIMIZATION_DEFAULT;
@@ -152,8 +153,9 @@ __host__ AovPipelineWrapper makeAovPipelineImpl(OptixDeviceContext ctx, const ui
 
     // note: we are leaking module / program group / pipeline at the moment
     // for one-off renders, this is fine
-    return AovPipelineWrapper {
+    return AovPipeline {
         .pipeline = pipeline,
+        .module = module,
         .raygenProgram = raygenGroup,
         .missProgram = missGroup,
         .sphereHitProgramGroup = sphereHitGroup,
@@ -162,7 +164,7 @@ __host__ AovPipelineWrapper makeAovPipelineImpl(OptixDeviceContext ctx, const ui
 }
 
 __host__ void launchAovPipelineImpl(
-    AovPipelineWrapper pipelineWrapper,
+    const AovPipeline& pipeline,
     const Camera* camera,
     OptixTraversableHandle rootHandle,
     Vec3* normals
@@ -174,10 +176,10 @@ __host__ void launchAovPipelineImpl(
     EmptyRecord sphereHitGroupRecord;
     EmptyRecord triHitGroupRecord;
 
-    optixSbtRecordPackHeader(pipelineWrapper.raygenProgram, &raygenRecord);
-    optixSbtRecordPackHeader(pipelineWrapper.missProgram, &missRecord);
-    optixSbtRecordPackHeader(pipelineWrapper.sphereHitProgramGroup, &sphereHitGroupRecord);
-    optixSbtRecordPackHeader(pipelineWrapper.triHitProgramGroup, &triHitGroupRecord);
+    optixSbtRecordPackHeader(pipeline.raygenProgram, &raygenRecord);
+    optixSbtRecordPackHeader(pipeline.missProgram, &missRecord);
+    optixSbtRecordPackHeader(pipeline.sphereHitProgramGroup, &sphereHitGroupRecord);
+    optixSbtRecordPackHeader(pipeline.triHitProgramGroup, &triHitGroupRecord);
 
     void* d_raygenRecord;
     cudaMalloc(&d_raygenRecord, sizeof(EmptyRecord));
@@ -234,7 +236,7 @@ __host__ void launchAovPipelineImpl(
     cudaMemcpy(d_pipelineParams, &pipelineParams, sizeof(Params), cudaMemcpyHostToDevice);
 
     OptixResult res = optixLaunch(
-        pipelineWrapper.pipeline,
+        pipeline.pipeline,
         stream,
         (CUdeviceptr)d_pipelineParams,
         sizeof(Params),
@@ -266,35 +268,30 @@ __host__ void launchAovPipelineImpl(
     cudaFree(d_hitGroupRecords);
 }
 
-PathtracerPipelineWrapper makePathtracerPipelineImpl(
+__host__ void releaseAovPipelineImpl(AovPipeline& pipeline) {
+    OPTIX_CHECK(optixPipelineDestroy(pipeline.pipeline));
+    OPTIX_CHECK(optixProgramGroupDestroy(pipeline.raygenProgram));
+    OPTIX_CHECK(optixProgramGroupDestroy(pipeline.missProgram));
+    OPTIX_CHECK(optixProgramGroupDestroy(pipeline.sphereHitProgramGroup));
+    OPTIX_CHECK(optixProgramGroupDestroy(pipeline.triHitProgramGroup));
+    OPTIX_CHECK(optixModuleDestroy(pipeline.module));
+}
+
+__host__ PathtracerPipeline makePathtracerPipelineImpl(
     OptixDeviceContext ctx,
     const uint8_t *progData,
     size_t progSize,
     unsigned int maxRayDepth
 ) {
-    // TODO
-    unsigned int radiancePayloadTypeSemantics[3] = {
-        // RGB components all have the same semantics: readable by the caller of trace after being written by miss or closest-hit
-        OPTIX_PAYLOAD_SEMANTICS_TRACE_CALLER_READ | OPTIX_PAYLOAD_SEMANTICS_CH_WRITE | OPTIX_PAYLOAD_SEMANTICS_MS_WRITE,
-        OPTIX_PAYLOAD_SEMANTICS_TRACE_CALLER_READ | OPTIX_PAYLOAD_SEMANTICS_CH_WRITE | OPTIX_PAYLOAD_SEMANTICS_MS_WRITE,
-        OPTIX_PAYLOAD_SEMANTICS_TRACE_CALLER_READ | OPTIX_PAYLOAD_SEMANTICS_CH_WRITE | OPTIX_PAYLOAD_SEMANTICS_MS_WRITE
-    };
-    OptixPayloadType radiancePayloadType = { .numPayloadValues = 3, .payloadSemantics = radiancePayloadTypeSemantics };
-
-    unsigned int shadowPayloadTypeSemantics[1] = {
-        // hit flag has semantics: readable by caller of trace after being written by miss (i.e. not in shadow) or closest-hit (i.e. in shadow)
-        OPTIX_PAYLOAD_SEMANTICS_TRACE_CALLER_READ | OPTIX_PAYLOAD_SEMANTICS_CH_WRITE | OPTIX_PAYLOAD_SEMANTICS_MS_WRITE
-    };
-    OptixPayloadType shadowPayloadType = { .numPayloadValues = 1, .payloadSemantics = shadowPayloadTypeSemantics };
-
-    OptixPayloadType payloadTypes[2] = { radiancePayloadType, shadowPayloadType };
+    PathtracerPipeline pathtracerPipeline;
+    std::vector<OptixProgramGroup> programGroups;
 
     OptixModuleCompileOptions moduleCompileOptions = {};
     moduleCompileOptions.maxRegisterCount = OPTIX_COMPILE_DEFAULT_MAX_REGISTER_COUNT;
     moduleCompileOptions.optLevel = OPTIX_COMPILE_OPTIMIZATION_DEFAULT;
     moduleCompileOptions.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_MINIMAL;
     moduleCompileOptions.numPayloadTypes = 2;
-    moduleCompileOptions.payloadTypes = payloadTypes;
+    moduleCompileOptions.payloadTypes = PathtracerPipeline::payloadTypes;
 
     OptixPipelineCompileOptions pipelineCompileOptions = {};
     pipelineCompileOptions.usesMotionBlur = false;
@@ -308,6 +305,7 @@ PathtracerPipelineWrapper makePathtracerPipelineImpl(
         OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE |
         OPTIX_PRIMITIVE_TYPE_FLAGS_SPHERE;
 
+    // -- create OptixModules --
     OptixModule module = nullptr;
     OptixResult res = optixModuleCreate(
         ctx,
@@ -320,6 +318,9 @@ PathtracerPipelineWrapper makePathtracerPipelineImpl(
         &module
     );
     OPTIX_CHECK(res);
+    pathtracerPipeline.module = module;
+
+    pathtracerPipeline.intersectionModule(PathtracerPipeline::GeometryType::TRIANGLE) = nullptr;
 
     OptixModule builtinModule = nullptr;
     OptixBuiltinISOptions builtinModuleOptions = {};
@@ -336,27 +337,161 @@ PathtracerPipelineWrapper makePathtracerPipelineImpl(
         &builtinModule
     );
     OPTIX_CHECK(res);
+    pathtracerPipeline.intersectionModule(PathtracerPipeline::GeometryType::SPHERE) = builtinModule;
+
+    // -- create raygen program --
+    OptixProgramGroupDesc raygenGroupDesc = {};
+    raygenGroupDesc.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+    raygenGroupDesc.raygen.module = module;
+    raygenGroupDesc.raygen.entryFunctionName = "__raygen__main";
+
+    OptixProgramGroupOptions raygenGroupOptions = {};
+    OptixProgramGroup raygenGroup = nullptr;
+    res = optixProgramGroupCreate(
+        ctx,
+        &raygenGroupDesc,
+        1,
+        &raygenGroupOptions,
+        nullptr,
+        nullptr,
+        &raygenGroup
+    );
+    OPTIX_CHECK(res);
+    pathtracerPipeline.raygenProgram = raygenGroup;
+    programGroups.push_back(raygenGroup);
+
+    // -- create miss programs --
+    OptixProgramGroupDesc missGroupRadianceDesc = {};
+    missGroupRadianceDesc.kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
+    missGroupRadianceDesc.miss.module = module;
+    missGroupRadianceDesc.miss.entryFunctionName = "__miss__radiance";
+
+    OptixProgramGroupOptions missGroupRadianceOptions = { .payloadType = &PathtracerPipeline::radiancePayloadType };
+    OptixProgramGroup missGroupRadiance = nullptr;
+    res = optixProgramGroupCreate(
+        ctx,
+        &missGroupRadianceDesc,
+        1,
+        &missGroupRadianceOptions,
+        nullptr,
+        nullptr,
+        &missGroupRadiance
+    );
+    OPTIX_CHECK(res);
+    pathtracerPipeline.missProgram(PathtracerPipeline::RayType::RADIANCE) = missGroupRadiance;
+    programGroups.push_back(missGroupRadiance);
+
+    OptixProgramGroupDesc missGroupShadowDesc = {};
+    missGroupShadowDesc.kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
+    missGroupShadowDesc.miss.module = module;
+    missGroupShadowDesc.miss.entryFunctionName = "__miss__shadow";
+
+    OptixProgramGroupOptions missGroupShadowOptions = { .payloadType = &PathtracerPipeline::shadowPayloadType };
+    OptixProgramGroup missGroupShadow = nullptr;
+    res = optixProgramGroupCreate(
+        ctx,
+        &missGroupShadowDesc,
+        1,
+        &missGroupShadowOptions,
+        nullptr,
+        nullptr,
+        &missGroupShadow
+    );
+    OPTIX_CHECK(res);
+    pathtracerPipeline.missProgram(PathtracerPipeline::RayType::SHADOW) = missGroupShadow;
+    programGroups.push_back(missGroupShadow);
+
+    // -- create closest-hit programs for radiance rays --
+    for (int geometry_type = 0; geometry_type < static_cast<int>(PathtracerPipeline::GeometryType::GEOMETRY_TYPE_COUNT); geometry_type++) {
+        for (int material_type = 0; material_type < static_cast<int>(PathtracerPipeline::MaterialType::MATERIAL_TYPE_COUNT); material_type++) {
+            auto geometryType = static_cast<PathtracerPipeline::GeometryType>(geometry_type);
+            auto materialType = static_cast<PathtracerPipeline::MaterialType>(material_type);
+
+            OptixProgramGroupDesc desc = {};
+            desc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
+            desc.hitgroup.moduleIS = pathtracerPipeline.intersectionModule(geometryType);
+            desc.hitgroup.entryFunctionNameIS = nullptr;
+            desc.hitgroup.moduleCH = pathtracerPipeline.module;
+            desc.hitgroup.entryFunctionNameCH = PathtracerPipeline::hitProgramNamesRadiance[material_type].data();
+            desc.hitgroup.moduleAH = nullptr;
+            desc.hitgroup.entryFunctionNameAH = nullptr;
+
+            OptixProgramGroupOptions options = { .payloadType = &PathtracerPipeline::radiancePayloadType };
+            OptixProgramGroup group = nullptr;
+            res = optixProgramGroupCreate(
+                ctx,
+                &desc,
+                1,
+                &options,
+                nullptr,
+                nullptr,
+                &group
+            );
+            OPTIX_CHECK(res);
+            pathtracerPipeline.radianceHitProgram(geometryType, materialType) = group;
+            programGroups.push_back(group);
+        }
+    }
+
+    // -- create closest-hit programs for shadow rays --
+    for (int geometry_type = 0; geometry_type < static_cast<int>(PathtracerPipeline::GeometryType::GEOMETRY_TYPE_COUNT); geometry_type++) {
+        auto geometryType = static_cast<PathtracerPipeline::GeometryType>(geometry_type);
+
+        OptixProgramGroupDesc desc = {};
+        desc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
+        desc.hitgroup.moduleIS = pathtracerPipeline.intersectionModule(geometryType);
+        desc.hitgroup.entryFunctionNameIS = nullptr;
+        desc.hitgroup.moduleCH = pathtracerPipeline.module;
+        desc.hitgroup.entryFunctionNameCH = PathtracerPipeline::hitProgramNameShadow.data();
+        desc.hitgroup.moduleAH = nullptr;
+        desc.hitgroup.entryFunctionNameAH = nullptr;
+
+        OptixProgramGroupOptions options = { .payloadType = &PathtracerPipeline::shadowPayloadType };
+        OptixProgramGroup group = nullptr;
+        res = optixProgramGroupCreate(
+            ctx,
+            &desc,
+            1,
+            &options,
+            nullptr,
+            nullptr,
+            &group
+        );
+        OPTIX_CHECK(res);
+        pathtracerPipeline.shadowHitProgram(geometryType) = group;
+        programGroups.push_back(group);
+    }
 
     OptixPipeline pipeline = nullptr;
     OptixPipelineLinkOptions pipelineLinkOptions = {};
     pipelineLinkOptions.maxTraceDepth = maxRayDepth;
 
-    OptixProgramGroup programGroups[4] = { raygenGroup, missGroup, sphereHitGroup, triHitGroup };
     res = optixPipelineCreate(
         ctx,
         &pipelineCompileOptions,
         &pipelineLinkOptions,
-        programGroups,
-        4,
+        programGroups.data(),
+        programGroups.size(),
         nullptr,
         nullptr,
         &pipeline
     );
     OPTIX_CHECK(res);
+    pathtracerPipeline.pipeline = pipeline;
 
-    return PathtracerPipelineWrapper {
-
-    };
+    return pathtracerPipeline;
 }
 
+void launchPathtracerPipelineImpl(
+    const PathtracerPipeline& pipeline,
+    const Scene* scene,
+    OptixTraversableHandle rootHandle,
+    Vec3* radiance
+) {
+    // TODO
+}
+
+void releasePathtracerPipelineImpl(PathtracerPipeline &pipeline) {
+    // TODO
+}
 

@@ -8,6 +8,7 @@
 
 #include "scene.h"
 #include "pipeline.h"
+#include "sbt_host.h"
 
 __host__ void optixLogCallback(unsigned int level, const char* tag, const char* msg, void *cbdata) {
     printf("[%s] %s\n", tag, msg);
@@ -87,19 +88,72 @@ RT_API __host__ AovPipelineWrapper makeAovPipeline(
     const uint8_t* progData,
     size_t progSize
 ) {
-    return makeAovPipelineImpl(ctx, progData, progSize);
+    AovPipeline aovPipeline = makeAovPipelineImpl(ctx, progData, progSize);
+    return new AovPipeline(aovPipeline);
 }
 
+RT_API __host__ AovSbtWrapper makeAovSbt() {
+    return new AovSbt();
+}
+
+RT_API __host__ void addHitRecordAovSbt(AovSbtWrapper sbt, GeometryData geometryData) {
+    sbt->addHitgroupRecord(geometryData);
+}
+
+RT_API __host__ void finalizeAovSbt(AovSbtWrapper sbt, AovPipelineWrapper pipeline) {
+    sbt->finalize(*pipeline);
+}
+
+RT_API __host__ void releaseAovSbt(AovSbtWrapper sbt) {
+    delete sbt;
+}
+
+
 RT_API __host__ void launchAovPipeline(
-    AovPipelineWrapper pipelineWrapper,
+    AovPipelineWrapper pipeline,
     const Camera* camera,
     OptixTraversableHandle rootHandle,
     struct Vec3* normals
 ) {
     launchAovPipelineImpl(
-        pipelineWrapper,
+        *pipeline,
         camera,
         rootHandle,
         normals
     );
+}
+
+RT_API __host__ void releaseAovPipeline(AovPipelineWrapper pipeline) {
+    delete pipeline;
+}
+
+RT_API __host__ PathtracerPipelineWrapper makePathtracerPipeline(
+    OptixDeviceContext ctx,
+    const uint8_t* progData,
+    size_t progSize
+) {
+    PathtracerPipeline pathtracerPipeline = makePathtracerPipelineImpl(ctx, progData, progSize);
+    return new PathtracerPipeline(pathtracerPipeline);
+}
+
+PathtracerSbtWrapper makePathtracerSbt() {
+    return new PathtracerSbt;
+}
+
+RT_API __host__ void launchPathtracerPipeline(
+    PathtracerPipelineWrapper pipeline,
+    const Scene* scene,
+    OptixTraversableHandle rootHandle,
+    struct Vec3* radiance
+) {
+    launchPathtracerPipelineImpl(
+        *pipeline,
+        scene,
+        rootHandle,
+        radiance
+    );
+}
+
+RT_API __host__ void releasePathtracerPipeline(PathtracerPipelineWrapper pipeline) {
+    delete pipeline;
 }

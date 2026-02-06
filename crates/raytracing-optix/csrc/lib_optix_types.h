@@ -12,22 +12,18 @@ struct OptixAccelerationStructure {
     OptixTraversableHandle handle;
 };
 
-struct AovPipelineWrapper {
-    OptixPipeline pipeline;
-    OptixProgramGroup raygenProgram;
-    OptixProgramGroup missProgram;
-    OptixProgramGroup sphereHitProgramGroup;
-    OptixProgramGroup triHitProgramGroup;
-};
+// Opaque pointers to C++ types
+typedef struct AovPipeline* AovPipelineWrapper;
+typedef struct PathtracerPipeline* PathtracerPipelineWrapper;
+typedef struct AovSbt* AovSbtWrapper;
+typedef struct PathtracerSbt* PathtracerSbtWrapper;
 
-struct PathtracerPipelineWrapper {
-    OptixPipeline pipeline;
-    OptixProgramGroup raygenProgram;
-    OptixProgramGroup missProgramRadiance;
-    OptixProgramGroup missProgramShadow;
+struct GeometryData {
+    enum GeometryKind { TRIANGLE, SPHERE } kind;
 
-    OptixProgramGroup hitProgramGroupShadow;
-    OptixProgramGroup diffuseHitProgramGroupRadiance;
-    // OptixProgramGroup smoothDielectricHitProgramGroupRadiance
-    // ...
+    size_t num_tris;
+    struct Vec3 *tris;
+    size_t num_vertices;
+    struct Vec3 *normals;
+    struct Vec2 *uvs;
 };

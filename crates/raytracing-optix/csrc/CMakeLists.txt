@@ -129,6 +129,7 @@ set(CU_SOURCE
   lib.cu
   scene.cu
   pipeline.cu
+  sbt_host.cu
   optix_function_table.cu
 )
 

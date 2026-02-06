@@ -39,15 +39,44 @@ RT_API struct OptixAccelerationStructure makeInstanceAccelerationStructure(
     size_t len
 );
 
-RT_API struct AovPipelineWrapper makeAovPipeline(
+// Rust side takes ownership, and should call `releaseAovPipeline` when finished
+RT_API AovPipelineWrapper makeAovPipeline(
     OptixDeviceContext ctx,
     const uint8_t* progData,
     size_t progSize
 );
 
+RT_API AovSbtWrapper makeAovSbt();
+RT_API void addHitRecordAovSbt(AovSbtWrapper sbt, GeometryData geometryData);
+RT_API void finalizeAovSbt(AovSbtWrapper sbt, AovPipelineWrapper pipeline);
+RT_API void releaseAovSbt(AovSbtWrapper sbt);
+
 RT_API void launchAovPipeline(
-    struct AovPipelineWrapper pipelineWrapper,
+    AovPipelineWrapper pipeline,
     const struct Camera* camera,
     OptixTraversableHandle rootHandle,
     struct Vec3* normals
 );
+
+RT_API void releaseAovPipeline(AovPipelineWrapper pipeline);
+
+// Rust side takes ownership, and should call `releasePathtracerPipeline` when finished
+RT_API PathtracerPipelineWrapper makePathtracerPipeline(
+    OptixDeviceContext ctx,
+    const uint8_t* progData,
+    size_t progSize
+);
+
+RT_API PathtracerSbtWrapper makePathtracerSbt();
+RT_API void addHitRecordPathtracerSbt(PathtracerSbtWrapper, GeometryData geometryData);
+RT_API void finalizePathtracerSbt(PathtracerSbtWrapper sbt);
+RT_API void releasePathtracerSbt(PathtracerSbtWrapper sbt);
+
+RT_API void launchPathtracerPipeline(
+    PathtracerPipelineWrapper pipeline,
+    const struct Scene* scene,
+    OptixTraversableHandle rootHandle,
+    struct Vec3* radiance
+);
+
+RT_API void releasePathtracerPipeline(PathtracerPipelineWrapper pipeline);
