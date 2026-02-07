@@ -83,3 +83,7 @@ RT_API void launchPathtracerPipeline(
 );
 
 RT_API void releasePathtracerPipeline(PathtracerPipelineWrapper pipeline);
+
+RT_API CudaArray makeCudaImage();
+RT_API CudaTextureObject makeCudaTexture();
+RT_API void uploadCudaTextures();

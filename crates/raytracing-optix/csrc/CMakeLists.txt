@@ -62,6 +62,7 @@ set(CU_SOURCE
   host/scene.cu
   host/pipeline.cu
   host/sbt_host.cu
+  host/texture.cu
   host/optix_function_table.cu
 )
 

@@ -1,5 +1,9 @@
 #pragma once
 
+/*
+ * SBT record definitions, shared between host/device C++ code
+ */
+
 #include <optix_types.h>
 
 struct RaygenRecord {

@@ -167,3 +167,41 @@ struct Material {
 };
 
 // @raytracing::renderer::RaytracerSettings
+
+// corresponds to `image` crate's `ColorType` enum
+enum TextureFormat {
+    R8,
+    RG8,
+    RGB8,
+    RGBA8,
+
+    R16,
+    RG16,
+    RGB16,
+    RGBA16,
+
+    R32F,
+    RG32F,
+    RGB32F,
+    RGBA32F,
+};
+
+// @raytracing::materials::texture::FilterMode
+enum FilterMode {
+    Nearest,
+    Bilinear,
+    Trilinear
+};
+
+// @raytracing::materials::texture::WrapMode
+enum WrapMode {
+    Repeat,
+    Mirror,
+    Clamp
+};
+
+// @raytracing::materials::texture::TextureSampler
+struct TextureSampler {
+    enum FilterMode filter;
+    enum WrapMode wrap;
+};

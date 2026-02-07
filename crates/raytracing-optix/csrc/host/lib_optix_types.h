@@ -1,7 +1,7 @@
 #pragma once
 
 /*
- * Types shared between Rust/C++ to manage OptiX runtime state and configuration
+ * Types shared between Rust/C++ to manage CUDA/OptiX runtime state and configuration
  */
 
 #include <optix_types.h>
@@ -27,4 +27,17 @@ struct GeometryData {
     size_t num_vertices;
     const struct Vec3 *normals;
     const struct Vec2 *uvs;
+};
+
+struct CudaArray {
+    void *d_array;
+};
+
+struct CudaTextureObject {
+    unsigned long long handle;
+};
+
+struct CudaTextures {
+    void *d_texture_objects;
+    size_t count;
 };
