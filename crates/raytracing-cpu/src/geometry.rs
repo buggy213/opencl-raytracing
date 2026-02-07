@@ -180,35 +180,36 @@ fn ray_sphere_intersect(
     // we take the convention of u being azimuthal angle (phi), 
     // v being polar angle (theta) with z-up
     let point = o_ray.at(t);
-    
-    let r_cos_theta = point.z();
+    let local = point - center;
+
+    let r_cos_theta = local.z();
     let theta = f32::acos(r_cos_theta / radius);
-    let r_sin_theta_cos_phi = point.x();
+    let r_sin_theta_cos_phi = local.x();
     let cos_phi = r_sin_theta_cos_phi / (radius * f32::sin(theta));
-    let r_sin_theta_sin_phi = point.y();
+    let r_sin_theta_sin_phi = local.y();
     let sin_phi = r_sin_theta_sin_phi / (radius * f32::sin(theta));
 
-    let phi = if point.y() > 0.0 {
+    let phi = if local.y() > 0.0 {
         f32::acos(cos_phi)
     } else {
         2.0 * f32::consts::PI - f32::acos(cos_phi)
     };
-    
+
     let uv = Vec2(
         phi / (2.0 * f32::consts::PI),
-        theta / f32::consts::PI 
+        theta / f32::consts::PI
     );
 
     let dpdu = Vec3(
-        -2.0 * f32::consts::PI * point.y(),
-        2.0 * f32::consts::PI * point.x(),
+        -2.0 * f32::consts::PI * local.y(),
+        2.0 * f32::consts::PI * local.x(),
         0.0
     );
 
     let sin_theta = f32::sin(theta);
     let dpdv = f32::consts::PI * Vec3(
-        point.z() * cos_phi,
-        point.z() * sin_phi,
+        local.z() * cos_phi,
+        local.z() * sin_phi,
         -radius * sin_theta
     );
 
@@ -216,7 +217,7 @@ fn ray_sphere_intersect(
         t,
         uv,
         point,
-        normal: (point - center) / radius,
+        normal: local / radius,
 
         dpdu,
         dpdv,
@@ -336,4 +337,37 @@ fn ray_triangle_intersect(
     }
 
     Some((t, u, v))
+}
+
+#[test]
+fn test_sphere_uv_off_center() {
+    // Sphere at (0, 3, 0), radius 1. Ray from origin along +y hits at (0, 2, 0).
+    // Local offset from center is (0, -1, 0): theta = pi/2, phi = 3pi/2.
+    // Expected: normal = (0, -1, 0), u = 0.75, v = 0.5
+    let center = Vec3(0.0, 3.0, 0.0);
+    let radius = 1.0;
+    let ray = Ray {
+        origin: Vec3(0.0, 0.0, 0.0),
+        direction: Vec3(0.0, 1.0, 0.0),
+    };
+
+    let result = ray_sphere_intersect(center, radius, ray, 0.001, f32::MAX)
+        .expect("ray should hit sphere");
+
+    assert!((result.t - 2.0).abs() < 1e-5, "t = {}", result.t);
+
+    let expected_normal = Vec3(0.0, -1.0, 0.0);
+    assert!(
+        (result.normal - expected_normal).length() < 1e-5,
+        "normal = {:?}", result.normal
+    );
+
+    assert!(
+        (result.uv.0 - 0.75).abs() < 1e-4,
+        "u = {} (expected 0.75)", result.uv.0
+    );
+    assert!(
+        (result.uv.1 - 0.5).abs() < 1e-4,
+        "v = {} (expected 0.5)", result.uv.1
+    );
 }
