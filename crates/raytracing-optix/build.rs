@@ -4,6 +4,7 @@ use cmake;
 
 fn bindgen_customization(bindings_builder: bindgen::Builder) -> bindgen::Builder {
     bindings_builder.rustified_enum("CameraTypeKind")
+        .rustified_enum("GeometryData_GeometryKind")
 }
 
 fn main() {

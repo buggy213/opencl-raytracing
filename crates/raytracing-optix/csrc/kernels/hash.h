@@ -8,8 +8,9 @@ inline __device__ u64 hash_u32(
     u32 data,
     u64 hash_state = 0x9e3779b97f4a7c15ULL
 ) {
-    data *= 0xbf58476d1ce4e5b9ULL;
-    data ^= data >> 32;
+    u64 data_long = data;
+    data_long *= 0xbf58476d1ce4e5b9ULL;
+    data_long ^= data_long >> 32;
 
     hash_state ^= data;
     hash_state *= 0x94d049bb133111ebULL;

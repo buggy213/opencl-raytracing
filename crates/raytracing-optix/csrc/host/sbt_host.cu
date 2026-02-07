@@ -29,7 +29,7 @@ __host__ void AovSbt::finalize(AovPipeline& pipeline) {
         cudaMalloc(&d_uvs, payload.num_vertices * sizeof(float2));
         cudaMemcpy(d_uvs, payload.uvs, payload.num_vertices * sizeof(float2), cudaMemcpyHostToDevice);
 
-        HitgroupRecord hitgroupRecord;
+        HitgroupRecord hitgroupRecord = {};
         switch (payload.kind) {
             case GeometryData::TRIANGLE:
                 optixSbtRecordPackHeader(pipeline.triHitProgramGroup, &hitgroupRecord);

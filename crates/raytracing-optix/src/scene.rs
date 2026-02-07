@@ -4,7 +4,7 @@
 
 use raytracing::{geometry::Shape, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
 
-use crate::optix::{self, OptixAccelerationStructure};
+use crate::optix::{self, OptixAccelerationStructure, Vec3SliceWrap, Vec3uSliceWrap};
 
 fn make_leaf_geometry_as(
     ctx: optix::OptixDeviceContext, 
@@ -12,16 +12,17 @@ fn make_leaf_geometry_as(
 ) -> OptixAccelerationStructure {
     match shape {
         Shape::TriangleMesh(mesh) => {
-            let vertices = mesh.vertices.as_ptr() as *const optix::Vec3;
-            #[allow(non_snake_case, reason = "match C++ API")]
-            let verticesLen = mesh.vertices.len();
+            let vertices: Vec3SliceWrap = mesh.vertices.as_slice().into();
 
-            let tris = mesh.tris.as_ptr() as *const optix::Vec3u;
             #[allow(non_snake_case, reason = "match C++ API")]
-            let trisLen = mesh.tris.len();
+            let (vertices, verticesLen) = (vertices.as_ptr(), vertices.len());
+            
+            let tris: Vec3uSliceWrap = mesh.tris.as_slice().into();
+            
+            #[allow(non_snake_case, reason = "match C++ API")]
+            let (tris, trisLen) = (tris.as_ptr(), tris.len());
 
-            // SAFETY: verticesLen and trisLen are valid lengths for vertices / tris, 
-            // and transform is valid pointer to 4x4 row-major matrix of floats
+            // SAFETY: verticesLen and trisLen are valid lengths for vertices / tris
             unsafe {
                 optix::makeMeshAccelerationStructure(
                     ctx, 

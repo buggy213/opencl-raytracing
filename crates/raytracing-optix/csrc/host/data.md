@@ -16,7 +16,8 @@ SBT hitgroup records will have the following format
 | struct MeshData |
 | union MaterialData |
 
-`struct MeshData` is defined as `struct MeshData { uint3* indices, float3* normals, float2* uvs }`. These are unused for non-triangle meshes, but could be useful for other procedural geometry possibly...
+`struct MeshData` is defined as `struct MeshData { uint3* indices, float3* normals, float2* uvs }`. These are unused for non-triangle meshes, but the space could be useful for other procedural geometry possibly...
+A mesh without normals / UVs has those respective pointers set to null. 
 
 `union MaterialData` is defined to be a `union` over the different sets of `TextureId` required by different materials. The program already knows which material type it is (since there is one closest-hit program per material)
 

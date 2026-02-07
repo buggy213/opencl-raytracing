@@ -43,10 +43,11 @@ struct LayeredBsdf {
 };
 
 enum class BsdfComponentFlags : u32 {
+    EMPTY = 0,
     NONSPECULAR_REFLECTION = 1 << 0,
     SPECULAR_REFLECTION = 1 << 1,
     NONSPECULAR_TRANSMISSION = 1 << 2,
-    SPECULAR_TRANSMISSION = 1 << 3
+    SPECULAR_TRANSMISSION = 1 << 3,
 };
 
 inline __device__ BsdfComponentFlags operator|(BsdfComponentFlags a, BsdfComponentFlags b) {
@@ -123,7 +124,7 @@ inline __device__ float3 evaluate_bsdf(OptixBsdfSmoothConductor bsdf, float3 wo,
 // @raytracing_cpu::materials::CpuBsdf::evaluate_pdf
 inline __device__ float evaluate_pdf(OptixBsdfDiffuse bsdf, float3 wo, float3 wi, BsdfComponentFlags component)
 {
-    if (component & BsdfComponentFlags::NONSPECULAR_TRANSMISSION == 0)
+    if ((component & BsdfComponentFlags::NONSPECULAR_TRANSMISSION) == BsdfComponentFlags::EMPTY)
     {
         return 0.0f;
     }
@@ -143,7 +144,7 @@ inline __device__ float evaluate_pdf(OptixBsdfDiffuse bsdf, float3 wo, float3 wi
 inline __device__ BsdfSample sample_bsdf(
     OptixBsdfDiffuse bsdf, float3 wo, BsdfComponentFlags component, sample::OptixSampler& sampler
 ) {
-    if (component & BsdfComponentFlags::NONSPECULAR_REFLECTION == 0)
+    if ((component & BsdfComponentFlags::NONSPECULAR_REFLECTION) == BsdfComponentFlags::EMPTY)
     {
         return BsdfSample();
     }

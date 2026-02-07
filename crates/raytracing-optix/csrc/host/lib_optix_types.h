@@ -22,8 +22,9 @@ struct GeometryData {
     enum GeometryKind { TRIANGLE, SPHERE } kind;
 
     size_t num_tris;
-    struct Vec3 *tris;
+    const struct Vec3u *tris;
+
     size_t num_vertices;
-    struct Vec3 *normals;
-    struct Vec2 *uvs;
+    const struct Vec3 *normals;
+    const struct Vec2 *uvs;
 };

@@ -13,7 +13,10 @@ pub(crate) mod kernels {
     pub(crate) const NORMALS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/normals.optixir"));
 }
 
+use std::{ops::Deref, slice};
+
 pub(crate) use detail::{
+    Vec2,
     Vec3,
     Vec3u,
     Matrix4x4,
@@ -29,9 +32,25 @@ pub(crate) use detail::{
     makeMeshAccelerationStructure,
     makeInstanceAccelerationStructure,
 
-    OptixPipelineWrapper,
+    AovPipelineWrapper,
     makeAovPipeline,
     launchAovPipeline,
+
+
+    GeometryData,
+    GeometryData_GeometryKind,
+
+    AovSbtWrapper,
+    makeAovSbt,
+    addHitRecordAovSbt,
+    finalizeAovSbt,
+    releaseAovSbt,
+
+    PathtracerSbtWrapper,
+    makePathtracerSbt,
+    addHitRecordPathtracerSbt,
+    finalizePathtracerSbt,
+    releasePathtracerSbt,
 
     Camera,
 };
@@ -65,6 +84,25 @@ const _: () = {
     assert!(std::mem::align_of::<raytracing::geometry::Vec3>() == std::mem::align_of::<Vec3>());
 };
 
+pub(crate) struct Vec3SliceWrap<'s>(&'s [Vec3]);
+impl<'s> From<&'s [raytracing::geometry::Vec3]> for Vec3SliceWrap<'s> {
+    fn from(value: &'s [raytracing::geometry::Vec3]) -> Vec3SliceWrap<'s> {
+        // SAFETY: rust's own allocated memory surely meets safety criteria for `from_raw_parts`, and layout check above
+        // should ensure pointer cast is safe
+        Vec3SliceWrap(
+            unsafe { slice::from_raw_parts(value.as_ptr() as *const Vec3, value.len()) }
+        )
+    }
+}
+
+impl Deref for Vec3SliceWrap<'_> {
+    type Target = [Vec3];
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
 impl From<raytracing::geometry::Vec3u> for Vec3u {
     fn from(value: raytracing::geometry::Vec3u) -> Self {
         Vec3u { x: value.0, y: value.1, z: value.2 }
@@ -82,6 +120,62 @@ const _: () = {
     assert!(std::mem::size_of::<raytracing::geometry::Vec3u>() == std::mem::size_of::<Vec3u>());
     assert!(std::mem::align_of::<raytracing::geometry::Vec3u>() == std::mem::align_of::<Vec3u>());
 };
+
+pub(crate) struct Vec3uSliceWrap<'s>(&'s [Vec3u]);
+impl<'s> From<&'s [raytracing::geometry::Vec3u]> for Vec3uSliceWrap<'s> {
+    fn from(value: &'s [raytracing::geometry::Vec3u]) -> Vec3uSliceWrap<'s> {
+        // SAFETY: rust's own allocated memory surely meets safety criteria for `from_raw_parts`, and layout check above
+        // should ensure pointer cast is safe
+        Vec3uSliceWrap(
+            unsafe { slice::from_raw_parts(value.as_ptr() as *const Vec3u, value.len()) }
+        )
+    }
+}
+
+impl Deref for Vec3uSliceWrap<'_> {
+    type Target = [Vec3u];
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl From<raytracing::geometry::Vec2> for Vec2 {
+    fn from(value: raytracing::geometry::Vec2) -> Self {
+        Vec2 { x: value.0, y: value.1 }
+    }
+}
+
+impl From<Vec2> for raytracing::geometry::Vec2 {
+    fn from(value: Vec2) -> Self {
+        raytracing::geometry::Vec2(value.x, value.y)
+    }
+}
+
+const _: () = {
+    // ensure that layouts match
+    assert!(std::mem::size_of::<raytracing::geometry::Vec2>() == std::mem::size_of::<Vec2>());
+    assert!(std::mem::align_of::<raytracing::geometry::Vec2>() == std::mem::align_of::<Vec2>());
+};
+
+pub(crate) struct Vec2SliceWrap<'s>(&'s [Vec2]);
+impl<'s> From<&'s [raytracing::geometry::Vec2]> for Vec2SliceWrap<'s> {
+    fn from(value: &'s [raytracing::geometry::Vec2]) -> Vec2SliceWrap<'s> {
+        // SAFETY: rust's own allocated memory surely meets safety criteria for `from_raw_parts`, and layout check above
+        // should ensure pointer cast is safe
+        Vec2SliceWrap(
+            unsafe { std::slice::from_raw_parts(value.as_ptr() as *const Vec2, value.len()) }
+        )
+    }
+}
+
+impl std::ops::Deref for Vec2SliceWrap<'_> {
+    type Target = [Vec2];
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
 
 impl From<raytracing::geometry::Matrix4x4> for Matrix4x4 {
     fn from(value: raytracing::geometry::Matrix4x4) -> Self {
