@@ -12,8 +12,23 @@ from .test_spec import load_test_suite
 
 
 def get_cli_binary() -> str:
-    """Get the path to the cli binary."""
-    return "cli"
+    """Build the bundled CLI via cargo xtask and return its path."""
+    workspace_root = Path(__file__).parent.parent.parent.parent
+    dist_binary = workspace_root / "dist" / "cli"
+
+    print("Building CLI bundle via cargo xtask...")
+    result = subprocess.run(
+        ["cargo", "xtask", "bundle", "--release"],
+        cwd=workspace_root,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(result.stderr, file=sys.stderr)
+        sys.exit(2)
+    print("Build complete.")
+
+    return str(dist_binary)
 
 
 def get_default_tests_file() -> Path:
@@ -226,7 +241,7 @@ Examples:
         suite.tests = [t for t in suite.tests if t.name in requested]
 
     # run the tests
-    workspace_root = Path(__file__).parent.parent.parent.parent.parent
+    workspace_root = Path(__file__).parent.parent.parent.parent
     scenes_dir = workspace_root / "scenes"
 
     results = runner.run_tests(

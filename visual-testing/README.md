@@ -4,16 +4,14 @@ Snapshot-based visual regression testing for the raytracer. Renders builtin test
 
 ## Requirements
 
-- **Rust CLI**: The `cli` binary must be installed and in your PATH:
-  ```bash
-  cargo install --path crates/cli
-  ```
+- **Rust toolchain**: The CLI is built automatically via `cargo xtask bundle`
+- **patchelf**: Required by xtask for rpath patching
 - **Python 3.10+** with [uv](https://github.com/astral-sh/uv)
 
 ## Quick Start
 
 ```bash
-cd crates/visual-testing
+cd visual-testing
 
 # Run all tests (defined in tests/tests.toml)
 uv run rttest cpu -- -s 1 -l 1
@@ -80,7 +78,7 @@ Returns JSON with test results, metrics, and artifact paths.
 ## Directory Structure
 
 ```
-crates/visual-testing/
+visual-testing/
 ├── references/           # Blessed reference images (not version-controlled)
 ├── outputs/              # Test outputs and diff images (not version-controlled)
 ├── tests/                # Example test specification files
@@ -192,10 +190,9 @@ light_samples = 2
 
 1. (For builtin scenes) Add the scene to `all_test_scenes()` in `crates/raytracing/src/scene/scene.rs`
 2. Add a `[[test]]` entry to `tests/tests.toml`
-3. Rebuild and bless:
+3. Bless:
 
 ```bash
-cargo install --path crates/cli
 uv run rttest cpu --bless -- -s 1 -l 1
 ```
 

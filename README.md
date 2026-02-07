@@ -115,13 +115,12 @@ CLI also has the `--interactive` flag, which allows you to set these different s
 ## Tests
 
 - **Unit tests**: Typically used for math and utility routines. Run with `cargo test`.
-- **Visual regression tests**: Snapshot-based image comparison using `crates/visual-testing`. See [crates/visual-testing/README.md](crates/visual-testing/README.md) for details.
+- **Visual regression tests**: Snapshot-based image comparison using `visual-testing`. See [visual-testing/README.md](visual-testing/README.md) for details.
 
 Quick start for visual testing:
 
 ```bash
-cargo install --path crates/cli
-cd crates/visual-testing
+cd visual-testing
 uv run rttest cpu --bless -- -s 1 -l 1   # create reference images
 uv run rttest cpu -- -s 1 -l 1           # run tests
 ```
