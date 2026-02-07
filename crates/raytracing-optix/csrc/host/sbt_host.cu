@@ -21,13 +21,17 @@ __host__ void AovSbt::finalize(AovPipeline& pipeline) {
         cudaMalloc(&d_tris, payload.num_tris * sizeof(uint3));
         cudaMemcpy(d_tris, payload.tris, payload.num_tris * sizeof(uint3), cudaMemcpyHostToDevice);
 
-        void* d_normals;
-        cudaMalloc(&d_normals, payload.num_vertices * sizeof(float3));
-        cudaMemcpy(d_normals, payload.normals, payload.num_vertices * sizeof(float3), cudaMemcpyHostToDevice);
+        void* d_normals = nullptr;
+        if (payload.normals) {
+            cudaMalloc(&d_normals, payload.num_vertices * sizeof(float3));
+            cudaMemcpy(d_normals, payload.normals, payload.num_vertices * sizeof(float3), cudaMemcpyHostToDevice);
+        }
 
-        void* d_uvs;
-        cudaMalloc(&d_uvs, payload.num_vertices * sizeof(float2));
-        cudaMemcpy(d_uvs, payload.uvs, payload.num_vertices * sizeof(float2), cudaMemcpyHostToDevice);
+        void* d_uvs = nullptr;
+        if (payload.uvs) {
+            cudaMalloc(&d_uvs, payload.num_vertices * sizeof(float2));
+            cudaMemcpy(d_uvs, payload.uvs, payload.num_vertices * sizeof(float2), cudaMemcpyHostToDevice);
+        }
 
         HitgroupRecord hitgroupRecord = {};
         switch (payload.kind) {
