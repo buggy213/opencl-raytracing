@@ -175,6 +175,7 @@ __host__ OptixAccelerationStructure makeIAS(
     OptixDeviceContext ctx,
     const OptixAccelerationStructure* instances,
     const Matrix4x4* transforms,
+    const unsigned int* sbtOffsets,
     size_t len
 ) {
     std::vector<OptixInstance> instanceBuffer;
@@ -185,12 +186,7 @@ __host__ OptixAccelerationStructure makeIAS(
         instance.instanceId = 0; /* we don't use this field, even if there is instancing happening */
         instance.visibilityMask = 255;
 
-        if (instances[i].primitive_type == OPTIX_BUILD_INPUT_TYPE_TRIANGLES) {
-            instance.sbtOffset = 1;
-        }
-        else {
-            instance.sbtOffset = 0;
-        }
+        instance.sbtOffset = sbtOffsets[i];
 
         instance.flags = OPTIX_INSTANCE_FLAG_NONE;
         instance.traversableHandle = instances[i].handle;

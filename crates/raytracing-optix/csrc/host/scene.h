@@ -22,5 +22,6 @@ OptixAccelerationStructure makeIAS(
     OptixDeviceContext ctx,
     const OptixAccelerationStructure* instances,
     const Matrix4x4* transforms,
+    const unsigned int* sbtOffsets,
     size_t len
 );

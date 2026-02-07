@@ -4,17 +4,18 @@ use std::marker::PhantomData;
 
 use raytracing::{geometry::Shape, scene::Scene};
 
-use crate::optix::{AovPipelineWrapper, AovSbtWrapper, GeometryData, GeometryData_GeometryKind, Vec2SliceWrap, Vec3SliceWrap, Vec3uSliceWrap, addHitRecordAovSbt, finalizeAovSbt, makeAovSbt, releaseAovSbt};
+use crate::{optix::{AovPipelineWrapper, AovSbtWrapper, GeometryData, GeometryData_GeometryKind, Vec2SliceWrap, Vec3SliceWrap, Vec3uSliceWrap, addHitRecordAovSbt, finalizeAovSbt, makeAovSbt, releaseAovSbt}, scene::SbtVisitor};
 
 // PhantomData tells borrowck that AovSbtWrapper acts as though it references scene data (it does)
 // Once finalized, the AovSbt doesn't reference scene data anymore, and lifetime annotation is unneeded
-struct AovSbtBuilder<'scene> {
+pub(crate) struct AovSbtBuilder<'scene> {
     ptr: AovSbtWrapper,
+    current_sbt_offset: u32,
     _data: PhantomData<&'scene Scene>
 }
 
-struct AovSbt {
-    ptr: AovSbtWrapper
+pub(crate) struct AovSbt {
+    pub(crate) ptr: AovSbtWrapper
 }
 
 impl<'scene> AovSbtBuilder<'scene> {
@@ -22,11 +23,12 @@ impl<'scene> AovSbtBuilder<'scene> {
         // SAFETY: no preconditions
         Self {
             ptr: unsafe { makeAovSbt() },
+            current_sbt_offset: 0,
             _data: PhantomData
         }
     }
 
-    pub(crate) fn add_hitgroup_record(&mut self, shape: &Shape) {
+    fn add_hitgroup_record(&mut self, shape: &Shape) {
         let geometry_data = match shape {
             Shape::TriangleMesh(mesh) => {
                 let tris: Vec3uSliceWrap = mesh.tris.as_slice().into();
@@ -71,6 +73,8 @@ impl<'scene> AovSbtBuilder<'scene> {
         };
 
         unsafe { addHitRecordAovSbt(self.ptr, geometry_data); }
+
+        self.current_sbt_offset += 1;
     }
 
     pub(crate) fn finalize(self, pipeline_wrapper: AovPipelineWrapper) -> AovSbt {
@@ -83,5 +87,18 @@ impl<'scene> AovSbtBuilder<'scene> {
 impl Drop for AovSbt {
     fn drop(&mut self) {
         unsafe { releaseAovSbt(self.ptr); }
+    }
+}
+
+impl SbtVisitor for AovSbtBuilder<'_> {
+    fn visit_geometry_as(&mut self, shape: &Shape) -> u32 {
+        let old_sbt_offset = self.current_sbt_offset;
+        self.add_hitgroup_record(shape);
+
+        old_sbt_offset
+    }
+
+    fn visit_instance_as(&mut self) -> u32 {
+        0
     }
 }

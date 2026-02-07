@@ -31,8 +31,7 @@ pub fn render(
 
     // SAFETY: no preconditions
     let optix_ctx = unsafe { optix::initOptix(true) };
-    
-    let scene_as = scene::prepare_optix_acceleration_structures(optix_ctx, scene);
+
     let normals_kernel = optix::kernels::NORMALS;
     let normals_pipeline = unsafe { 
         optix::makeAovPipeline(
@@ -41,6 +40,10 @@ pub fn render(
             normals_kernel.len(),
         ) 
     };
+    
+    let mut scene_sbt = sbt::AovSbtBuilder::new(scene);
+    let scene_as = scene::prepare_optix_acceleration_structures(optix_ctx, scene, &mut scene_sbt);
+    let scene_sbt = scene_sbt.finalize(normals_pipeline);
 
     let camera: optix::Camera = scene.camera.clone().into();
     let mut render_output = RenderOutput::new(camera.raster_width as u32, camera.raster_height as u32);
@@ -53,15 +56,11 @@ pub fn render(
     unsafe { 
         optix::launchAovPipeline(
             normals_pipeline,
+            scene_sbt.ptr,
             &camera,
             scene_as.handle,
             normals.as_mut_ptr()
         ); 
-    }
-
-    // SAFETY: optix_ctx is valid
-    unsafe {
-        optix::destroyOptix(optix_ctx);
     }
     
     // in theory, this should be optimized away

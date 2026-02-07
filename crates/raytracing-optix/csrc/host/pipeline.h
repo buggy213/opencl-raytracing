@@ -20,6 +20,7 @@ AovPipeline makeAovPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData,
 
 void launchAovPipelineImpl(
     const AovPipeline& pipeline,
+    const AovSbt& sbt,
     const Camera* camera,
     OptixTraversableHandle rootHandle,
     Vec3* normals

@@ -1,8 +1,14 @@
 #pragma once
 
+#include "kernel_math.h"
+
 struct Ray {
     float3 origin;
     float3 direction;
+
+    __device__ float3 at(float t) const {
+        return origin + t * direction;
+    }
 };
 
 // sue me

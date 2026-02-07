@@ -6,6 +6,7 @@
 #include "kernel_math.h"
 #include "kernel_types.h"
 
+#include "accel.h"
 #include "camera.h"
 
 #include <optix_device.h>
@@ -52,20 +53,6 @@ extern "C" __global__ void __miss__nop() {
 }
 
 extern "C" __global__ void __closesthit__normal_sphere() {
-    float4 sphere_data[1];
-    optixGetSphereData(sphere_data);
-
-    // w is the radius
-    float3 sphere_center = make_float3(sphere_data->x, sphere_data->y, sphere_data->z);
-    float sphere_radius = sphere_data->w;
-
-    float3 ray_origin = optixGetWorldRayOrigin();
-    float3 ray_direction = optixGetWorldRayDirection();
-    float t = optixGetRayTmax();
-
-    float3 intersection_point = ray_origin + ray_direction * t;
-
-    float3 normal = (intersection_point - sphere_center) / sphere_radius;
     optixSetPayload_0(__float_as_uint(normal.x));
     optixSetPayload_1(__float_as_uint(normal.y));
     optixSetPayload_2(__float_as_uint(normal.z));

@@ -73,12 +73,14 @@ RT_API __host__ OptixAccelerationStructure makeInstanceAccelerationStructure(
     OptixDeviceContext ctx,
     const OptixAccelerationStructure* instances,
     const struct Matrix4x4* transforms,
+    const unsigned int* sbtOffsets,
     size_t len
 ) {
     return makeIAS(
         ctx,
         instances,
         transforms,
+        sbtOffsets,
         len
     );
 }
@@ -111,12 +113,14 @@ RT_API __host__ void releaseAovSbt(AovSbtWrapper sbt) {
 
 RT_API __host__ void launchAovPipeline(
     AovPipelineWrapper pipeline,
+    AovSbtWrapper sbt,
     const Camera* camera,
     OptixTraversableHandle rootHandle,
     struct Vec3* normals
 ) {
     launchAovPipelineImpl(
         *pipeline,
+        *sbt,
         camera,
         rootHandle,
         normals

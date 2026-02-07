@@ -36,6 +36,7 @@ RT_API struct OptixAccelerationStructure makeInstanceAccelerationStructure(
     OptixDeviceContext ctx,
     const struct OptixAccelerationStructure* instances,
     const struct Matrix4x4* transforms,
+    const unsigned int* sbtOffsets,
     size_t len
 );
 
@@ -53,6 +54,7 @@ RT_API void releaseAovSbt(AovSbtWrapper sbt);
 
 RT_API void launchAovPipeline(
     AovPipelineWrapper pipeline,
+    AovSbtWrapper sbt,
     const struct Camera* camera,
     OptixTraversableHandle rootHandle,
     struct Vec3* normals
