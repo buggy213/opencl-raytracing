@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "sbt_host.h"
-#include "lib_types.h"
+#include "types.h"
 #include "lib_optix_types.h"
 
 // AOV shader binding table layout: 1 raygen record, 1 miss record (sets all AOV to default / invalid)
@@ -23,11 +23,11 @@ struct AovSbt {
 // Pathtracer shader binding table layout: 1 raygen record, 2 miss records (one for radiance rays, one for shadow rays)
 // 2 hitgroup records per primitive, one for shadow rays and one for radiance rays
 struct PathtracerSbt {
-    std::vector<StagedHitgroupRecord> hitgroupRecords;
+    // std::vector<StagedHitgroupRecord> hitgroupRecords;
 
     OptixShaderBindingTable sbt;
 
     size_t addHitgroupRecord();
-    void finalize();
+    void finalize(PathtracerPipeline& pipeline);
     ~PathtracerSbt();
 };

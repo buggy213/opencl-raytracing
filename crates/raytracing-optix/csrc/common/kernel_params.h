@@ -6,7 +6,7 @@
 
 #include <optix_device.h>
 
-#include "lib_types.h"
+#include "types.h"
 
 struct AovPipelineParams {
     float3* normals;

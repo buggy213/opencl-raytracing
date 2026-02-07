@@ -3,10 +3,12 @@
 #include <cstdint>
 #include <vector>
 
-#include "lib_types.h"
+#include "types.h"
 #include "optix.h"
 #include "util.h"
 #include "sbt.h"
+#include "kernel_params.h"
+#include "sbt_host.h"
 
 __host__ AovPipeline makeAovPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData, size_t progSize) {
     OptixModuleCompileOptions moduleCompileOptions = {};
@@ -165,57 +167,11 @@ __host__ AovPipeline makeAovPipelineImpl(OptixDeviceContext ctx, const uint8_t* 
 
 __host__ void launchAovPipelineImpl(
     const AovPipeline& pipeline,
+    const AovSbt& sbt,
     const Camera* camera,
     OptixTraversableHandle rootHandle,
     Vec3* normals
 ) {
-
-
-    EmptyRecord raygenRecord;
-    EmptyRecord missRecord;
-    EmptyRecord sphereHitGroupRecord;
-    EmptyRecord triHitGroupRecord;
-
-    optixSbtRecordPackHeader(pipeline.raygenProgram, &raygenRecord);
-    optixSbtRecordPackHeader(pipeline.missProgram, &missRecord);
-    optixSbtRecordPackHeader(pipeline.sphereHitProgramGroup, &sphereHitGroupRecord);
-    optixSbtRecordPackHeader(pipeline.triHitProgramGroup, &triHitGroupRecord);
-
-    void* d_raygenRecord;
-    cudaMalloc(&d_raygenRecord, sizeof(EmptyRecord));
-    cudaMemcpy(d_raygenRecord, &raygenRecord, sizeof(EmptyRecord), cudaMemcpyHostToDevice);
-
-    void* d_missRecord;
-    cudaMalloc(&d_missRecord, sizeof(EmptyRecord));
-    cudaMemcpy(d_missRecord, &missRecord, sizeof(EmptyRecord), cudaMemcpyHostToDevice);
-
-    EmptyRecord* d_hitGroupRecords;
-    cudaMalloc(&d_hitGroupRecords, 2 * sizeof(EmptyRecord));
-    cudaMemcpy(&d_hitGroupRecords[0], &sphereHitGroupRecord, sizeof(EmptyRecord), cudaMemcpyHostToDevice);
-    cudaMemcpy(&d_hitGroupRecords[1], &triHitGroupRecord, sizeof(EmptyRecord), cudaMemcpyHostToDevice);
-
-    cudaStream_t stream;
-    cudaStreamCreate(&stream);
-
-    OptixShaderBindingTable sbt = {};
-    sbt.raygenRecord = (CUdeviceptr)d_raygenRecord;
-
-    sbt.missRecordBase = (CUdeviceptr)d_missRecord;
-    sbt.missRecordCount = 1;
-    sbt.missRecordStrideInBytes = sizeof(EmptyRecord);
-
-    sbt.hitgroupRecordBase = (CUdeviceptr)d_hitGroupRecords;
-    sbt.hitgroupRecordCount = 2;
-    sbt.hitgroupRecordStrideInBytes = sizeof(EmptyRecord);
-
-    sbt.callablesRecordCount = 0;
-
-    struct Params {
-        CUdeviceptr normals;
-        CUdeviceptr camera;
-        OptixTraversableHandle root_handle;
-    };
-
     size_t width = camera->raster_width;
     size_t height = camera->raster_height;
 
@@ -226,21 +182,24 @@ __host__ void launchAovPipelineImpl(
     cudaMalloc(&d_camera, sizeof(Camera));
     cudaMemcpy(d_camera, camera, sizeof(Camera), cudaMemcpyHostToDevice);
 
-    Params pipelineParams = {};
-    pipelineParams.normals = (CUdeviceptr)d_normals;
-    pipelineParams.camera = (CUdeviceptr)d_camera;
+    AovPipelineParams pipelineParams = {};
+    pipelineParams.normals = (float3*)d_normals;
+    pipelineParams.camera = (Camera*)d_camera;
     pipelineParams.root_handle = rootHandle;
 
     void* d_pipelineParams;
-    cudaMalloc(&d_pipelineParams, sizeof(Params));
-    cudaMemcpy(d_pipelineParams, &pipelineParams, sizeof(Params), cudaMemcpyHostToDevice);
+    cudaMalloc(&d_pipelineParams, sizeof(AovPipelineParams));
+    cudaMemcpy(d_pipelineParams, &pipelineParams, sizeof(AovPipelineParams), cudaMemcpyHostToDevice);
+
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
 
     OptixResult res = optixLaunch(
         pipeline.pipeline,
         stream,
         (CUdeviceptr)d_pipelineParams,
-        sizeof(Params),
-        &sbt,
+        sizeof(AovPipelineParams),
+        &sbt.sbt,
         width,
         height,
         1
@@ -263,9 +222,6 @@ __host__ void launchAovPipelineImpl(
     cudaFree(d_normals);
     cudaFree(d_camera);
     cudaFree(d_pipelineParams);
-    cudaFree(d_raygenRecord);
-    cudaFree(d_missRecord);
-    cudaFree(d_hitGroupRecords);
 }
 
 __host__ void releaseAovPipelineImpl(AovPipeline& pipeline) {

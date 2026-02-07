@@ -1,6 +1,6 @@
 #pragma once
 
-#include "lib_types.h"
+#include "types.h"
 #include "lib_optix_types.h"
 #include "optix_types.h"
 

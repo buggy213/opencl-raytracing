@@ -5,7 +5,7 @@
 #include <string_view>
 
 #include "lib_optix_types.h"
-#include "lib_types.h"
+#include "types.h"
 
 struct AovPipeline {
     OptixPipeline pipeline;
@@ -30,19 +30,19 @@ void releaseAovPipelineImpl(AovPipeline& pipeline);
 struct PathtracerPipeline {
     OptixPipeline pipeline;
 
-    enum class RayType {
+    enum RayType {
         RADIANCE,
         SHADOW,
         RAY_TYPE_COUNT
     };
 
-    enum class GeometryType {
+    enum GeometryType {
         TRIANGLE,
         SPHERE,
         GEOMETRY_TYPE_COUNT
     };
 
-    enum class MaterialType {
+    enum MaterialType {
         DIFFUSE,
         MATERIAL_TYPE_COUNT
     };
@@ -90,24 +90,24 @@ struct PathtracerPipeline {
 
     // 1 per hitgroup (geometry, material) for radiance rays
     static constexpr size_t radianceHitProgramCount =
-        static_cast<size_t>(GeometryType::GEOMETRY_TYPE_COUNT) * static_cast<size_t>(MaterialType::MATERIAL_TYPE_COUNT);
+        GeometryType::GEOMETRY_TYPE_COUNT * MaterialType::MATERIAL_TYPE_COUNT;
 
     OptixProgramGroup hitProgramGroupsRadiance[radianceHitProgramCount];
 
     OptixModule& intersectionModule(GeometryType geometryType) {
-        return intersectionModules[static_cast<size_t>(geometryType)];
+        return intersectionModules[geometryType];
     }
 
     OptixProgramGroup& missProgram(RayType rayType) {
-        return missPrograms[static_cast<size_t>(rayType)];
+        return missPrograms[rayType];
     }
 
     OptixProgramGroup& shadowHitProgram(GeometryType geometryType) {
-        return hitProgramGroupsShadow[static_cast<size_t>(geometryType)];
+        return hitProgramGroupsShadow[geometryType];
     }
 
     OptixProgramGroup& radianceHitProgram(GeometryType geometryType, MaterialType materialType) {
-        size_t index = static_cast<size_t>(geometryType) * static_cast<size_t>(MaterialType::MATERIAL_TYPE_COUNT) + static_cast<size_t>(materialType);
+        size_t index = geometryType * MaterialType::MATERIAL_TYPE_COUNT + materialType;
         return hitProgramGroupsRadiance[index];
     }
 };

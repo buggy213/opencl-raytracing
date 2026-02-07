@@ -145,5 +145,23 @@ struct Light
             Vec3 radiance;
             Matrix4x4 light_to_world;
         };
-    };
+    } variant;
+};
+
+struct Material {
+    enum MaterialKind {
+        Diffuse,
+        SmoothDielectric,
+        SmoothConductor,
+        RoughDielectric,
+        RoughConductor,
+        CoatedDiffuse
+    } kind;
+
+    union MaterialVariant {
+        struct Diffuse {
+            Vec3 albedo;
+        };
+        // TODO: add other variants
+    } variant;
 };

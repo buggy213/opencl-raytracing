@@ -130,14 +130,28 @@ RT_API __host__ void releaseAovPipeline(AovPipelineWrapper pipeline) {
 RT_API __host__ PathtracerPipelineWrapper makePathtracerPipeline(
     OptixDeviceContext ctx,
     const uint8_t* progData,
-    size_t progSize
+    size_t progSize,
+    unsigned int maxRayDepth
 ) {
-    PathtracerPipeline pathtracerPipeline = makePathtracerPipelineImpl(ctx, progData, progSize);
+    PathtracerPipeline pathtracerPipeline = makePathtracerPipelineImpl(ctx, progData, progSize, maxRayDepth);
     return new PathtracerPipeline(pathtracerPipeline);
 }
 
 PathtracerSbtWrapper makePathtracerSbt() {
     return new PathtracerSbt;
+}
+
+void addHitRecordPathtracerSbt(PathtracerSbtWrapper sbt, GeometryData geometryData) {
+
+}
+
+void finalizePathtracerSbt(PathtracerSbtWrapper sbt, PathtracerPipelineWrapper pipeline) {
+    sbt->finalize(*pipeline);
+}
+
+
+void releasePathtracerSbt(PathtracerSbtWrapper sbt) {
+    delete sbt;
 }
 
 RT_API __host__ void launchPathtracerPipeline(

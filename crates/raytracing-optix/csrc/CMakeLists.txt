@@ -1,3 +1,5 @@
+# Based off of OptiX sample CMakeLists.txt; license included below 
+
 # Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -43,82 +45,12 @@ message("CMAKE_MODULE_PATH = " "${CMAKE_MODULE_PATH}")
 find_package(CUDAToolkit 13.0 REQUIRED)
 message("CUDAToolkit_INCLUDE_DIRS = " "${CUDAToolkit_INCLUDE_DIRS}")
 
-# Set sm_xx for all the apps
-if( ${CUDAToolkit_VERSION} VERSION_GREATER_EQUAL "13.0" )
-  # Drop architectures older than sm_75
-  set(SM_COMPUTE compute_75)
-else()
-  set(SM_COMPUTE compute_50)
-endif()
-
-message(STATUS "SM_COMPUTE set to ${SM_COMPUTE}")
-
 # This contains a macro which generates custom build rules for compiling *.cu input files to either *.ptx or *.optixir.
 include("nvcuda_compile_module")
-
-set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-
-if(UNIX) 
-  set(OS "linux")
-  add_definitions("-DLINUX")
-  add_definitions("-Wno-unused-local-typedefs -Wno-delete-non-virtual-dtor")
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++ -static-libgcc")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
-else(UNIX)
-  if(APPLE)
-  else(APPLE)
-    if(WIN32)
-      set(OS "win")
-      add_definitions("-DNOMINMAX")
-    endif(WIN32)
-  endif(APPLE)
-endif(UNIX)
-
 
 # C++17 is required for std::filesystem
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib")
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
-
-if(WIN32 AND "${CMAKE_GENERATOR}" MATCHES "^(Visual Studio).*")
-  # Set the base folder where the per-project "core" folders with the *.ptx or *.optixir files get created.
-  set(MODULE_TARGET_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$(ConfigurationName)")
-  # Enable multi-processor build on all Visual Studio versions.
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
-else()
-  # DAR This should be independent of ${CMAKE_BUILD_TYPE} because that single-configuration generator will not create subfolders, will it?
-  # Otherwise add something with if("${CMAKE_BUILD_TYPE}" STREQUAL "")
-  set(MODULE_TARGET_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
-endif()
-
-
-# Some useful macros
-macro(ADD_TARGET_PROPERTIES _target _name)
-  set(_properties)
-  foreach(_prop ${ARGN})
-    set(_properties "${_properties} ${_prop}")
-  endforeach(_prop)
-  get_target_property(_old_properties ${_target} ${_name})
-  if(NOT _old_properties)
-    # In case it's NOTFOUND
-    set(_old_properties)
-  endif(NOT _old_properties)
-  set_target_properties(${_target} PROPERTIES ${_name} "${_old_properties} ${_properties}")
-endmacro(ADD_TARGET_PROPERTIES)
-
-macro(TARGET_INCLUDE_SYMBOL target symbol)
-  if (WIN32)
-    if ( LOCAL_ARCH STREQUAL "amd64" )
-      add_target_properties( ${target} LINK_FLAGS /include:${symbol} )
-    endif()
-  endif()
-  if(UNIX)
-    add_target_properties( ${target} LINK_FLAGS "-Wl,--undefined=${symbol}" )
-  endif()
-endmacro()
 
 # find OptiX SDK
 find_package(OptiX90)
@@ -126,18 +58,18 @@ set(OPTIX_INCLUDE_DIR "${OPTIX90_INCLUDE_DIR}")
 message("OPTIX_INCLUDE_DIR = " "${OPTIX_INCLUDE_DIR}")
 
 set(CU_SOURCE
-  lib.cu
-  scene.cu
-  pipeline.cu
-  sbt_host.cu
-  optix_function_table.cu
+  host/lib.cu
+  host/scene.cu
+  host/pipeline.cu
+  host/sbt_host.cu
+  host/optix_function_table.cu
 )
 
 set(API_HEADERS
-  lib_api.h
-  lib_types.h
-  lib_optix_types.h
-  shared_lib.h
+  common/types.h
+  host/lib_api.h
+  host/lib_optix_types.h
+  host/shared_lib.h
 )
 
 # create library
@@ -149,6 +81,10 @@ set_target_properties(raytracing_optix PROPERTIES PUBLIC_HEADER "${API_HEADERS}"
 
 target_include_directories(raytracing_optix
   PRIVATE ${OPTIX_INCLUDE_DIR}
+)
+
+target_include_directories(raytracing_optix
+  PRIVATE common
 )
 
 # these preprocessor definitions ensure correct visibility of symbols

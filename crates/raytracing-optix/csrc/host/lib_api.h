@@ -1,7 +1,7 @@
 #pragma once
 
 #include "shared_lib.h"
-#include "lib_types.h"
+#include "types.h"
 #include "lib_optix_types.h"
 
 #ifdef __cplusplus
@@ -64,12 +64,13 @@ RT_API void releaseAovPipeline(AovPipelineWrapper pipeline);
 RT_API PathtracerPipelineWrapper makePathtracerPipeline(
     OptixDeviceContext ctx,
     const uint8_t* progData,
-    size_t progSize
+    size_t progSize,
+    unsigned int maxRayDepth
 );
 
 RT_API PathtracerSbtWrapper makePathtracerSbt();
 RT_API void addHitRecordPathtracerSbt(PathtracerSbtWrapper, GeometryData geometryData);
-RT_API void finalizePathtracerSbt(PathtracerSbtWrapper sbt);
+RT_API void finalizePathtracerSbt(PathtracerSbtWrapper sbt, PathtracerPipelineWrapper pipeline);
 RT_API void releasePathtracerSbt(PathtracerSbtWrapper sbt);
 
 RT_API void launchPathtracerPipeline(

@@ -6,7 +6,7 @@
 
 #include <vector>
 
-#include "lib_types.h"
+#include "types.h"
 
 // TODO: can probably optimize by using separate streams for every IAS, and adding synchronization between them
 __host__ OptixAccelerationStructure makeSphereGAS(
