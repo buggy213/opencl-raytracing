@@ -52,13 +52,15 @@ $(OUT_DIR)/%.ptx: %.cu
 	$(NVCC) $(NVCCFLAGS) --ptx $< -o $@
 
 $(OUT_DIR)/%.optixir.debug: %.cu
-	$(NVCC) $(NVCCFLAGS) --optix-ir $< -o $@
+	$(NVCC) $(NVCCFLAGS) --optix-ir -G --generate-line-info $< -o $@
 
 $(OUT_DIR)/%.ptx.debug: %.cu
-	$(NVCC) $(NVCCFLAGS) --ptx $< -o $@
+	$(NVCC) $(NVCCFLAGS) --ptx -G --generate-line-info $< -o $@
 
 -include $(OPTIXIR_DEPS)
 -include $(PTX_DEPS)
+-include $(OPTIXIR_DEBUG_DEPS)
+-include $(PTX_DEBUG_DEPS)
 
 .PHONY: all clean optix-ir ptx
 
