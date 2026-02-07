@@ -27,11 +27,15 @@ inline __device__ HitInfo get_hit_info_sphere() {
     float3 sphere_center = make_float3(sphere_data->x, sphere_data->y, sphere_data->z);
     float sphere_radius = sphere_data->w;
 
-    float3 ray_origin = optixGetObjectRayOrigin();
-    float3 ray_direction = optixGetObjectRayDirection();
+    // not the most efficient to be doing this, since we have to transform back to world-space later
+    // however, getting object-space ray is not possible in CH
+    float3 ray_origin_w = optixGetWorldRayOrigin();
+    float3 ray_direction_w = optixGetWorldRayDirection();
+    float3 ray_origin_o = optixTransformPointFromWorldToObjectSpace(ray_origin_w);
+    float3 ray_direction_o = optixTransformVectorFromWorldToObjectSpace(ray_direction_w);
     float t = optixGetRayTmax();
 
-    float3 intersection_point = ray_origin + ray_direction * t;
+    float3 intersection_point = ray_origin_o + ray_direction_o * t;
     float3 normal = (intersection_point - sphere_center) / sphere_radius;
 
     float3 local = intersection_point - sphere_center;

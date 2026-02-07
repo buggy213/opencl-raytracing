@@ -165,3 +165,5 @@ struct Material {
         // TODO: add other variants
     } variant;
 };
+
+// @raytracing::renderer::RaytracerSettings

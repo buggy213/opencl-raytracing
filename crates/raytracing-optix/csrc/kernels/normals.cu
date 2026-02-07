@@ -53,20 +53,18 @@ extern "C" __global__ void __miss__nop() {
 }
 
 extern "C" __global__ void __closesthit__normal_sphere() {
+    HitInfo hit = get_hit_info_sphere();
+
+    float3 normal = hit.normal;
     optixSetPayload_0(__float_as_uint(normal.x));
     optixSetPayload_1(__float_as_uint(normal.y));
     optixSetPayload_2(__float_as_uint(normal.z));
 }
 
 extern "C" __global__ void __closesthit__normal_tri() {
-    float3 tri_data[3];
-    optixGetTriangleVertexData(tri_data);
+    HitInfo hit = get_hit_info_tri();
 
-    // OptiX has front-face CCW winding order by default
-    float3 e01 = tri_data[1] - tri_data[0];
-    float3 e02 = tri_data[2] - tri_data[0];
-
-    float3 normal = normalize(cross(e01, e02));
+    float3 normal = hit.normal;
     optixSetPayload_0(__float_as_uint(normal.x));
     optixSetPayload_1(__float_as_uint(normal.y));
     optixSetPayload_2(__float_as_uint(normal.z));

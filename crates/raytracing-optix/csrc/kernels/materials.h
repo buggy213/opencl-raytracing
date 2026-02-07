@@ -7,11 +7,12 @@
 #include "kernel_types.h"
 #include "sample.h"
 
+namespace materials
+{
+
 /// In the common case, we don't need the std::variant of the various BSDFs, since material dispatch
 /// is handled by different closest-hit programs in the SBT. This is good for register usage / scheduling
 /// We still do need it for more specialized (i.e. mix, layered) materials.
-namespace materials
-{
 struct OptixBsdfDiffuse {
     float3 albedo;
 };
@@ -146,7 +147,7 @@ inline __device__ BsdfSample sample_bsdf(
 ) {
     if ((component & BsdfComponentFlags::NONSPECULAR_REFLECTION) == BsdfComponentFlags::EMPTY)
     {
-        return BsdfSample();
+        return {};
     }
 
     float2 u = sampler.sample_uniform2();
