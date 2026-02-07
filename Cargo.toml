@@ -1,17 +1,18 @@
 [workspace]
 resolver = "3"
 
-members = [ 
+members = [
     "crates/embree4",
     "crates/embree4-sys",
-    
-    "crates/raytracing", 
-    
+
+    "crates/raytracing",
+
     "crates/raytracing-cpu",
     "crates/raytracing-optix",
-    
+
     "crates/viewer",
-    "crates/cli", 
+    "crates/cli",
+    "crates/xtask",
 ]
 
 [workspace.dependencies]
