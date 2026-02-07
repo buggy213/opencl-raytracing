@@ -47,7 +47,7 @@ RT_API AovPipelineWrapper makeAovPipeline(
 );
 
 RT_API AovSbtWrapper makeAovSbt();
-RT_API void addHitRecordAovSbt(AovSbtWrapper sbt, GeometryData geometryData);
+RT_API void addHitRecordAovSbt(AovSbtWrapper sbt, struct GeometryData geometryData);
 RT_API void finalizeAovSbt(AovSbtWrapper sbt, AovPipelineWrapper pipeline);
 RT_API void releaseAovSbt(AovSbtWrapper sbt);
 
@@ -69,7 +69,7 @@ RT_API PathtracerPipelineWrapper makePathtracerPipeline(
 );
 
 RT_API PathtracerSbtWrapper makePathtracerSbt();
-RT_API void addHitRecordPathtracerSbt(PathtracerSbtWrapper, GeometryData geometryData);
+RT_API void addHitRecordPathtracerSbt(PathtracerSbtWrapper, struct GeometryData geometryData);
 RT_API void finalizePathtracerSbt(PathtracerSbtWrapper sbt, PathtracerPipelineWrapper pipeline);
 RT_API void releasePathtracerSbt(PathtracerSbtWrapper sbt);
 

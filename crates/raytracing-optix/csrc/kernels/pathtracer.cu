@@ -1,9 +1,9 @@
 #define USE_PATHTRACER_PIPELINE_PARAMS
-#include "params.h"
+#include "kernel_params.h"
 
 #include <optix_device.h>
 
-#include "lib_types.h"
+#include "types.h"
 #include "kernel_types.h"
 #include "kernel_math.h"
 

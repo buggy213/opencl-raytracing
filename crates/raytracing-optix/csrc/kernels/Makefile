@@ -9,11 +9,13 @@ endif
 KERNELS := \
 	normals.cu \
 	pathtracer.cu
+SHARED_HEADERS := $(realpath ../common)
 NVCC := nvcc
 NVCCFLAGS := \
 	--optix-ir \
 	--use_fast_math \
 	-arch=compute_86 \
+	-I$(SHARED_HEADERS) \
 	-I$(OPTIX90_PATH)/include \
 	-I$(MATHDX_25_12_PATH)/nvidia/mathdx/25.12/include
 

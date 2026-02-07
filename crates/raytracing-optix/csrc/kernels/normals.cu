@@ -1,7 +1,7 @@
 // Ray-generation w/ pinhole camera; only performs primary visibility and only calculates geometric normals
 #define USE_AOV_PIPELINE_PARAMS
-#include "params.h"
-#include "lib_types.h"
+#include "kernel_params.h"
+#include "types.h"
 
 #include "kernel_math.h"
 #include "kernel_types.h"

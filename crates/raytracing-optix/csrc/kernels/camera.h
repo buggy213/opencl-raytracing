@@ -1,6 +1,6 @@
 #pragma once
 
-#include "lib_types.h"
+#include "types.h"
 #include "kernel_types.h"
 #include "kernel_math.h"
 

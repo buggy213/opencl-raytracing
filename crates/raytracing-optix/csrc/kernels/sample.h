@@ -10,7 +10,7 @@
 
 #include "hash.h"
 #include "kernel_math.h"
-#include "lib_types.h"
+#include "types.h"
 
 namespace sample {
 

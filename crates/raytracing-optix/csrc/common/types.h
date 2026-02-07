@@ -130,21 +130,21 @@ struct Light
     {
         struct PointLight
         {
-            Vec3 position;
-            Vec3 intensity;
+            struct Vec3 position;
+            struct Vec3 intensity;
         } point_light;
         struct DirectionLight
         {
-            Vec3 direction;
-            Vec3 radiance;
+            struct Vec3 direction;
+            struct Vec3 radiance;
         } direction_light;
         struct DiffuseAreaLight
         {
             unsigned int prim_id;
 
-            Vec3 radiance;
-            Matrix4x4 light_to_world;
-        };
+            struct Vec3 radiance;
+            struct Matrix4x4 light_to_world;
+        } area_light;
     } variant;
 };
 
@@ -160,8 +160,8 @@ struct Material {
 
     union MaterialVariant {
         struct Diffuse {
-            Vec3 albedo;
-        };
+            struct Vec3 albedo;
+        } diffuse;
         // TODO: add other variants
     } variant;
 };

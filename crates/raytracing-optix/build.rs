@@ -50,8 +50,8 @@ fn main() {
         .expect("unable to write bindings");
 
     // compile OptiX IR through make
-    println!("cargo:rerun-if-changed=kernels");
-    let kernels_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("kernels");
+    println!("cargo:rerun-if-changed=csrc/kernels");
+    let kernels_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("csrc/kernels");
     let exit_code = std::process::Command::new("make")
         .current_dir(&kernels_dir)
         .arg("all")

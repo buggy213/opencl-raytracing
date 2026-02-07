@@ -1,5 +1,5 @@
 #pragma once
-#include "lib_types.h"
+#include "types.h"
 
 inline constexpr float4 float4_zero = float4 {0.0f, 0.0f, 0.0f, 0.0f };
 inline constexpr float3 float3_zero = float3 {0.0f, 0.0f, 0.0f };
