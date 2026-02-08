@@ -6,7 +6,7 @@ pub mod png {
 
     pub fn save_png(rgb_data: &[Vec3], exposure: f32, width: u32, height: u32, output_path: &Path) {
         let file = File::create(output_path).expect("failed to create output file");
-        let mut encoder = png::Encoder::new(file, width as u32, height as u32);
+        let mut encoder = png::Encoder::new(file, width, height);
         encoder.set_color(png::ColorType::Rgb);
         encoder.set_depth(png::BitDepth::Eight);
 

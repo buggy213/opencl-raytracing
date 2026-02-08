@@ -1183,12 +1183,10 @@ mod microfacet {
             fresnel_complex(cos_theta.abs(), Complex(eta.2, kappa.2))
         );
 
-        let brdf = distribution(wm, alpha_x, alpha_y)
+        distribution(wm, alpha_x, alpha_y)
         * fresnel
         * G(wo, wi, alpha_x, alpha_y)
-        / (4.0 * wo.z() * wi.z());
-        
-        brdf
+        / (4.0 * wo.z() * wi.z())
     }
 
     pub(super) fn torrance_sparrow_refl_sample(

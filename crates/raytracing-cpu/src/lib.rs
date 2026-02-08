@@ -289,11 +289,9 @@ fn ray_radiance(
         };
 
         let add_zero_bounce = raytracer_settings.accumulate_bounces || raytracer_settings.max_ray_depth == depth;
-        if specular_bounce && add_zero_bounce {
-            if let Some(light_idx) = hit.light_idx {
-                let light = &context.scene.lights[light_idx as usize];
-                radiance += path_weight * light_radiance(light, hit.point);
-            }
+        if specular_bounce && add_zero_bounce && let Some(light_idx) = hit.light_idx {
+            let light = &context.scene.lights[light_idx as usize];
+            radiance += path_weight * light_radiance(light, hit.point);
         }
 
         let material = &context.scene.materials[hit.material_idx as usize];

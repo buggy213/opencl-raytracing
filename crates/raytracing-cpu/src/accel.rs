@@ -92,9 +92,7 @@ pub(crate) fn traverse_bvh(
     let root_bvh_index = acceleration_structures.root_bvh_index();
     let root_bounds = acceleration_structures.bvhs[root_bvh_index].bounds();
 
-    let Some(_) = intersect_aabb(root_bounds, ray) else {
-        return None;
-    };
+    let _ = intersect_aabb(root_bounds, ray)?;
 
     let root_entry = TraversalStackEntry { 
         aggregate_index: scene.root_index(),
@@ -109,11 +107,7 @@ pub(crate) fn traverse_bvh(
 
     let mut hit_info: Option<HitInfo> = None;
 
-    loop {
-        let Some(top_of_stack) = stack.last() else {
-            break
-        };
-
+    while let Some(top_of_stack) = stack.last() {
         let stack_idx = stack.len() - 1;
         let TraversalStackEntry {
             aggregate_index,

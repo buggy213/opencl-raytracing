@@ -214,19 +214,15 @@ impl CpuTextures<'_> {
     pub(crate) fn new(scene: &Scene) -> CpuTextures<'_> {
         let mut scene_image_mipmaps: Vec<Option<CpuMipmap>> = vec![None; scene.images.len()];
         for texture in &scene.textures {
-            match texture {
-                Texture::ImageTexture { image, sampler } => {
-                    if matches!(sampler.filter, FilterMode::Trilinear) {
-                        let image_buffer = &scene.images[image.0 as usize].buffer;
+            if let Texture::ImageTexture { image, sampler } = texture
+                && matches!(sampler.filter, FilterMode::Trilinear) {
+                    let image_buffer = &scene.images[image.0 as usize].buffer;
 
-                        if scene_image_mipmaps[image.0 as usize].is_none() {
-                            let mipmap = generate_mips(image_buffer);
-                            scene_image_mipmaps[image.0 as usize] = Some(mipmap);
-                        }
+                    if scene_image_mipmaps[image.0 as usize].is_none() {
+                        let mipmap = generate_mips(image_buffer);
+                        scene_image_mipmaps[image.0 as usize] = Some(mipmap);
                     }
                 }
-                _ => ()
-            }
         }
 
         CpuTextures { 
