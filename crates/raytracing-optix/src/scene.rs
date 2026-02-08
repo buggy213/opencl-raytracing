@@ -149,6 +149,18 @@ pub(crate) fn prepare_optix_textures(
         if image_buffer.color_space() != Cicp::SRGB_LINEAR {
             warn!("image doesn't contain linear data");
         }
+        
+        // CUDA doesn't support 3 channel textures, so pad w/ alpha
+        if image_buffer.color().channel_count() == 3 {
+            warn!("padding image with alpha channel; ideally this is done when image is decoded from disk");
+        }
+
+        let image_buffer = match image_buffer.color() {
+            image::ColorType::Rgb8 => &image::DynamicImage::ImageRgba8(image_buffer.to_rgba8()),
+            image::ColorType::Rgb16 => &image::DynamicImage::ImageRgba16(image_buffer.to_rgba16()),
+            image::ColorType::Rgb32F => &image::DynamicImage::ImageRgba32F(image_buffer.to_rgba32f()),
+            _ => image_buffer,
+        };
 
         let (data_ptr, layout) = match image_buffer.color() {
             image::ColorType::L8
@@ -189,13 +201,10 @@ pub(crate) fn prepare_optix_textures(
         let fmt = match image_buffer.color() {
             image::ColorType::L8 => optix::TextureFormat::R8,
             image::ColorType::La8 => optix::TextureFormat::RG8,
-            image::ColorType::Rgb8 => optix::TextureFormat::RGB8,
             image::ColorType::Rgba8 => optix::TextureFormat::RGBA8,
             image::ColorType::L16 => optix::TextureFormat::R16,
             image::ColorType::La16 => optix::TextureFormat::RG16,
-            image::ColorType::Rgb16 => optix::TextureFormat::RGB16,
             image::ColorType::Rgba16 => optix::TextureFormat::RGBA16,
-            image::ColorType::Rgb32F => optix::TextureFormat::RGB32F,
             image::ColorType::Rgba32F => optix::TextureFormat::RGBA32F,
             _ => unimplemented!("unsupported dynamic image format for optix texture upload"),
         };

@@ -9,8 +9,6 @@ __host__ cudaChannelFormatDesc fromTextureFormat(TextureFormat fmt) {
             return cudaCreateChannelDesc(8, 0, 0, 0, cudaChannelFormatKindUnsigned);
         case RG8:
             return cudaCreateChannelDesc(8, 8, 0, 0, cudaChannelFormatKindUnsigned);
-        case RGB8:
-            return cudaCreateChannelDesc(8, 8, 8, 0, cudaChannelFormatKindUnsigned);
         case RGBA8:
             return cudaCreateChannelDesc(8, 8, 8, 8, cudaChannelFormatKindUnsigned);
 
@@ -18,8 +16,6 @@ __host__ cudaChannelFormatDesc fromTextureFormat(TextureFormat fmt) {
             return cudaCreateChannelDesc(16, 0, 0, 0, cudaChannelFormatKindUnsigned);
         case RG16:
             return cudaCreateChannelDesc(16, 16, 0, 0, cudaChannelFormatKindUnsigned);
-        case RGB16:
-            return cudaCreateChannelDesc(16, 16, 16, 0, cudaChannelFormatKindUnsigned);
         case RGBA16:
             return cudaCreateChannelDesc(16, 16, 16, 16, cudaChannelFormatKindUnsigned);
 
@@ -27,8 +23,6 @@ __host__ cudaChannelFormatDesc fromTextureFormat(TextureFormat fmt) {
             return cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
         case RG32F:
             return cudaCreateChannelDesc(32, 32, 0, 0, cudaChannelFormatKindFloat);
-        case RGB32F:
-            return cudaCreateChannelDesc(32, 32, 32, 0, cudaChannelFormatKindFloat);
         case RGBA32F:
             return cudaCreateChannelDesc(32, 32, 32, 32, cudaChannelFormatKindFloat);
 

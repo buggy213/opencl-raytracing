@@ -151,20 +151,19 @@ struct Light
 // @raytracing::renderer::RaytracerSettings
 
 // corresponds to `image` crate's `ColorType` enum
+// note that CUDA textures do *not* support 3 channel types (e.g. uchar3, ushort3, float3).
+// caller must pad w/ alpha channel
 enum TextureFormat {
     R8,
     RG8,
-    RGB8,
     RGBA8,
 
     R16,
     RG16,
-    RGB16,
     RGBA16,
 
     R32F,
     RG32F,
-    RGB32F,
     RGBA32F,
 };
 
