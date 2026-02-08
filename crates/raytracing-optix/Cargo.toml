@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 raytracing = { workspace = true }
+image = { workspace = true }
+tracing = { workspace = true }
 
 [build-dependencies]
 cmake = "0.1"

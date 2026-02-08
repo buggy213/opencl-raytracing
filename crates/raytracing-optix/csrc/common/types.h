@@ -205,3 +205,30 @@ struct TextureSampler {
     enum FilterMode filter;
     enum WrapMode wrap;
 };
+
+// @raytracing::materials::texture::Texture
+struct Texture {
+    enum TextureKind { ImageTexture, ConstantTexture, CheckerTexture, ScaleTexture, MixTexture } kind;
+    union TextureVariant {
+        struct ImageTexture {
+            unsigned long long texture_object;
+        } image_texture;
+        struct ConstantTexture {
+            struct Vec4 value;
+        } constant_texture;
+        struct CheckerTexture {
+            struct Vec4 color1;
+            struct Vec4 color2;
+        } checker_texture;
+
+        struct ScaleTexture {
+            unsigned int a;
+            unsigned int b;
+        } scale_texture;
+        struct MixTexture {
+            unsigned int a;
+            unsigned int b;
+            unsigned int c;
+        } mix_texture;
+    } variant;
+};

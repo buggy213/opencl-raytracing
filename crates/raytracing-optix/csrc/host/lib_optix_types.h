@@ -36,8 +36,3 @@ struct CudaArray {
 struct CudaTextureObject {
     unsigned long long handle;
 };
-
-struct CudaTextures {
-    void *d_texture_objects;
-    size_t count;
-};

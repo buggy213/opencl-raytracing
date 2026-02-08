@@ -8,11 +8,6 @@
 
 #include "types.h"
 
-struct OptixTextures {
-    cudaTextureObject_t *texture_objects;
-    size_t count;
-};
-
 struct AovPipelineParams {
     float3* normals;
     Camera* camera;
@@ -24,7 +19,7 @@ struct PathtracerPipelineParams
     float3* radiance;
     Scene* scene;
     OptixTraversableHandle root_handle;
-    OptixTextures textures;
+    Texture* textures;
 };
 
 #ifdef USE_AOV_PIPELINE_PARAMS

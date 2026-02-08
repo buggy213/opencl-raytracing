@@ -44,6 +44,7 @@ pub fn render(
     let mut scene_sbt = sbt::AovSbtBuilder::new(scene);
     let scene_as = scene::prepare_optix_acceleration_structures(optix_ctx, scene, &mut scene_sbt);
     let scene_sbt = scene_sbt.finalize(normals_pipeline);
+    let scene_textures: optix::OptixTexturesWrapper = scene::prepare_optix_textures(scene);
 
     let camera: optix::Camera = scene.camera.clone().into();
     let mut render_output = RenderOutput::new(camera.raster_width as u32, camera.raster_height as u32);

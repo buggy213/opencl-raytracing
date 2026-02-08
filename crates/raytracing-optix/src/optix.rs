@@ -19,6 +19,7 @@ pub(crate) use detail::{
     Vec2,
     Vec3,
     Vec3u,
+    Vec4,
     Matrix4x4,
     Quaternion,
     Transform,
@@ -36,7 +37,6 @@ pub(crate) use detail::{
     makeAovPipeline,
     launchAovPipeline,
 
-
     GeometryData,
     GeometryData_GeometryKind,
 
@@ -52,7 +52,18 @@ pub(crate) use detail::{
     finalizePathtracerSbt,
     releasePathtracerSbt,
 
+    CudaArray,
+    CudaTextureObject,
+    TextureFormat,
+    makeCudaArray,
+    makeCudaTexture,
+
+    OptixTexturesWrapper,
+    uploadOptixTextures,
+
     Camera,
+    Texture,
+    TextureSampler,
 };
 
 use detail::{
@@ -64,8 +75,45 @@ use detail::{
     CameraType_CameraVariant_ThinLensPerspective,
 };
 
+// crate::scene needs to use these, so we export them
+pub(crate) use detail::{
+    Texture_TextureKind,
+    Texture_TextureVariant,
+    Texture_TextureVariant_ImageTexture,
+    Texture_TextureVariant_ConstantTexture,
+    Texture_TextureVariant_CheckerTexture,
+    Texture_TextureVariant_MixTexture,
+    Texture_TextureVariant_ScaleTexture
+};
+
+use detail::{
+    WrapMode,
+    FilterMode
+};
+
 
 // conversion functions for vocabulary types
+impl From<raytracing::geometry::Vec4> for Vec4 {
+    fn from(value: raytracing::geometry::Vec4) -> Self {
+        Vec4 { x: value.0, y: value.1, z: value.2, w: value.3 }
+    }
+}
+
+
+impl From<Vec4> for raytracing::geometry::Vec4 {
+    fn from(value: Vec4) -> Self {
+        raytracing::geometry::Vec4(value.x, value.y, value.z, value.w)
+    }
+}
+
+const _: () = {
+    // ensure that layouts match
+    assert!(std::mem::size_of::<raytracing::geometry::Vec4>() == std::mem::size_of::<Vec4>());
+    assert!(std::mem::align_of::<raytracing::geometry::Vec4>() == std::mem::align_of::<Vec4>());
+};
+
+
+
 impl From<raytracing::geometry::Vec3> for Vec3 {
     fn from(value: raytracing::geometry::Vec3) -> Self {
         Vec3 { x: value.0, y: value.1, z: value.2 }
@@ -276,5 +324,31 @@ impl From<raytracing::scene::Camera> for Camera {
             camera_to_world: value.camera_to_world.into(), 
             raster_to_camera: value.raster_to_camera.into() 
         }
+    }
+}
+
+impl From<raytracing::materials::WrapMode> for WrapMode {
+    fn from(value: raytracing::materials::WrapMode) -> Self {
+        match value {
+            raytracing::materials::WrapMode::Repeat => WrapMode::Repeat,
+            raytracing::materials::WrapMode::Mirror => WrapMode::Mirror,
+            raytracing::materials::WrapMode::Clamp => WrapMode::Clamp,
+        }
+    }
+}
+
+impl From<raytracing::materials::FilterMode> for FilterMode {
+    fn from(value: raytracing::materials::FilterMode) -> Self {
+        match value {
+            raytracing::materials::FilterMode::Nearest => FilterMode::Nearest,
+            raytracing::materials::FilterMode::Bilinear => FilterMode::Bilinear,
+            raytracing::materials::FilterMode::Trilinear => FilterMode::Trilinear,
+        }
+    }
+}
+
+impl From<raytracing::materials::TextureSampler> for TextureSampler {
+    fn from(value: raytracing::materials::TextureSampler) -> Self {
+        TextureSampler { filter: value.filter.into(), wrap: value.wrap.into() }
     }
 }

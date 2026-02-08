@@ -5,6 +5,10 @@ use cmake;
 fn bindgen_customization(bindings_builder: bindgen::Builder) -> bindgen::Builder {
     bindings_builder.rustified_enum("CameraTypeKind")
         .rustified_enum("GeometryData_GeometryKind")
+        .rustified_enum("TextureFormat")
+        .rustified_enum("Texture_TextureKind")
+        .rustified_enum("WrapMode")
+        .rustified_enum("FilterMode")
 }
 
 fn main() {

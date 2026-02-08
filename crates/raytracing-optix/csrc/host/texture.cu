@@ -110,6 +110,8 @@ __host__ cudaArray_t createCudaArray(const void* src, size_t pitch, size_t width
     );
 
     CUDA_CHECK(err);
+
+    return backing_array;
 }
 
 __host__ cudaTextureObject_t createCudaTexture(cudaArray_t backing_array, TextureSampler sampler) {
@@ -118,4 +120,14 @@ __host__ cudaTextureObject_t createCudaTexture(cudaArray_t backing_array, Textur
     cudaTextureDesc texture_desc = fromTextureSampler(sampler);
 
     CUDA_CHECK(cudaCreateTextureObject(&texture, &resource_desc, &texture_desc, nullptr));
+
+    return texture;
+}
+
+__host__ CUdeviceptr uploadOptixTexturesImpl(const Texture *textures, size_t count) {
+    void* d_optixTextures;
+    cudaMalloc(&d_optixTextures, sizeof(Texture) * count);
+    cudaMemcpy(d_optixTextures, textures, sizeof(Texture) * count, cudaMemcpyHostToDevice);
+
+    return (CUdeviceptr)d_optixTextures;
 }

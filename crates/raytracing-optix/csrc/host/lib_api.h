@@ -84,6 +84,15 @@ RT_API void launchPathtracerPipeline(
 
 RT_API void releasePathtracerPipeline(PathtracerPipelineWrapper pipeline);
 
-RT_API CudaArray makeCudaImage();
-RT_API CudaTextureObject makeCudaTexture();
-RT_API void uploadCudaTextures();
+RT_API struct CudaArray makeCudaArray(const void* src, size_t pitch, size_t width, size_t height, enum TextureFormat fmt);
+RT_API struct CudaTextureObject makeCudaTexture(struct CudaArray backing_array, struct TextureSampler sampler);
+
+// opaque type to represent device allocation of scene-description textures
+struct OptixTextures;
+typedef struct OptixTextures* OptixTexturesWrapper;
+
+// TODO: this could be made zero-alloc on rust side maybe
+RT_API OptixTexturesWrapper uploadOptixTextures(
+    const struct Texture *textures,
+    size_t count
+);

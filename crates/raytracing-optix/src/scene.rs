@@ -2,9 +2,13 @@
 //! that calls into C++ in order to generate hierarchy of Geometry-AS / Instance-AS for OptiX.
 //! We do it this way to avoid having to make the whole scene description #[repr(C)]
 
-use raytracing::{geometry::Shape, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
+use std::os::raw::c_void;
 
-use crate::optix::{self, OptixAccelerationStructure, Vec3SliceWrap, Vec3uSliceWrap};
+use image::metadata::Cicp;
+use raytracing::{geometry::Shape, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
+use tracing::warn;
+
+use crate::optix::{self, CudaArray, OptixAccelerationStructure, OptixTexturesWrapper, Texture, Texture_TextureVariant, Texture_TextureVariant_ConstantTexture, Texture_TextureVariant_ImageTexture, Vec3SliceWrap, Vec3uSliceWrap, makeCudaArray, makeCudaTexture, uploadOptixTextures};
 
 // hooks for SBT to be constructed alongside the AS hierarchy. `visit` functions on a node 
 // return corresponding SBT offset which will be used when constructing that node's parent.
@@ -132,4 +136,148 @@ pub(crate) fn prepare_optix_acceleration_structures(
         sbt_visitor,
         scene.root_index()
     )
+}
+
+pub(crate) fn prepare_optix_textures(
+    scene: &Scene
+) -> OptixTexturesWrapper {
+    let mut cuda_arrays: Vec<CudaArray> = Vec::new();
+
+    for image in &scene.images {
+        let image_buffer = &image.buffer;
+        if image_buffer.color_space() != Cicp::SRGB_LINEAR {
+            warn!("image doesn't contain linear data");
+        }
+
+        let (data_ptr, layout) = match image_buffer.color() {
+            image::ColorType::L8
+            | image::ColorType::La8
+            | image::ColorType::Rgb8
+            | image::ColorType::Rgba8 => {
+                let flat = image_buffer.as_flat_samples_u8().unwrap();
+                if !flat.is_normal(image::flat::NormalForm::RowMajorPacked) {
+                    unreachable!("ImageBuffer should always be row-major packed data");
+                }
+
+                (flat.samples.as_ptr() as *const c_void, flat.layout)
+            },
+            image::ColorType::L16
+            | image::ColorType::La16
+            | image::ColorType::Rgb16
+            | image::ColorType::Rgba16 => {
+                let flat = image_buffer.as_flat_samples_u16().unwrap();
+                if !flat.is_normal(image::flat::NormalForm::RowMajorPacked) {
+                    unreachable!("ImageBuffer should always be row-major packed data");
+                }
+
+                (flat.samples.as_ptr() as *const c_void, flat.layout)
+            },
+            image::ColorType::Rgb32F
+            | image::ColorType::Rgba32F => {
+                let flat = image_buffer.as_flat_samples_f32().unwrap();
+                if !flat.is_normal(image::flat::NormalForm::RowMajorPacked) {
+                    unreachable!("ImageBuffer should always be row-major packed data");
+                }
+
+                (flat.samples.as_ptr() as *const c_void, flat.layout)
+            },
+            
+            _ => unimplemented!("unsupported dynamic image format for optix texture upload"),
+        };
+
+        let fmt = match image_buffer.color() {
+            image::ColorType::L8 => optix::TextureFormat::R8,
+            image::ColorType::La8 => optix::TextureFormat::RG8,
+            image::ColorType::Rgb8 => optix::TextureFormat::RGB8,
+            image::ColorType::Rgba8 => optix::TextureFormat::RGBA8,
+            image::ColorType::L16 => optix::TextureFormat::R16,
+            image::ColorType::La16 => optix::TextureFormat::RG16,
+            image::ColorType::Rgb16 => optix::TextureFormat::RGB16,
+            image::ColorType::Rgba16 => optix::TextureFormat::RGBA16,
+            image::ColorType::Rgb32F => optix::TextureFormat::RGB32F,
+            image::ColorType::Rgba32F => optix::TextureFormat::RGBA32F,
+            _ => unimplemented!("unsupported dynamic image format for optix texture upload"),
+        };
+
+        let cuda_array = unsafe {
+            makeCudaArray(
+                data_ptr, 
+                layout.height_stride, 
+                layout.width as usize, 
+                layout.height as usize, 
+                fmt
+            )
+        };
+
+        cuda_arrays.push(cuda_array);
+    }
+
+    let mut cuda_textures = Vec::new();
+    let mut optix_textures = Vec::new();
+
+    for texture in &scene.textures {
+        let optix_texture = match texture {
+            raytracing::materials::Texture::ImageTexture { image, sampler } => {
+                let backing_array = cuda_arrays[image.0 as usize];
+                let texture_object = unsafe { makeCudaTexture(backing_array, (*sampler).into()) };
+                cuda_textures.push(texture_object);
+                
+                Texture {
+                    kind: optix::Texture_TextureKind::ImageTexture,
+                    variant: Texture_TextureVariant {
+                        image_texture: Texture_TextureVariant_ImageTexture { texture_object: texture_object.handle }
+                    },
+                }
+            },
+            raytracing::materials::Texture::ConstantTexture { value } => {
+                Texture { 
+                    kind: optix::Texture_TextureKind::ConstantTexture, 
+                    variant: Texture_TextureVariant {
+                        constant_texture: Texture_TextureVariant_ConstantTexture { value: (*value).into() }
+                    } 
+                }
+                
+            },
+            raytracing::materials::Texture::CheckerTexture { color1, color2 } => {
+                Texture {
+                    kind: optix::Texture_TextureKind::CheckerTexture,
+                    variant: Texture_TextureVariant {
+                        checker_texture: optix::Texture_TextureVariant_CheckerTexture {
+                            color1: (*color1).into(),
+                            color2: (*color2).into(),
+                        }
+                    }
+                }
+            },
+            raytracing::materials::Texture::ScaleTexture { a, b } => {
+                Texture {
+                    kind: optix::Texture_TextureKind::ScaleTexture,
+                    variant: Texture_TextureVariant {
+                        scale_texture: optix::Texture_TextureVariant_ScaleTexture {
+                            a: a.0,
+                            b: b.0,
+                        }
+                    }
+                }
+            },
+            raytracing::materials::Texture::MixTexture { a, b, c } => {
+                Texture {
+                    kind: optix::Texture_TextureKind::MixTexture,
+                    variant: Texture_TextureVariant {
+                        mix_texture: optix::Texture_TextureVariant_MixTexture {
+                            a: a.0,
+                            b: b.0,
+                            c: c.0,
+                        }
+                    }
+                }
+            },
+        };
+
+        optix_textures.push(optix_texture);
+    }
+
+    unsafe {
+        uploadOptixTextures(optix_textures.as_ptr(), optix_textures.len())
+    }
 }
