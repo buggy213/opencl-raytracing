@@ -263,7 +263,8 @@ fn ray_radiance(
             let camera = &context.scene.camera;
             (camera.near_clip, camera.far_clip)
         } else {
-            (0.0, f32::INFINITY)
+            // avoid self-intersection
+            (0.0001, f32::INFINITY)
         };
 
         let hit_info = traverse_bvh(
@@ -378,7 +379,7 @@ fn ray_radiance(
 
         let world_dir = o2w.apply_vector(bsdf_sample.wi);
         let new_ray = Ray {
-            origin: hit.point + world_dir * 0.0001,
+            origin: hit.point,
             direction: world_dir,
         };
 
@@ -403,8 +404,8 @@ fn first_hit_aovs(
 ) -> FirstHitAOVData {
     let hit_info = traverse_bvh(
         camera_ray, 
-        0.0,
-        f32::INFINITY,
+        context.scene.camera.near_clip,
+        context.scene.camera.far_clip,
         context, 
         traversal_cache,
         false,
