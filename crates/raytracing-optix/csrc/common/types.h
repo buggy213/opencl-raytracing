@@ -148,24 +148,6 @@ struct Light
     } variant;
 };
 
-struct Material {
-    enum MaterialKind {
-        Diffuse,
-        SmoothDielectric,
-        SmoothConductor,
-        RoughDielectric,
-        RoughConductor,
-        CoatedDiffuse
-    } kind;
-
-    union MaterialVariant {
-        struct Diffuse {
-            struct Vec3 albedo;
-        } diffuse;
-        // TODO: add other variants
-    } variant;
-};
-
 // @raytracing::renderer::RaytracerSettings
 
 // corresponds to `image` crate's `ColorType` enum
@@ -230,5 +212,27 @@ struct Texture {
             unsigned int b;
             unsigned int c;
         } mix_texture;
+    } variant;
+};
+
+// @raytracing::materials::texture::TextureId
+typedef unsigned int TextureId;
+
+// @raytracing::materials::Material
+struct Material {
+    enum MaterialKind {
+        Diffuse,
+        SmoothDielectric,
+        SmoothConductor,
+        RoughDielectric,
+        RoughConductor,
+        CoatedDiffuse
+    } kind;
+
+    union MaterialVariant {
+        struct Diffuse {
+            TextureId albedo;
+        } diffuse;
+        // TODO: add other variants
     } variant;
 };

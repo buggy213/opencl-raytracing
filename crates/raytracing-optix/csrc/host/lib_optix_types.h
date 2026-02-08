@@ -4,6 +4,7 @@
  * Types shared between Rust/C++ to manage CUDA/OptiX runtime state and configuration
  */
 
+#include "types.h"
 #include <optix_types.h>
 
 struct OptixAccelerationStructure {
@@ -18,8 +19,17 @@ typedef struct PathtracerPipeline* PathtracerPipelineWrapper;
 typedef struct AovSbt* AovSbtWrapper;
 typedef struct PathtracerSbt* PathtracerSbtWrapper;
 
+
+#ifdef __cplusplus
+enum class GeometryKind { TRIANGLE, SPHERE };
+using MaterialKind = Material::MaterialKind;
+#else
+enum GeometryKind { TRIANGLE, SPHERE };
+#endif
+
+
 struct GeometryData {
-    enum GeometryKind { TRIANGLE, SPHERE } kind;
+    enum GeometryKind kind;
 
     size_t num_tris;
     const struct Vec3u *tris;

@@ -23,11 +23,16 @@ struct AovSbt {
 // Pathtracer shader binding table layout: 1 raygen record, 2 miss records (one for radiance rays, one for shadow rays)
 // 2 hitgroup records per primitive, one for shadow rays and one for radiance rays
 struct PathtracerSbt {
-    // std::vector<StagedHitgroupRecord> hitgroupRecords;
+    struct StagedHitgroupRecord {
+        GeometryData geometry;
+        Material material;
+    };
+
+    std::vector<StagedHitgroupRecord> payloads;
 
     OptixShaderBindingTable sbt;
 
-    size_t addHitgroupRecord();
+    size_t addHitgroupRecord(GeometryData geometryData, Material material);
     void finalize(PathtracerPipeline& pipeline);
     ~PathtracerSbt();
 };

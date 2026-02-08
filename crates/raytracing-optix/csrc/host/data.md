@@ -12,14 +12,15 @@ There is a 1-1-1 mapping between primitives and GAS's and SBT records for hitgro
 SBT hitgroup records will have the following format
 
 | Opaque Record Header |
-| ------------- |
-| struct MeshData |
-| union MaterialData |
+|----------------------|
+| struct MeshData      |
+| struct Material      |
 
 `struct MeshData` is defined as `struct MeshData { uint3* indices, float3* normals, float2* uvs }`. These are unused for non-triangle meshes, but the space could be useful for other procedural geometry possibly...
 A mesh without normals / UVs has those respective pointers set to null. 
 
-`union MaterialData` is defined to be a `union` over the different sets of `TextureId` required by different materials. The program already knows which material type it is (since there is one closest-hit program per material)
+`struct Material` is defined to be a `union` over the different sets of `TextureId` required by different materials, which mirrors the definition used in scene description. 
+The program already knows which material type it is (since there is one closest-hit program per material)
 
 Overall, each record should be on the order of ~100 bytes at most, which should be very manageable. Keeping it from being too bloated is important, since shadow rays require a full SBT record, but have no need for `MeshData` or `MaterialData` (we can leave them totally uninitialized, even) and thus that space is wasted. This effectively leads to 2x memory consumption for the SBT, which is ok. 
 

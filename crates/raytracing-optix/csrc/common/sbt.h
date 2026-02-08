@@ -23,9 +23,5 @@ struct HitgroupRecord {
         float2* uvs;
     } mesh_data;
 
-    union MaterialData {
-        struct DiffuseMaterialData {
-            float3 albedo;
-        } diffuse_material_data;
-    } material_data;
+    struct Material material_data;
 };

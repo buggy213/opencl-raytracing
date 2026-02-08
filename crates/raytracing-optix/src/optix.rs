@@ -37,8 +37,12 @@ pub(crate) use detail::{
     makeAovPipeline,
     launchAovPipeline,
 
+    PathtracerPipelineWrapper,
+    makePathtracerPipeline,
+    launchPathtracerPipeline,
+
     GeometryData,
-    GeometryData_GeometryKind,
+    GeometryKind,
 
     AovSbtWrapper,
     makeAovSbt,
@@ -64,6 +68,7 @@ pub(crate) use detail::{
     Camera,
     Texture,
     TextureSampler,
+    Material,
 };
 
 use detail::{
@@ -83,7 +88,11 @@ pub(crate) use detail::{
     Texture_TextureVariant_ConstantTexture,
     Texture_TextureVariant_CheckerTexture,
     Texture_TextureVariant_MixTexture,
-    Texture_TextureVariant_ScaleTexture
+    Texture_TextureVariant_ScaleTexture,
+
+    Material_MaterialKind,
+    Material_MaterialVariant,
+    Material_MaterialVariant_Diffuse,
 };
 
 use detail::{

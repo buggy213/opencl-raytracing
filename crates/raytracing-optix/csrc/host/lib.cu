@@ -99,8 +99,8 @@ RT_API __host__ AovSbtWrapper makeAovSbt() {
     return new AovSbt();
 }
 
-RT_API __host__ void addHitRecordAovSbt(AovSbtWrapper sbt, GeometryData geometryData) {
-    sbt->addHitgroupRecord(geometryData);
+RT_API __host__ size_t addHitRecordAovSbt(AovSbtWrapper sbt, GeometryData geometryData) {
+    return sbt->addHitgroupRecord(geometryData);
 }
 
 RT_API __host__ void finalizeAovSbt(AovSbtWrapper sbt, AovPipelineWrapper pipeline) {
@@ -142,20 +142,24 @@ RT_API __host__ PathtracerPipelineWrapper makePathtracerPipeline(
     return new PathtracerPipeline(pathtracerPipeline);
 }
 
-PathtracerSbtWrapper makePathtracerSbt() {
+RT_API __host__ PathtracerSbtWrapper makePathtracerSbt() {
     return new PathtracerSbt;
 }
 
-void addHitRecordPathtracerSbt(PathtracerSbtWrapper sbt, GeometryData geometryData) {
-
+RT_API __host__ size_t addHitRecordPathtracerSbt(
+    PathtracerSbtWrapper sbt,
+    GeometryData geometryData,
+    Material material
+) {
+    return sbt->addHitgroupRecord(geometryData, material);
 }
 
-void finalizePathtracerSbt(PathtracerSbtWrapper sbt, PathtracerPipelineWrapper pipeline) {
+RT_API __host__ void finalizePathtracerSbt(PathtracerSbtWrapper sbt, PathtracerPipelineWrapper pipeline) {
     sbt->finalize(*pipeline);
 }
 
 
-void releasePathtracerSbt(PathtracerSbtWrapper sbt) {
+RT_API __host__ void releasePathtracerSbt(PathtracerSbtWrapper sbt) {
     delete sbt;
 }
 

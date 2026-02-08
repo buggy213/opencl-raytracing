@@ -5,7 +5,7 @@
 use std::os::raw::c_void;
 
 use image::metadata::Cicp;
-use raytracing::{geometry::Shape, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
+use raytracing::{geometry::Shape, materials::Material, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
 use tracing::warn;
 
 use crate::optix::{self, CudaArray, OptixAccelerationStructure, OptixTexturesWrapper, Texture, Texture_TextureVariant, Texture_TextureVariant_ConstantTexture, Texture_TextureVariant_ImageTexture, Vec3SliceWrap, Vec3uSliceWrap, makeCudaArray, makeCudaTexture, uploadOptixTextures};
@@ -13,7 +13,7 @@ use crate::optix::{self, CudaArray, OptixAccelerationStructure, OptixTexturesWra
 // hooks for SBT to be constructed alongside the AS hierarchy. `visit` functions on a node 
 // return corresponding SBT offset which will be used when constructing that node's parent.
 pub(crate) trait SbtVisitor {
-    fn visit_geometry_as(&mut self, shape: &Shape) -> u32;
+    fn visit_geometry_as(&mut self, shape: &Shape, material: &Material) -> u32;
     fn visit_instance_as(&mut self) -> u32;
 }
 
@@ -103,7 +103,8 @@ pub(crate) fn prepare_optix_acceleration_structures(
             match scene.get_primitive(primitive_index) {
                 Primitive::Basic(basic) => {
                     let leaf_gas = make_leaf_geometry_as(ctx, &basic.shape);
-                    let leaf_gas_sbt_offset = sbt_visitor.visit_geometry_as(&basic.shape);
+                    let leaf_gas_material = &scene.materials[basic.material as usize];
+                    let leaf_gas_sbt_offset = sbt_visitor.visit_geometry_as(&basic.shape, leaf_gas_material);
                     descendant_acceleration_structures.push(leaf_gas);
                     descendant_sbt_offsets.push(leaf_gas_sbt_offset);
                 }
@@ -115,7 +116,7 @@ pub(crate) fn prepare_optix_acceleration_structures(
                         sbt_visitor,
                         aggregate_index
                     );
-                    let child_ias_sbt_offset = sbt_visitor.visit_instance_as();
+                    let _child_ias_sbt_offset = sbt_visitor.visit_instance_as();
                     descendant_acceleration_structures.push(child_ias);
                 }
                 Primitive::Transform(_) => unreachable!("DescendantsIter should flatten transforms")
