@@ -67,22 +67,16 @@ struct WindowRequests {
 
 impl WindowRequests {
     fn apply(&self, window: &Window) {
-        if let Some(new_size) = self.resize {
-            if new_size != window.inner_size().to_logical(window.scale_factor()) {
-                _ = window.request_inner_size(new_size);
-            }
+        if let Some(new_size) = self.resize && new_size != window.inner_size().to_logical(window.scale_factor()) { 
+            _ = window.request_inner_size(new_size);
         }
 
-        if let Some(ref new_name) = self.rename {
-            if *new_name != window.title() {
-                window.set_title(new_name);
-            }
+        if let Some(ref new_name) = self.rename && *new_name != window.title() {
+            window.set_title(new_name);
         }
 
-        if let Some(resizable) = self.resizable {
-            if resizable != window.is_resizable() {
-                window.set_resizable(resizable);
-            }
+        if let Some(resizable) = self.resizable && resizable != window.is_resizable() {
+            window.set_resizable(resizable);
         }
     }
 }

@@ -7,7 +7,7 @@ use raytracing::scene::test_scenes;
 
 mod tui;
 use raytracing::{
-    renderer::{AOVFlags, RaytracerSettings, RenderOutput},
+    renderer::{AOVFlags, RenderOutput},
     sampling::Sampler,
     scene,
 };
@@ -169,11 +169,7 @@ fn main() {
         unreachable!("clap should prevent this");
     };
 
-    let mut raytracer_settings = if let Some(builtin_scene_settings) = builtin_scene_settings {
-        builtin_scene_settings
-    } else {
-        RaytracerSettings::default()
-    };
+    let mut raytracer_settings = builtin_scene_settings.unwrap_or_default();
 
     // override builtin / default settings
     raytracer_settings.max_ray_depth = cli_args
@@ -323,7 +319,7 @@ fn save_render_output(
 fn save_to_png(mut render_output: RenderOutput, aov_flags: AOVFlags, output_path: &Path) {
     fn add_suffix(path: &Path, suffix: &str) -> PathBuf {
         let dir = path.parent().unwrap();
-        let base_name = path.file_stem().map(|x| x.to_str()).flatten().unwrap();
+        let base_name = path.file_stem().and_then(|x| x.to_str()).unwrap();
         dir.join(format!("{}_{}.{}", base_name, suffix, "png"))
     }
 
@@ -339,7 +335,7 @@ fn save_to_png(mut render_output: RenderOutput, aov_flags: AOVFlags, output_path
                 );
             }
             AOVFlags::NORMALS => {
-                let output_path = add_suffix(&output_path, name);
+                let output_path = add_suffix(output_path, name);
 
                 raytracing_cpu::utils::png::normals_to_rgb(render_output.normals.as_mut().unwrap());
                 raytracing_cpu::utils::png::save_png(
@@ -351,7 +347,7 @@ fn save_to_png(mut render_output: RenderOutput, aov_flags: AOVFlags, output_path
                 );
             }
             AOVFlags::UV_COORDS => {
-                let output_path = add_suffix(&output_path, name);
+                let output_path = add_suffix(output_path, name);
                 let uv_rgb = raytracing_cpu::utils::png::uvs_to_rgb(render_output.uv.as_ref().unwrap());
                 raytracing_cpu::utils::png::save_png(
                     &uv_rgb,
@@ -418,7 +414,7 @@ fn save_to_exr(render_output: RenderOutput, aov_flags: AOVFlags, output_path: &P
                     raytracing_cpu::utils::exr::channel_from_f32_array(
                         &mut channels,
                         "Mip Level",
-                        &mip_level
+                        mip_level
                     );
                 }
             }

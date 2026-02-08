@@ -146,6 +146,12 @@ extern "C" fn unsafe_set_node_children<NodeType: Debug>(
 
 }
 
+impl<NodeType: Debug> Default for BVHBuildArguments<NodeType> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 
 impl<NodeType: Debug> BVHBuildArguments<NodeType> {
     pub fn new() -> Self {
@@ -203,6 +209,7 @@ impl<NodeType: Debug> BVHBuildArguments<NodeType> {
                     maxDepth: 32,
                     sahBlockSize: 1,
                     minLeafSize: 1,
+                    #[allow(clippy::unnecessary_cast, reason = "not unncessary on all platforms")]
                     maxLeafSize: max_leaf_size.unwrap_or(RTCBuildConstants_RTC_BUILD_MAX_PRIMITIVES_PER_LEAF as u32),
                     traversalCost: 1.0,
                     intersectionCost: 1.0,

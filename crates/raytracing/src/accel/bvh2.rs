@@ -158,6 +158,12 @@ pub struct BVH2Builder {
     primitives: Vec<BuildPrimitive>,
 }
 
+impl Default for BVH2Builder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BVH2Builder {
     pub fn new() -> Self {
         Self {
@@ -313,20 +319,19 @@ impl BreadthFirstLinearizedBVH {
         // perform BFS over BVH, make primitives pointed to by leaf nodes contiguous
         let mut queue: VecDeque<(&BVHNode, AABB)> = VecDeque::new();
         let node = bvh.root();
-        let root_aabb;
-
-        match node {
+        
+        let root_aabb = match node {
             BVHNode::Inner {
                 left_aabb,
                 right_aabb,
                 ..
             } => {
-                root_aabb = AABB::surrounding_box(*left_aabb, *right_aabb);
+                AABB::surrounding_box(*left_aabb, *right_aabb)
             }
             BVHNode::Leaf { .. } => {
                 unimplemented!("BVH root is a leaf node");
             }
-        }
+        };
 
         let mut bvh_nodes: Vec<BreadthFirstLinearizedBVHNode> = Vec::new();
         let mut contiguous_prims: Vec<PrimPtr> = Vec::new();
@@ -433,22 +438,21 @@ impl DepthFirstLinearizedBVH {
         let mut stack: Vec<(&BVHNode, AABB, NodeProgress)> = Vec::new();
 
         let node = bvh.root();
-        let root_aabb;
-
-        match node {
+        
+        let root_aabb = match node {
             BVHNode::Inner {
                 left_aabb,
                 right_aabb,
                 ..
             } => {
-                root_aabb = AABB::surrounding_box(*left_aabb, *right_aabb);
+                AABB::surrounding_box(*left_aabb, *right_aabb)
             }
             BVHNode::Leaf { .. } => {
                 warn!("BVH root is a leaf node, setting bounds to infinity");
 
-                root_aabb = AABB::infinite();
+                AABB::infinite()
             }
-        }
+        };
 
         stack.push((node, root_aabb, NodeProgress::None));
 

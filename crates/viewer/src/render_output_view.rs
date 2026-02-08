@@ -86,7 +86,7 @@ fn raytrace_scene(path: &Path, settings: &RaytracerSettings, backend_settings: C
     assert!(settings.outputs.contains(AOVFlags::BEAUTY));
     let output = raytracing_cpu::render(
         &scene, 
-        &settings,
+        settings,
         backend_settings
     );
     

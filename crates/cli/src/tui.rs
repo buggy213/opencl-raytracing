@@ -121,15 +121,14 @@ pub enum FocusedField {
 
 impl FocusedField {
     fn numeric_validation(self) -> bool {
-        match self {
+        matches!(self, 
             FocusedField::NumThreads 
             | FocusedField::RayDepth 
             | FocusedField::Spp 
             | FocusedField::LightSamples 
             | FocusedField::PixelX 
-            | FocusedField::PixelY => true,
-            _ => false
-        }
+            | FocusedField::PixelY
+        )
     }
 }
 
@@ -757,13 +756,11 @@ pub fn run() -> io::Result<Option<CommandLineArguments>> {
         loop {
             terminal.draw(|frame| view(frame, &model))?;
     
-            if event::poll(std::time::Duration::from_millis(100))? {
-                if let Event::Key(key) = event::read()? {
-                    if let Some(msg) = key_to_message(key, &model) {
+            if event::poll(std::time::Duration::from_millis(100))? 
+                && let Event::Key(key) = event::read()? 
+                    && let Some(msg) = key_to_message(key, &model) {
                         update(&mut model, msg);
                     }
-                }
-            }
     
             if model.should_quit {
                 return Ok(None);

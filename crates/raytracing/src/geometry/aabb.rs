@@ -14,8 +14,8 @@ pub struct AABB {
 macro_rules! from_points {
     ($($y:expr),+) => (
         {
-            let minimum = crate::macros::variadic_min_comparator!(Vec3::elementwise_min, $($y),+);
-            let maximum = crate::macros::variadic_max_comparator!(Vec3::elementwise_max, $($y),+);
+            let minimum = $crate::macros::variadic_min_comparator!(Vec3::elementwise_min, $($y),+);
+            let maximum = $crate::macros::variadic_max_comparator!(Vec3::elementwise_max, $($y),+);
             AABB {
                 minimum, maximum
             }
@@ -37,6 +37,8 @@ impl AABB {
     pub fn new(minimum: Vec3, maximum: Vec3) -> AABB {
         AABB { minimum, maximum }
     }
+
+    #[allow(clippy::too_many_arguments)]
     #[rustfmt::skip]
     pub fn from_bounds(
         min_x0: f32, min_x1: f32,

@@ -186,8 +186,8 @@ impl Scene {
         }
     }
 
-    pub fn get_direct_descendant<'scene>(
-        &'scene self,
+    pub fn get_direct_descendant(
+        &self,
         aggregate_primitive_index: AggregatePrimitiveIndex,
         index: usize,
     ) -> (PrimitiveIndex, Transform) {
@@ -198,8 +198,8 @@ impl Scene {
         )
     }
 
-    pub fn get_descendant<'scene>(
-        &'scene self,
+    pub fn get_descendant(
+        &self,
         aggregate_primitive_index: AggregatePrimitiveIndex,
         index: usize,
     ) -> (PrimitiveIndex, Transform) {

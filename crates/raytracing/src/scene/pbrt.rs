@@ -342,9 +342,7 @@ impl<'a> TokenStream<'a> {
                 end += 1; // include closing quote
             }
             Some(&self.input[start..end])
-        } else if bytes[start] == b'[' {
-            Some(&self.input[start..start + 1])
-        } else if bytes[start] == b']' {
+        } else if bytes[start] == b'[' || bytes[start] == b']' {
             Some(&self.input[start..start + 1])
         } else {
             let mut end = start;
@@ -792,11 +790,11 @@ fn resolve_texture(
     param_name: &str,
     default: Vec3,
 ) -> TextureId {
-    if let Some(tex_name) = params.get_texture(param_name) {
-        if let Some(tex_id) = state.get_named_texture(tex_name) {
+    if let Some(tex_name) = params.get_texture(param_name)
+        && let Some(tex_id) = state.get_named_texture(tex_name) {
             return tex_id;
         }
-    }
+    
 
     let color = params.get_rgb_or(param_name, default);
     builder.add_constant_texture(Vec4(color.0, color.1, color.2, 1.0))
@@ -809,11 +807,11 @@ fn resolve_float_texture(
     param_name: &str,
     default: f32,
 ) -> TextureId {
-    if let Some(tex_name) = params.get_texture(param_name) {
-        if let Some(tex_id) = state.get_named_texture(tex_name) {
+    if let Some(tex_name) = params.get_texture(param_name) 
+        && let Some(tex_id) = state.get_named_texture(tex_name) {
             return tex_id;
         }
-    }
+    
 
     let value = params.get_float_or(param_name, default);
     builder.add_constant_texture(Vec4(value, value, value, 1.0))
@@ -1262,10 +1260,8 @@ fn parse_world_begin(state: &mut ParserState) {
 }
 
 fn skip_directive(toks: &mut TokenStream) -> Result<(), ParseError> {
-    if let Some(tok) = toks.peek() {
-        if tok.starts_with('"') {
-            toks.next();
-        }
+    if let Some(tok) = toks.peek() && tok.starts_with('"') {
+        toks.next();
     }
 
     let _ = parse_parameter_list(toks)?;

@@ -172,9 +172,7 @@ pub fn sphere_scene() -> Scene {
     );
     scene_builder.add_camera(camera);
 
-    let scene = scene_builder.build();
-
-    scene
+    scene_builder.build()
 }
 
 pub fn cube_scene() -> Scene {

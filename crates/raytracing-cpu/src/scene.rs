@@ -12,7 +12,7 @@ pub(crate) struct CpuAccelerationStructures {
 // to prepare a scene for CPU render, must turn all AggregatePrimitives into BVHs using Embree
 // this is done recursively to handle multi-level BVH
 pub(crate) fn prepare_cpu_acceleration_structures(scene: &Scene) -> CpuAccelerationStructures {
-    let embree = embree4::Device::new();
+    let embree = embree4::Device::new_device();
 
     let mut bvhs: Vec<DepthFirstLinearizedBVH> = Vec::new();
     let mut bvh_transforms: Vec<Transform> = Vec::new();

@@ -3,7 +3,7 @@
 use std::{cell::Cell, fmt::Write, panic::PanicHookInfo, sync::{Arc, Mutex, mpsc::RecvTimeoutError}, time::Duration};
 
 use accel::{traverse_bvh};
-use indicatif::{ProgressBar, ProgressState, ProgressStyle};
+use indicatif::{ProgressState, ProgressStyle};
 use lights::{light_radiance, occluded, sample_light};
 use materials::CpuMaterial;
 use ray::Ray;
@@ -635,7 +635,7 @@ pub fn render(
     // construct BVH using embree
     let cpu_acceleration_structures = scene::prepare_cpu_acceleration_structures(scene);
     let cpu_raytracing_context = CpuRaytracingContext::new(
-        &scene,
+        scene,
         &cpu_acceleration_structures
     );
 
@@ -649,7 +649,7 @@ pub fn render(
             &cpu_raytracing_context, 
             &mut single_threaded_sampler,
             &mut traversal_cache, 
-            &raytracer_settings, 
+            raytracer_settings, 
             &mut render_output
         );
 
@@ -680,7 +680,7 @@ pub fn render(
             &mut single_threaded_sampler,
             &mut traversal_cache,
             full_screen,
-            &raytracer_settings
+            raytracer_settings
         )
     }
     else {
@@ -743,7 +743,7 @@ pub fn render(
                         &single_threaded_sampler,
                         thread_work_queue_handle, 
                         thread_result_channel_tx, 
-                        &raytracer_settings
+                        raytracer_settings
                     );
                 });
             }
@@ -868,7 +868,7 @@ pub fn render_single_pixel(
 
     let cpu_acceleration_structures = scene::prepare_cpu_acceleration_structures(scene);
     let cpu_raytracing_context = CpuRaytracingContext::new(
-        &scene,
+        scene,
         &cpu_acceleration_structures
     );
 
@@ -897,7 +897,7 @@ pub fn render_single_pixel(
         &cpu_raytracing_context, 
         &mut single_pixel_sampler,
         &mut traversal_cache, 
-        &raytracer_settings
+        raytracer_settings
     );
 
     SinglePixelOutput { hit: aovs.hit, uv: aovs.uv, normal: aovs.normals, radiance }

@@ -21,7 +21,7 @@ impl Device {
         eprintln!("{error_cstr:?}", );
     }
 
-    pub fn new() -> Device {
+    pub fn new_device() -> Device {
         let handle = unsafe { rtcNewDevice(ptr::null()) };
         unsafe {
             rtcSetDeviceErrorFunction(handle, Some(Device::print_errors), null_mut());

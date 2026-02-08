@@ -7,16 +7,24 @@ use anyhow::{Context, bail};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
-struct CargoMessage {
-    reason: String,
-    #[serde(default)]
-    package_id: Option<String>,
-    #[serde(default)]
-    target: Option<CargoTarget>,
-    #[serde(default)]
-    executable: Option<String>,
-    #[serde(default)]
-    linked_paths: Option<Vec<String>>,
+#[serde(tag = "reason")]
+enum CargoMessage {
+    #[serde(rename = "compiler-artifact")]
+    CompilerArtifactMessage(CompilerArtifactMessage),
+    #[serde(rename = "build-script-executed")]
+    BuildScriptMessage(BuildScriptMessage)
+}
+
+#[derive(Deserialize)]
+struct CompilerArtifactMessage {
+    target: CargoTarget,
+    executable: String
+}
+
+#[derive(Deserialize)]
+struct BuildScriptMessage {
+    package_id: String,
+    linked_paths: Vec<String>
 }
 
 #[derive(Deserialize)]
@@ -125,27 +133,20 @@ fn cargo_build(release: bool, optix: bool) -> anyhow::Result<(Option<PathBuf>, O
             Err(_) => continue,
         };
 
-        if msg.reason == "compiler-artifact" {
-            if let Some(ref target) = msg.target {
+        match msg {
+            CargoMessage::CompilerArtifactMessage(CompilerArtifactMessage { target, executable }) => {
                 if target.name == "cli" && target.kind.contains(&"bin".to_string()) {
-                    if let Some(ref exe) = msg.executable {
-                        binary_path = Some(PathBuf::from(exe));
-                    }
+                    binary_path = Some(PathBuf::from(executable));
                 }
-            }
-        }
-
-        if msg.reason == "build-script-executed" {
-            if let Some(ref pkg_id) = msg.package_id {
-                if pkg_id.contains("raytracing-optix") {
-                    if let Some(ref paths) = msg.linked_paths {
-                        for p in paths {
-                            let p = p.strip_prefix("native=").unwrap_or(p);
-                            let candidate = PathBuf::from(p);
-                            if candidate.exists() {
-                                optix_linked_path = Some(candidate);
-                                break;
-                            }
+            },
+            CargoMessage::BuildScriptMessage(BuildScriptMessage { package_id, linked_paths }) => {
+                if package_id.contains("raytracing-optix") {
+                    for p in &linked_paths {
+                        let p = p.strip_prefix("native=").unwrap_or(p);
+                        let candidate = PathBuf::from(p);
+                        if candidate.exists() {
+                            optix_linked_path = Some(candidate);
+                            break;
                         }
                     }
                 }

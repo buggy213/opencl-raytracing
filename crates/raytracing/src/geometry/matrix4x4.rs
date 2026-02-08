@@ -45,6 +45,7 @@ impl Matrix4x4 {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[rustfmt::skip]
     pub fn create(a11: f32, a12: f32, a13: f32, a14: f32,
                   a21: f32, a22: f32, a23: f32, a24: f32,
@@ -254,7 +255,7 @@ impl Matrix4x4 {
     }
 
     pub fn transposed(&self) -> Matrix4x4 {
-        let mut me = self.clone();
+        let mut me = *self;
         me.transpose();
         me
     }

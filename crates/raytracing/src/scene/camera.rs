@@ -102,7 +102,8 @@ impl Camera {
             screen_space_top_left,
             screen_space_bottom_right,
         );
-        return persp.compose(fov_scale).compose(screen_to_raster);
+        
+        persp.compose(fov_scale).compose(screen_to_raster)
     }
 
     fn create_orthographic_transform(
@@ -125,7 +126,8 @@ impl Camera {
             screen_space_top_left,
             screen_space_bottom_right,
         );
-        return translate.compose(scale).compose(screen_to_raster);
+
+        translate.compose(scale).compose(screen_to_raster)
     }
 
     pub fn from_gltf_camera_node(camera_node: &gltf::Node, raster_height: usize) -> Camera {
