@@ -29,12 +29,8 @@ fn main() {
         format!("-I{}", dst.display())
     };
 
-    let Ok(optix_path) = std::env::var("OPTIX90_PATH") else {
-        panic!("OPTIX90_PATH is not set");
-    };
-
-    let optix_include_path = PathBuf::from(optix_path).join("include");
-    let optix_include_path = if cfg!(target_os = "windows") {
+    let optix_include_path = dst.join("optix_include");
+    let optix_include_arg = if cfg!(target_os = "windows") {
         format!("-I \"{}\"", optix_include_path.display())
     } else {
         format!("-I{}", optix_include_path.display())
@@ -44,7 +40,7 @@ fn main() {
     let bindings_builder = bindgen::Builder::default()
         .header("wrapper.h")
         .clang_arg(include_path)
-        .clang_arg(optix_include_path)
+        .clang_arg(optix_include_arg)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
 
     let bindings_builder = bindgen_customization(bindings_builder);
@@ -60,6 +56,7 @@ fn main() {
     let kernels_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("csrc/kernels");
     let exit_code = std::process::Command::new("make")
         .current_dir(&kernels_dir)
+        .env("OPTIX_INCLUDE_DIR", &optix_include_path)
         .arg("all")
         .spawn()
         .expect("failed to run make")

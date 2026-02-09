@@ -1,5 +1,9 @@
-ifeq ($(origin OPTIX90_PATH),undefined)
-$(error OPTIX90_PATH must be set)
+ifndef OPTIX_INCLUDE_DIR
+  ifdef OPTIX91_PATH
+    OPTIX_INCLUDE_DIR := $(OPTIX91_PATH)/include
+  else
+    $(error Set OPTIX91_PATH for standalone builds; OPTIX_INCLUDE_DIR is set automatically by cargo)
+  endif
 endif
 
 ifeq ($(origin MATHDX_25_12_PATH),undefined)
@@ -15,7 +19,7 @@ NVCCFLAGS := \
 	--use_fast_math \
 	-arch=compute_86 \
 	-I$(SHARED_HEADERS) \
-	-I$(OPTIX90_PATH)/include \
+	-I$(OPTIX_INCLUDE_DIR) \
 	-I$(MATHDX_25_12_PATH)/nvidia/mathdx/25.12/include
 
 

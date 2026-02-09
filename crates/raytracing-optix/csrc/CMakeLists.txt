@@ -45,17 +45,17 @@ message("CMAKE_MODULE_PATH = " "${CMAKE_MODULE_PATH}")
 find_package(CUDAToolkit 13.0 REQUIRED)
 message("CUDAToolkit_INCLUDE_DIRS = " "${CUDAToolkit_INCLUDE_DIRS}")
 
-# This contains a macro which generates custom build rules for compiling *.cu input files to either *.ptx or *.optixir.
-include("nvcuda_compile_module")
-
 # C++17 is required for std::filesystem
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# find OptiX SDK
-find_package(OptiX90)
-set(OPTIX_INCLUDE_DIR "${OPTIX90_INCLUDE_DIR}")
-message("OPTIX_INCLUDE_DIR = " "${OPTIX_INCLUDE_DIR}")
+# find OptiX SDK, or download it from github if not found
+find_package(OptiX91)
+if(NOT OptiX91_FOUND)
+  include(DownloadOptiX91)
+endif()
+
+set(OPTIX_INCLUDE_DIR "${OPTIX91_INCLUDE_DIR}")
 
 set(CU_SOURCE
   host/lib.cu
@@ -105,3 +105,5 @@ install(TARGETS raytracing_optix
   LIBRARY DESTINATION "."
   PUBLIC_HEADER DESTINATION "."
 )
+
+install(DIRECTORY "${OPTIX_INCLUDE_DIR}/" DESTINATION "optix_include")

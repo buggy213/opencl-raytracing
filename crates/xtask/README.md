@@ -42,7 +42,7 @@ cargo xtask bundle --output-dir my-bundle
 | Variable | Required | Description |
 |---|---|---|
 | `EMBREE_DIR` | Always | Path to Embree 4 installation |
-| `OPTIX90_PATH` | With `--optix` | Path to OptiX 9.0 SDK |
+| `OPTIX91_PATH` | Optional | Path to local OptiX 9.1 SDK (auto-downloaded if unset) |
 | `CUDACXX` | With `--optix` | Path to `nvcc` |
 
 ## Verification
