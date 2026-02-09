@@ -14,18 +14,18 @@ struct AovPipelineParams {
     OptixTraversableHandle root_handle;
 };
 
+// this field is deliberately opaque to the host C++ code, which is only responsible for allocating it
+// a static assert within the kernel code ensures that it is sufficiently large for
+struct PathtracerPerRayData {
+    __align__(8) char data[64];
+};
+
 struct PathtracerPipelineParams
 {
     float4* radiance;
     Scene scene;
     OptixTraversableHandle root_handle;
     Texture* textures;
+    PathtracerPerRayData* ray_datas;
+    OptixRaytracerSettings settings;
 };
-
-#ifdef USE_AOV_PIPELINE_PARAMS
-extern "C" __constant__ AovPipelineParams pipeline_params;
-#endif
-
-#ifdef USE_PATHTRACER_PIPELINE_PARAMS
-extern "C" __constant__ PathtracerPipelineParams pipeline_params;
-#endif

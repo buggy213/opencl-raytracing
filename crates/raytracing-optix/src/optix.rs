@@ -64,12 +64,15 @@ pub(crate) use detail::{
     makeCudaArray,
     makeCudaTexture,
 
+    OptixRaytracerSettings,
+
     Camera,
     Light,
     Texture,
     TextureSampler,
     Scene,
     Material,
+    Sampler,
 };
 
 use detail::{
@@ -85,6 +88,11 @@ use detail::{
     Light_LightVariant_PointLight,
     Light_LightVariant_DirectionLight,
     Light_LightVariant_DiffuseAreaLight,
+
+    Sampler_SamplerKind,
+    Sampler_SamplerVariant,
+    Sampler_SamplerVariant_Independent,
+    Sampler_SamplerVariant_Stratified,
 };
 
 // crate::scene needs to use these, so we export them
@@ -294,6 +302,19 @@ impl From<Transform> for raytracing::geometry::Transform {
     }
 }
 
+// conversion function for RaytracerSettings
+impl From<raytracing::renderer::RaytracerSettings> for OptixRaytracerSettings {
+    fn from(value: raytracing::renderer::RaytracerSettings) -> Self {
+        OptixRaytracerSettings { 
+            accumulate_bounces: value.accumulate_bounces, 
+            light_sample_count: value.light_sample_count, 
+            samples_per_pixel: value.samples_per_pixel, 
+            seed: value.seed.unwrap_or(9000), 
+            sampler: value.sampler.into() 
+        }
+    }
+}
+
 // conversion functions for scene description types. these should only be one way
 impl From<raytracing::scene::CameraType> for CameraType {
     fn from(value: raytracing::scene::CameraType) -> Self {
@@ -339,6 +360,29 @@ impl From<raytracing::scene::Camera> for Camera {
             world_to_raster: value.world_to_raster.into(), 
             camera_to_world: value.camera_to_world.into(), 
             raster_to_camera: value.raster_to_camera.into() 
+        }
+    }
+}
+
+impl From<raytracing::sampling::Sampler> for Sampler {
+    fn from(value: raytracing::sampling::Sampler) -> Self {
+        match value {
+            raytracing::sampling::Sampler::Independent => {
+                Sampler { 
+                    kind: Sampler_SamplerKind::Independent, 
+                    variant: Sampler_SamplerVariant {
+                        independent: Sampler_SamplerVariant_Independent {}
+                    }
+                }
+            },
+            raytracing::sampling::Sampler::Stratified { jitter, x_strata, y_strata } => {
+                Sampler { 
+                    kind: Sampler_SamplerKind::Stratified, 
+                    variant: Sampler_SamplerVariant {
+                        stratified: Sampler_SamplerVariant_Stratified { jitter, x_strata, y_strata }
+                    } 
+                }
+            },
         }
     }
 }

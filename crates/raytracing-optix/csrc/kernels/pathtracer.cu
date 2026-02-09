@@ -1,5 +1,6 @@
-#define USE_PATHTRACER_PIPELINE_PARAMS
+#include "accel.h"
 #include "kernel_params.h"
+extern "C" __constant__ PathtracerPipelineParams pipeline_params;
 
 #include <optix_device.h>
 
@@ -18,6 +19,13 @@ enum RayType
     RAY_TYPE_COUNT
 };
 
+struct PerRayData {
+    sample::OptixSampler sampler;
+};
+
+static_assert(sizeof(PerRayData) == sizeof(PathtracerPerRayData), "pathtracer per-ray data size mismatch");
+static_assert(alignof(PerRayData) == alignof(PathtracerPerRayData), "pathtracer per-ray data alignment mismatch");
+
 // primary entry point
 // uses radiance ray type payload only to read out reported radiance from primary (camera) ray
 extern "C" __global__ void __raygen__main() {
@@ -25,9 +33,13 @@ extern "C" __global__ void __raygen__main() {
     uint3 tid = optixGetLaunchIndex();
 
     const Scene& scene = pipeline_params.scene;
+
+
+
     Ray ray = generate_ray(*scene.camera, tid.x, tid.y);
 
-    uint x, y, z;
+    uint r, g, b;
+    uint specular_bounce = 1;
     optixTrace(
         OPTIX_PAYLOAD_TYPE_ID_0,
         pipeline_params.root_handle,
@@ -41,16 +53,17 @@ extern "C" __global__ void __raygen__main() {
         RADIANCE_RAY,
         RAY_TYPE_COUNT,
         RADIANCE_RAY,
-        x,
-        y,
-        z
+        r,
+        g,
+        b,
+        specular_bounce
     );
 
     float4& target = pipeline_params.radiance[tid.y * dim.x + tid.x];
     target = make_float4(
-        __uint_as_float(x),
-        __uint_as_float(y),
-        __uint_as_float(z),
+        __uint_as_float(r),
+        __uint_as_float(g),
+        __uint_as_float(b),
         1.0f
     );
 }
@@ -59,6 +72,7 @@ extern "C" __global__ void __raygen__main() {
 // The radiance ray type uses OPTIX_PAYLOAD_TYPE_ID_0,
 // which contains the following fields
 // - radiance: float3
+// - specular bounce: bool
 
 // one miss program for radiance rays
 extern "C" __global__ void __miss__radiance() {
@@ -74,10 +88,33 @@ extern "C" __global__ void __miss__radiance() {
 // `optixGetHitKind` / `optixGetPrimitiveType` is used to distinguish between different primitives
 extern "C" __global__ void __closesthit__radiance_diffuse() {
     optixSetPayloadTypes(OPTIX_PAYLOAD_TYPE_ID_0);
-    // todo
 
-    float t = optixGetRayTmax();
-    optixSetPayload_0(__float_as_uint(t));
+    HitInfo hit_info {};
+    unsigned int hit_kind = optixGetHitKind();
+    OptixPrimitiveType geometry = optixGetPrimitiveType(hit_kind);
+
+    switch (geometry) {
+        case OPTIX_PRIMITIVE_TYPE_SPHERE:
+            hit_info = get_hit_info_sphere();
+            break;
+        case OPTIX_PRIMITIVE_TYPE_TRIANGLE:
+            hit_info = get_hit_info_tri();
+            break;
+        default:
+            // TODO: handle more geometry types
+            optixSetPayload_0(__float_as_uint(0.0f));
+            optixSetPayload_1(__float_as_uint(0.0f));
+            optixSetPayload_2(__float_as_uint(0.0f));
+            return;
+    }
+
+    unsigned int specular_bounce = optixGetPayload_3();
+
+    // TODO: direct lighting from intersection with light
+
+
+
+    optixSetPayload_0(__float_as_uint(0.0f));
     optixSetPayload_1(__float_as_uint(1.0f));
     optixSetPayload_2(__float_as_uint(0.0f));
 }

@@ -78,6 +78,7 @@ RT_API void releasePathtracerSbt(PathtracerSbtWrapper sbt);
 RT_API void launchPathtracerPipeline(
     PathtracerPipelineWrapper pipeline,
     PathtracerSbtWrapper sbt,
+    struct OptixRaytracerSettings settings,
     struct Scene scene,
     OptixTraversableHandle rootHandle,
     struct Vec4* radiance

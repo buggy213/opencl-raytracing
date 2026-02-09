@@ -2,6 +2,8 @@
 
 #include <memory>
 
+#include "kernel_math.h"
+#include "kernel_types.h"
 #include "sbt.h"
 
 #include <optix_device.h>

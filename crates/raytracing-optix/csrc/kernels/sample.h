@@ -76,7 +76,6 @@ struct OptixSampler
     __device__ static OptixSampler from_sampler(const Sampler& sampler, cuda::std::optional<unsigned long long> seed)
     {
         unsigned long long seed_unwrapped = seed.value_or(42);
-
         seed_unwrapped = hash_u32(seed_unwrapped);
 
         switch (sampler.kind)

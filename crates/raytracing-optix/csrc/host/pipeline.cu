@@ -441,6 +441,7 @@ __host__ PathtracerPipeline makePathtracerPipelineImpl(
 __host__ void launchPathtracerPipelineImpl(
     const PathtracerPipeline& pipeline,
     const PathtracerSbt& sbt,
+    OptixRaytracerSettings settings,
     Scene scene,
     OptixTraversableHandle rootHandle,
     Vec4* radiance
@@ -463,14 +464,21 @@ __host__ void launchPathtracerPipelineImpl(
     cudaMalloc(&d_textures, sizeof(Texture) * scene.num_textures);
     cudaMemcpy(d_textures, scene.textures, sizeof(Texture) * scene.num_textures, cudaMemcpyHostToDevice);
 
+    void* d_ray_datas;
+    cudaMalloc(&d_ray_datas, sizeof(PathtracerPerRayData) * width * height);
+
     PathtracerPipelineParams pipelineParams = {};
-    pipelineParams.radiance = (float4*)d_radiance;
+    pipelineParams.radiance = static_cast<float4*>(d_radiance);
     pipelineParams.scene = Scene {
         .camera = static_cast<const Camera*>(d_camera),
+        .num_lights = scene.num_lights,
         .lights = static_cast<const Light*>(d_lights),
+        .num_textures = scene.num_textures,
         .textures = static_cast<const Texture*>(d_textures)
     };
     pipelineParams.root_handle = rootHandle;
+    pipelineParams.ray_datas = static_cast<PathtracerPerRayData*>(d_ray_datas);
+    pipelineParams.settings = settings;
 
     void* d_pipelineParams;
     cudaMalloc(&d_pipelineParams, sizeof(pipelineParams));

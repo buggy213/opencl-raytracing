@@ -143,7 +143,16 @@ struct Light
     } variant;
 };
 
-// @raytracing::renderer::RaytracerSettings
+// corresponds roughly to @raytracing::renderer::RaytracerSettings
+// but with some fields handled by the host side (e.g. default seed, AovFlags, max_ray_depth)
+struct OptixRaytracerSettings {
+    bool accumulate_bounces;
+
+    unsigned int light_sample_count;
+    unsigned int samples_per_pixel;
+    unsigned long long seed;
+    struct Sampler sampler;
+};
 
 // corresponds to `image` crate's `ColorType` enum
 // note that CUDA textures do *not* support 3 channel types (e.g. uchar3, ushort3, float3).

@@ -98,6 +98,7 @@ pub fn render(
     let scene_textures = scene::prepare_optix_textures(scene);
     let scene_data = scene::prepare_optix_scene_data(scene, scene_textures);
     let optix_scene = OptixScene::new(&scene_data);
+    let optix_settings: optix::OptixRaytracerSettings = raytracer_settings.clone().into();
 
     let mut render_output = RenderOutput::new(scene.camera.raster_width as u32, scene.camera.raster_height as u32);
     let buffer_size = scene.camera.raster_width * scene.camera.raster_height;
@@ -110,6 +111,7 @@ pub fn render(
         optix::launchPathtracerPipeline(
             pathtracer_pipeline,
             scene_sbt.ptr,
+            optix_settings,
             optix_scene.ffi,
             scene_as.handle,
             radiance.as_mut_ptr()

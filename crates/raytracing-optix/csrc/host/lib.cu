@@ -166,6 +166,7 @@ RT_API __host__ void releasePathtracerSbt(PathtracerSbtWrapper sbt) {
 RT_API __host__ void launchPathtracerPipeline(
     PathtracerPipelineWrapper pipeline,
     PathtracerSbtWrapper sbt,
+    struct OptixRaytracerSettings settings,
     struct Scene scene,
     OptixTraversableHandle rootHandle,
     struct Vec4* radiance
@@ -173,6 +174,7 @@ RT_API __host__ void launchPathtracerPipeline(
     launchPathtracerPipelineImpl(
         *pipeline,
         *sbt,
+        settings,
         scene,
         rootHandle,
         radiance
