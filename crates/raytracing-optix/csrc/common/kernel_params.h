@@ -16,8 +16,8 @@ struct AovPipelineParams {
 
 struct PathtracerPipelineParams
 {
-    float3* radiance;
-    Scene* scene;
+    float4* radiance;
+    Scene scene;
     OptixTraversableHandle root_handle;
     Texture* textures;
 };

@@ -4,7 +4,7 @@ use crate::{
     geometry::{Matrix4x4, Quaternion, Vec3}, materials::TextureId, scene::BasicPrimitiveIndex
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub enum Light {
     PointLight {

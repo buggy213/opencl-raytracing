@@ -438,16 +438,86 @@ __host__ PathtracerPipeline makePathtracerPipelineImpl(
     return pathtracerPipeline;
 }
 
-void launchPathtracerPipelineImpl(
+__host__ void launchPathtracerPipelineImpl(
     const PathtracerPipeline& pipeline,
-    const Scene* scene,
+    const PathtracerSbt& sbt,
+    Scene scene,
     OptixTraversableHandle rootHandle,
-    Vec3* radiance
+    Vec4* radiance
 ) {
-    // TODO
+    size_t width = scene.camera->raster_width;
+    size_t height = scene.camera->raster_height;
+
+    void* d_radiance;
+    cudaMalloc(&d_radiance, sizeof(float4) * width * height);
+
+    void* d_camera;
+    cudaMalloc(&d_camera, sizeof(Camera));
+    cudaMemcpy(d_camera, scene.camera, sizeof(Camera), cudaMemcpyHostToDevice);
+
+    void* d_lights;
+    cudaMalloc(&d_lights, sizeof(Light) * scene.num_lights);
+    cudaMemcpy(d_lights, scene.lights, sizeof(Light) * scene.num_lights, cudaMemcpyHostToDevice);
+
+    void* d_textures;
+    cudaMalloc(&d_textures, sizeof(Texture) * scene.num_textures);
+    cudaMemcpy(d_textures, scene.textures, sizeof(Texture) * scene.num_textures, cudaMemcpyHostToDevice);
+
+    PathtracerPipelineParams pipelineParams = {};
+    pipelineParams.radiance = (float4*)d_radiance;
+    pipelineParams.scene = Scene {
+        .camera = static_cast<const Camera*>(d_camera),
+        .lights = static_cast<const Light*>(d_lights),
+        .textures = static_cast<const Texture*>(d_textures)
+    };
+    pipelineParams.root_handle = rootHandle;
+
+    void* d_pipelineParams;
+    cudaMalloc(&d_pipelineParams, sizeof(pipelineParams));
+    cudaMemcpy(d_pipelineParams, &pipelineParams, sizeof(pipelineParams), cudaMemcpyHostToDevice);
+
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+
+    OptixResult res = optixLaunch(
+        pipeline.pipeline,
+        stream,
+        (CUdeviceptr)d_pipelineParams,
+        sizeof(PathtracerPipelineParams),
+        &sbt.sbt,
+        width,
+        height,
+        1
+    );
+    OPTIX_CHECK(res);
+
+    cudaStreamSynchronize(stream);
+    cudaStreamDestroy(stream);
+
+    cudaMemcpy(radiance, d_radiance, sizeof(float4) * width * height, cudaMemcpyDeviceToHost);
+
+    cudaFree(d_radiance);
+    cudaFree(d_camera);
+    cudaFree(d_lights);
+    cudaFree(d_textures);
+    cudaFree(d_pipelineParams);
 }
 
-void releasePathtracerPipelineImpl(PathtracerPipeline &pipeline) {
-    // TODO
+__host__ void releasePathtracerPipelineImpl(PathtracerPipeline &pipeline) {
+    OPTIX_CHECK(optixPipelineDestroy(pipeline.pipeline));
+    OPTIX_CHECK(optixProgramGroupDestroy(pipeline.raygenProgram));
+    for (OptixProgramGroup miss : pipeline.missPrograms) {
+        OPTIX_CHECK(optixProgramGroupDestroy(miss));
+    }
+
+    for (OptixProgramGroup radianceHit : pipeline.hitProgramGroupsRadiance) {
+        OPTIX_CHECK(optixProgramGroupDestroy(radianceHit));
+    }
+
+    for (OptixProgramGroup shadowHit : pipeline.hitProgramGroupsShadow) {
+        OPTIX_CHECK(optixProgramGroupDestroy(shadowHit));
+    }
+
+    OPTIX_CHECK(optixModuleDestroy(pipeline.module));
 }
 

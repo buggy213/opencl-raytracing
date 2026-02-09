@@ -6,6 +6,7 @@ fn bindgen_customization(bindings_builder: bindgen::Builder) -> bindgen::Builder
         .rustified_enum("TextureFormat")
         .rustified_enum("Texture_TextureKind")
         .rustified_enum("Material_MaterialKind")
+        .rustified_enum("Light_LightKind")
         .rustified_enum("WrapMode")
         .rustified_enum("FilterMode")
 }

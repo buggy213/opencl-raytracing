@@ -19,20 +19,22 @@ enum RayType
 };
 
 // primary entry point
+// uses radiance ray type payload only to read out reported radiance from primary (camera) ray
 extern "C" __global__ void __raygen__main() {
     uint3 dim = optixGetLaunchDimensions();
     uint3 tid = optixGetLaunchIndex();
 
-    const Scene& scene = *pipeline_params.scene;
-    Ray ray = generate_ray(scene.camera, tid.x, tid.y);
+    const Scene& scene = pipeline_params.scene;
+    Ray ray = generate_ray(*scene.camera, tid.x, tid.y);
 
-    uint x, y, z, w;
+    uint x, y, z;
     optixTrace(
+        OPTIX_PAYLOAD_TYPE_ID_0,
         pipeline_params.root_handle,
         ray.origin,
         ray.direction,
-        scene.camera.near_clip,
-        scene.camera.far_clip,
+        scene.camera->near_clip,
+        scene.camera->far_clip,
         0.0f,
         (OptixVisibilityMask)(-1),
         OPTIX_RAY_FLAG_NONE,
@@ -41,8 +43,15 @@ extern "C" __global__ void __raygen__main() {
         RADIANCE_RAY,
         x,
         y,
-        z,
-        w
+        z
+    );
+
+    float4& target = pipeline_params.radiance[tid.y * dim.x + tid.x];
+    target = make_float4(
+        __uint_as_float(x),
+        __uint_as_float(y),
+        __uint_as_float(z),
+        1.0f
     );
 }
 
@@ -56,7 +65,7 @@ extern "C" __global__ void __miss__radiance() {
     optixSetPayloadTypes(OPTIX_PAYLOAD_TYPE_ID_0);
 
     // todo: environment map
-    optixSetPayload_0(__float_as_uint(0.0f));
+    optixSetPayload_0(__float_as_uint(1.0f));
     optixSetPayload_1(__float_as_uint(0.0f));
     optixSetPayload_2(__float_as_uint(0.0f));
 }
@@ -66,6 +75,11 @@ extern "C" __global__ void __miss__radiance() {
 extern "C" __global__ void __closesthit__radiance_diffuse() {
     optixSetPayloadTypes(OPTIX_PAYLOAD_TYPE_ID_0);
     // todo
+
+    float t = optixGetRayTmax();
+    optixSetPayload_0(__float_as_uint(t));
+    optixSetPayload_1(__float_as_uint(1.0f));
+    optixSetPayload_2(__float_as_uint(0.0f));
 }
 
 // -- Shadow Rays

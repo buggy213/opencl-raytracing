@@ -165,12 +165,14 @@ RT_API __host__ void releasePathtracerSbt(PathtracerSbtWrapper sbt) {
 
 RT_API __host__ void launchPathtracerPipeline(
     PathtracerPipelineWrapper pipeline,
-    const Scene* scene,
+    PathtracerSbtWrapper sbt,
+    struct Scene scene,
     OptixTraversableHandle rootHandle,
-    struct Vec3* radiance
+    struct Vec4* radiance
 ) {
     launchPathtracerPipelineImpl(
         *pipeline,
+        *sbt,
         scene,
         rootHandle,
         radiance
@@ -189,9 +191,4 @@ RT_API __host__ struct CudaArray makeCudaArray(const void *src, size_t pitch, si
 RT_API __host__ struct CudaTextureObject makeCudaTexture(struct CudaArray backing_array, struct TextureSampler sampler) {
     cudaTextureObject_t cudaTexture = createCudaTexture(static_cast<cudaArray_t>(backing_array.d_array), sampler);
     return CudaTextureObject { .handle = cudaTexture };
-}
-
-RT_API __host__ OptixTexturesWrapper uploadOptixTextures(const struct Texture *textures, size_t count) {
-    CUdeviceptr d_optixTextures = uploadOptixTexturesImpl(textures, count);
-    return reinterpret_cast<struct OptixTextures*>(d_optixTextures);
 }

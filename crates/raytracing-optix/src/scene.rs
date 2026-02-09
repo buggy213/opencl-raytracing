@@ -2,13 +2,13 @@
 //! that calls into C++ in order to generate hierarchy of Geometry-AS / Instance-AS for OptiX.
 //! We do it this way to avoid having to make the whole scene description #[repr(C)]
 
-use std::os::raw::c_void;
+use std::{marker::PhantomData, os::raw::c_void};
 
 use image::metadata::Cicp;
 use raytracing::{geometry::Shape, materials::Material, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
 use tracing::warn;
 
-use crate::optix::{self, CudaArray, OptixAccelerationStructure, OptixTexturesWrapper, Texture, Texture_TextureVariant, Texture_TextureVariant_ConstantTexture, Texture_TextureVariant_ImageTexture, Vec3SliceWrap, Vec3uSliceWrap, makeCudaArray, makeCudaTexture, uploadOptixTextures};
+use crate::optix::{self, CudaArray, OptixAccelerationStructure, Texture, Texture_TextureVariant, Texture_TextureVariant_ConstantTexture, Texture_TextureVariant_ImageTexture, Vec3SliceWrap, Vec3uSliceWrap, makeCudaArray, makeCudaTexture};
 
 // hooks for SBT to be constructed alongside the AS hierarchy. `visit` functions on a node 
 // return corresponding SBT offset which will be used when constructing that node's parent.
@@ -141,7 +141,7 @@ pub(crate) fn prepare_optix_acceleration_structures(
 
 pub(crate) fn prepare_optix_textures(
     scene: &Scene
-) -> OptixTexturesWrapper {
+) -> Vec<optix::Texture> {
     let mut cuda_arrays: Vec<CudaArray> = Vec::new();
 
     for image in &scene.images {
@@ -287,7 +287,44 @@ pub(crate) fn prepare_optix_textures(
         optix_textures.push(optix_texture);
     }
 
-    unsafe {
-        uploadOptixTextures(optix_textures.as_ptr(), optix_textures.len())
+    optix_textures
+}
+
+pub(crate) struct OptixSceneData {
+    pub(crate) optix_camera: optix::Camera,
+    pub(crate) optix_lights: Vec<optix::Light>,
+    pub(crate) optix_textures: Vec<optix::Texture>,
+}
+
+pub(crate) fn prepare_optix_scene_data(
+    scene: &Scene,
+    optix_textures: Vec<optix::Texture>,
+) -> OptixSceneData {
+    OptixSceneData { 
+        optix_camera: scene.camera.clone().into(), 
+        optix_lights: scene.lights.iter().cloned().map(Into::into).collect(), 
+        optix_textures 
+    }
+}
+
+pub(crate) struct OptixScene<'scene> {
+    pub(crate) ffi: optix::Scene,
+    _data: PhantomData<&'scene OptixSceneData>
+}
+
+impl<'scene> OptixScene<'scene> {
+    pub(crate) fn new(scene_data: &'scene OptixSceneData) -> Self {
+        let ffi_scene = optix::Scene {
+            camera: &scene_data.optix_camera,
+            num_lights: scene_data.optix_lights.len(),
+            lights: scene_data.optix_lights.as_ptr(),
+            num_textures: scene_data.optix_textures.len(),
+            textures: scene_data.optix_textures.as_ptr(),
+        };
+
+        OptixScene {
+            ffi: ffi_scene,
+            _data: PhantomData,
+        }
     }
 }

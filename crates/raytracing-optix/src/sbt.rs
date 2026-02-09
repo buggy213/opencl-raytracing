@@ -74,7 +74,24 @@ fn optix_material_from_material(material: &Material) -> optix::Material {
             }
         },
         
-        _ => todo!("other materials")
+        // TODO: other materials
+        Material::CoatedDiffuse { diffuse_albedo, .. } => {
+            optix::Material {
+                kind: optix::Material_MaterialKind::Diffuse,
+                variant: Material_MaterialVariant { 
+                    diffuse: Material_MaterialVariant_Diffuse { albedo: diffuse_albedo.0 } 
+                },
+            }
+        }
+        
+        _ => {
+            optix::Material {
+                kind: optix::Material_MaterialKind::Diffuse,
+                variant: Material_MaterialVariant { 
+                    diffuse: Material_MaterialVariant_Diffuse { albedo: 0 } 
+                },
+            }
+        }
     }
 }
 

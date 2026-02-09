@@ -117,11 +117,3 @@ __host__ cudaTextureObject_t createCudaTexture(cudaArray_t backing_array, Textur
 
     return texture;
 }
-
-__host__ CUdeviceptr uploadOptixTexturesImpl(const Texture *textures, size_t count) {
-    void* d_optixTextures;
-    cudaMalloc(&d_optixTextures, sizeof(Texture) * count);
-    cudaMemcpy(d_optixTextures, textures, sizeof(Texture) * count, cudaMemcpyHostToDevice);
-
-    return (CUdeviceptr)d_optixTextures;
-}

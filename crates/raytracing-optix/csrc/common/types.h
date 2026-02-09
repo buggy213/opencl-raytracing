@@ -101,11 +101,6 @@ struct Camera {
     struct Transform raster_to_camera;
 };
 
-// @raytracing::scene::scene::Scene
-struct Scene {
-    struct Camera camera;
-};
-
 // @raytracing::sampling::Sampler
 struct Sampler
 {
@@ -216,6 +211,19 @@ struct Texture {
 
 // @raytracing::materials::texture::TextureId
 typedef unsigned int TextureId;
+
+// @raytracing::scene::scene::Scene
+// scene hierarchy is mapped onto OptiX AS-hierarchy
+// materials are stored inline in SBT hitgroup record payload
+struct Scene {
+    const struct Camera* camera;
+
+    size_t num_lights;
+    const struct Light* lights;
+
+    size_t num_textures;
+    const struct Texture* textures;
+};
 
 // @raytracing::materials::Material
 struct Material {

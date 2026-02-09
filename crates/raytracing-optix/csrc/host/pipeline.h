@@ -122,9 +122,10 @@ PathtracerPipeline makePathtracerPipelineImpl(
 
 void launchPathtracerPipelineImpl(
     const PathtracerPipeline& pipeline,
-    const Scene* scene,
+    const PathtracerSbt& sbt,
+    Scene scene,
     OptixTraversableHandle rootHandle,
-    Vec3* radiance
+    Vec4* radiance
 );
 
 void releasePathtracerPipelineImpl(PathtracerPipeline& pipeline);

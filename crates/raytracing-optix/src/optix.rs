@@ -12,6 +12,7 @@ pub(crate) mod kernels {
     // doing it at runtime and doesn't require linker shenanigans
 
     pub(crate) const NORMALS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/normals.optixir"));
+    pub(crate) const PATHTRACER: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/pathtracer.optixir"));
 }
 
 use std::{ops::Deref, slice};
@@ -63,12 +64,11 @@ pub(crate) use detail::{
     makeCudaArray,
     makeCudaTexture,
 
-    OptixTexturesWrapper,
-    uploadOptixTextures,
-
     Camera,
+    Light,
     Texture,
     TextureSampler,
+    Scene,
     Material,
 };
 
@@ -79,6 +79,12 @@ use detail::{
     CameraType_CameraVariant_Orthographic,
     CameraType_CameraVariant_PinholePerspective,
     CameraType_CameraVariant_ThinLensPerspective,
+
+    Light_LightKind,
+    Light_LightVariant,
+    Light_LightVariant_PointLight,
+    Light_LightVariant_DirectionLight,
+    Light_LightVariant_DiffuseAreaLight,
 };
 
 // crate::scene needs to use these, so we export them
@@ -333,6 +339,44 @@ impl From<raytracing::scene::Camera> for Camera {
             world_to_raster: value.world_to_raster.into(), 
             camera_to_world: value.camera_to_world.into(), 
             raster_to_camera: value.raster_to_camera.into() 
+        }
+    }
+}
+
+impl From<raytracing::lights::Light> for Light {
+    fn from(value: raytracing::lights::Light) -> Self {
+        match value {
+            raytracing::lights::Light::PointLight { position, intensity } => {
+                Light { 
+                    kind: Light_LightKind::PointLight, 
+                    variant: Light_LightVariant { 
+                        point_light: Light_LightVariant_PointLight { position: position.into(), intensity: intensity.into() } 
+                    } 
+                }
+            },
+            raytracing::lights::Light::DirectionLight { direction, radiance } => {
+                Light {
+                    kind: Light_LightKind::DirectionLight,
+                    variant: Light_LightVariant {
+                        direction_light: Light_LightVariant_DirectionLight {
+                            direction: direction.into(),
+                            radiance: radiance.into(),
+                        }
+                    }
+                }
+            },
+            raytracing::lights::Light::DiffuseAreaLight { prim_id: _, radiance, light_to_world } => {
+                Light {
+                    kind: Light_LightKind::DiffuseAreaLight,
+                    variant: Light_LightVariant {
+                        area_light: Light_LightVariant_DiffuseAreaLight {
+                            prim_id: 0, // TODO: support area light sampling
+                            radiance: radiance.into(),
+                            light_to_world: light_to_world.into(),
+                        }
+                    }
+                }
+            },
         }
     }
 }
