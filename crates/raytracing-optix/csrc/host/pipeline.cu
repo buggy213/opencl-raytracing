@@ -420,7 +420,8 @@ __host__ PathtracerPipeline makePathtracerPipelineImpl(
 
     OptixPipeline pipeline = nullptr;
     OptixPipelineLinkOptions pipelineLinkOptions = {};
-    pipelineLinkOptions.maxTraceDepth = maxRayDepth;
+    // maxTraceDepth = 1 corresponds to max_ray_depth = 0 in cpu implementation
+    pipelineLinkOptions.maxTraceDepth = maxRayDepth + 1;
 
     res = optixPipelineCreate(
         ctx,

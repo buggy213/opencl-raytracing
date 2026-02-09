@@ -6,6 +6,7 @@
 #include "kernel_math.h"
 #include "kernel_types.h"
 #include "sample.h"
+#include "texture.h"
 
 namespace materials
 {
@@ -15,15 +16,21 @@ namespace materials
 /// We still do need it for more specialized (i.e. mix, layered) materials.
 struct OptixBsdfDiffuse {
     float3 albedo;
+
+    __device__ static constexpr bool is_delta_bsdf() { return false; }
 };
 
 struct OptixBsdfSmoothDielectric {
     float eta;
+
+    __device__ static constexpr bool is_delta_bsdf() { return true; }
 };
 
 struct OptixBsdfSmoothConductor {
     float3 eta;
     float3 kappa;
+
+    __device__ static constexpr bool is_delta_bsdf() { return true; }
 };
 
 struct OptixBsdfRoughConductor {
@@ -42,6 +49,17 @@ struct OptixBsdfRoughDielectric {
 struct LayeredBsdf {
     // todo
 };
+
+// -- Material evaluation --
+// these roughly correspond to the material evaluation routines of
+// @<raytracing::materials::Material as raytracing_cpu::materials::CpuMaterial>::get_bsdf
+// but don't need to match against the kind of material it is, since this is known from call site
+inline __device__ OptixBsdfDiffuse get_diffuse_bsdf(const Material& material, float2 uv)
+{
+    const Material::MaterialVariant::Diffuse& diffuse = material.variant.diffuse;
+    float4 albedo = texture::sample(diffuse.albedo, uv);
+    return OptixBsdfDiffuse { .albedo = make_float3(albedo.x, albedo.y, albedo.z) };
+}
 
 enum class BsdfComponentFlags : u32 {
     EMPTY = 0,

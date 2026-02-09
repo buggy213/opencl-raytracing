@@ -15,7 +15,7 @@ struct AovPipelineParams {
 };
 
 // this field is deliberately opaque to the host C++ code, which is only responsible for allocating it
-// a static assert within the kernel code ensures that it is sufficiently large for
+// a static assert within the kernel code ensures that it is sufficiently large for actual contents
 struct PathtracerPerRayData {
     __align__(8) char data[64];
 };

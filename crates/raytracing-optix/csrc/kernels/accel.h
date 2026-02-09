@@ -17,7 +17,7 @@ struct HitInfo {
     float3 normal;
 };
 
-// following functions must be only be called from any-hit programs
+// following functions must be only be called from closest-hit programs
 // also, they return HitInfo in object-space
 
 // @raytracing_cpu::geometry::ray_sphere_intersect

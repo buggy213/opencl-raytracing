@@ -248,6 +248,21 @@ inline __device__ float dot(float2 a, float2 b) {
     return a.x * b.x + a.y * b.y;
 }
 
+inline __device__ float length(float4 a)
+{
+    return sqrtf(dot(a, a));
+}
+
+inline __device__ float length(float3 a)
+{
+    return sqrtf(dot(a, a));
+}
+
+inline __device__ float length(float2 a)
+{
+    return sqrtf(dot(a, a));
+}
+
 inline __device__ float3 cross(float3 a, float3 b) {
     return make_float3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
 }

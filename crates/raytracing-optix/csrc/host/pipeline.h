@@ -58,16 +58,20 @@ struct PathtracerPipeline {
     };
     static constexpr std::string_view hitProgramNameShadow = "__closesthit__shadow";
 
-    static constexpr unsigned int radiancePayloadTypeSemantics[4] = {
+    static constexpr unsigned int radiancePayloadTypeSemantics[7] = {
         // radiance components all have the same semantics: readable by the caller of trace after being written by miss or closest-hit
         OPTIX_PAYLOAD_SEMANTICS_TRACE_CALLER_READ | OPTIX_PAYLOAD_SEMANTICS_CH_WRITE | OPTIX_PAYLOAD_SEMANTICS_MS_WRITE,
         OPTIX_PAYLOAD_SEMANTICS_TRACE_CALLER_READ | OPTIX_PAYLOAD_SEMANTICS_CH_WRITE | OPTIX_PAYLOAD_SEMANTICS_MS_WRITE,
         OPTIX_PAYLOAD_SEMANTICS_TRACE_CALLER_READ | OPTIX_PAYLOAD_SEMANTICS_CH_WRITE | OPTIX_PAYLOAD_SEMANTICS_MS_WRITE,
+        // path weight components are writable by caller of trace, and are then read from closest-hit and miss
+        OPTIX_PAYLOAD_SEMANTICS_TRACE_CALLER_WRITE | OPTIX_PAYLOAD_SEMANTICS_CH_READ | OPTIX_PAYLOAD_SEMANTICS_MS_READ,
+        OPTIX_PAYLOAD_SEMANTICS_TRACE_CALLER_WRITE | OPTIX_PAYLOAD_SEMANTICS_CH_READ | OPTIX_PAYLOAD_SEMANTICS_MS_READ,
+        OPTIX_PAYLOAD_SEMANTICS_TRACE_CALLER_WRITE | OPTIX_PAYLOAD_SEMANTICS_CH_READ | OPTIX_PAYLOAD_SEMANTICS_MS_READ,
         // specular bounce flag is writable by caller of trace, read from closest-hit / miss in order to determine if light contribution
         // should be added
         OPTIX_PAYLOAD_SEMANTICS_TRACE_CALLER_WRITE | OPTIX_PAYLOAD_SEMANTICS_CH_READ | OPTIX_PAYLOAD_SEMANTICS_MS_READ
     };
-    static constexpr OptixPayloadType radiancePayloadType = { .numPayloadValues = 4, .payloadSemantics = radiancePayloadTypeSemantics };
+    static constexpr OptixPayloadType radiancePayloadType = { .numPayloadValues = 7, .payloadSemantics = radiancePayloadTypeSemantics };
 
     static constexpr unsigned int shadowPayloadTypeSemantics[1] = {
         // hit flag has semantics: readable by caller of trace after being written by miss (i.e. not in shadow) or closest-hit (i.e. in shadow)

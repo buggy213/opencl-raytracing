@@ -14,7 +14,7 @@ pub(crate) struct LightSample {
 pub(crate) fn sample_light(
     context: &CpuRaytracingContext,
     light: &Light, 
-    point: Vec3, // world-space
+    point: Vec3, // world-space, point being shaded
     sampler: &mut CpuSampler,
 ) -> LightSample {
     match light {
