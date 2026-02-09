@@ -324,7 +324,8 @@ fn ray_radiance(
             let mut direct_illumination = Vec3::zero();
 
             for light in &context.scene.lights {
-                let light_samples = if light.is_delta_light() {
+                let mut light_contribution = Vec3::zero();
+                let light_samples: u32 = if light.is_delta_light() {
                     1
                 }
                 else {
@@ -340,11 +341,12 @@ fn ray_radiance(
                         
                         let cos_theta = wi.z();
 
-                        direct_illumination += bsdf_value * light_sample.radiance * f32::max(0.0, cos_theta) / light_sample.pdf; 
+                        light_contribution += bsdf_value * light_sample.radiance * f32::max(0.0, cos_theta) / light_sample.pdf; 
                     }
                 }
 
-                direct_illumination /= light_samples as f32;
+                light_contribution /= light_samples as f32;
+                direct_illumination += light_contribution;
             }
 
             radiance += path_weight * direct_illumination;
