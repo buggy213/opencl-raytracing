@@ -9,7 +9,7 @@ use crate::{geometry::{Vec2, Vec3}, sampling::Sampler};
 // TODO: light path expression support? looks cool but is certainly not cheap to compute.
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct AOVFlags: u32 {
+    pub struct AovFlags: u32 {
         const BEAUTY = 1 << 0;
         const NORMALS = 1 << 1;
         const UV_COORDS = 1 << 2;
@@ -24,14 +24,14 @@ bitflags! {
         // (blender has ability to do fully custom AOV from shader graph, looks cool)
 
         const DEBUG =
-            AOVFlags::NORMALS.bits()
-            | AOVFlags::UV_COORDS.bits()
-            | AOVFlags::MIP_LEVEL.bits();
+            AovFlags::NORMALS.bits()
+            | AovFlags::UV_COORDS.bits()
+            | AovFlags::MIP_LEVEL.bits();
 
         const FIRST_HIT_AOVS =
-            AOVFlags::NORMALS.bits()
-            | AOVFlags::UV_COORDS.bits()
-            | AOVFlags::MIP_LEVEL.bits();
+            AovFlags::NORMALS.bits()
+            | AovFlags::UV_COORDS.bits()
+            | AovFlags::MIP_LEVEL.bits();
     }
 }
 
@@ -69,7 +69,7 @@ pub struct RaytracerSettings {
     pub seed: Option<u64>,
     pub sampler: Sampler,
 
-    pub outputs: AOVFlags,
+    pub outputs: AovFlags,
 
     pub antialias_primary_rays: bool,
     pub antialias_secondary_rays: bool,
@@ -86,7 +86,7 @@ impl Default for RaytracerSettings {
             seed: None,
             sampler: Sampler::Independent,
 
-            outputs: AOVFlags::BEAUTY,
+            outputs: AovFlags::BEAUTY,
 
             antialias_primary_rays: true,
             antialias_secondary_rays: true,

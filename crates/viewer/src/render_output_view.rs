@@ -1,7 +1,7 @@
 use std::{borrow::Cow, path::{Path, PathBuf}};
 
 use bytemuck::NoUninit;
-use raytracing::{geometry::Vec3, renderer::AOVFlags};
+use raytracing::{geometry::Vec3, renderer::AovFlags};
 use raytracing::renderer::RaytracerSettings;
 use raytracing_cpu::CpuBackendSettings;
 use wgpu::{util::DeviceExt, TextureFormat};
@@ -83,7 +83,7 @@ struct RaytracerResult {
 
 fn raytrace_scene(path: &Path, settings: &RaytracerSettings, backend_settings: CpuBackendSettings) -> RaytracerResult {
     let scene = raytracing::scene::scene_from_gltf_file(path).expect("failed to load scene");
-    assert!(settings.outputs.contains(AOVFlags::BEAUTY));
+    assert!(settings.outputs.contains(AovFlags::BEAUTY));
     let output = raytracing_cpu::render(
         &scene, 
         settings,
@@ -631,7 +631,7 @@ impl RenderOutputView {
                 light_sample_count: self.gui_state.light_samples,
                 accumulate_bounces: self.gui_state.accumulate_bounces,
 
-                outputs: AOVFlags::BEAUTY,
+                outputs: AovFlags::BEAUTY,
                 
                 ..Default::default()
             };

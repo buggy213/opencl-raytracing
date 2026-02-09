@@ -6,7 +6,7 @@ use crate::{
     geometry::{Mesh, Shape, Vec2, Vec3, Vec3u, Vec4},
     lights::{EnvironmentLight, Light},
     materials::{Image, Material, Texture, TextureSampler},
-    renderer::{AOVFlags, RaytracerSettings},
+    renderer::{AovFlags, RaytracerSettings},
     sampling::Sampler,
     scene::{Camera, Scene, SceneBuilder},
 };
@@ -604,7 +604,7 @@ pub fn environment_lighting_scene() -> Scene {
 
 fn debug_normals_settings() -> RaytracerSettings {
     RaytracerSettings {
-        outputs: AOVFlags::NORMALS,
+        outputs: AovFlags::NORMALS,
         ..Default::default()
     }
 }

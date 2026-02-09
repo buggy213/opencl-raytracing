@@ -7,7 +7,7 @@ use raytracing::scene::test_scenes;
 
 mod tui;
 use raytracing::{
-    renderer::{AOVFlags, RenderOutput},
+    renderer::{AovFlags, RenderOutput},
     sampling::Sampler,
     scene,
 };
@@ -220,16 +220,16 @@ fn main() {
         let mut aov_flags = raytracer_settings.outputs;
         for aov_str in aov.iter().flatten() {
             match aov_str.as_str() {
-                "n" | "normal" => aov_flags.insert(AOVFlags::NORMALS),
-                "u" | "uv" => aov_flags.insert(AOVFlags::UV_COORDS),
-                "m" | "mip" => aov_flags.insert(AOVFlags::MIP_LEVEL),
+                "n" | "normal" => aov_flags.insert(AovFlags::NORMALS),
+                "u" | "uv" => aov_flags.insert(AovFlags::UV_COORDS),
+                "m" | "mip" => aov_flags.insert(AovFlags::MIP_LEVEL),
                 "b" | "beauty" => warn!("beauty is implicit"),
                 _ => warn!("unknown AOV specified: {aov_str}"),
             }
         }
 
         if *no_beauty {
-            aov_flags.remove(AOVFlags::BEAUTY);
+            aov_flags.remove(AovFlags::BEAUTY);
         }
 
         raytracer_settings.outputs = aov_flags;
@@ -286,7 +286,7 @@ fn main() {
 // and not lose their render
 fn save_render_output(
     render_output: RenderOutput,
-    aov_flags: AOVFlags,
+    aov_flags: AovFlags,
     output_format: Option<OutputFormat>,
     output_path: &Path,
 ) {
@@ -316,7 +316,7 @@ fn save_render_output(
 }
 
 // 1 png file for each output, not suffixed w/ aov name if it's the beauty output
-fn save_to_png(mut render_output: RenderOutput, aov_flags: AOVFlags, output_path: &Path) {
+fn save_to_png(mut render_output: RenderOutput, aov_flags: AovFlags, output_path: &Path) {
     fn add_suffix(path: &Path, suffix: &str) -> PathBuf {
         let dir = path.parent().unwrap();
         let base_name = path.file_stem().and_then(|x| x.to_str()).unwrap();
@@ -325,7 +325,7 @@ fn save_to_png(mut render_output: RenderOutput, aov_flags: AOVFlags, output_path
 
     for (name, flag) in aov_flags.iter_names() {
         bitflags_match!(flag, {
-            AOVFlags::BEAUTY => {
+            AovFlags::BEAUTY => {
                 raytracing_cpu::utils::png::save_png(
                     render_output.beauty.as_ref().unwrap(),
                     1000.0,
@@ -334,7 +334,7 @@ fn save_to_png(mut render_output: RenderOutput, aov_flags: AOVFlags, output_path
                     output_path
                 );
             }
-            AOVFlags::NORMALS => {
+            AovFlags::NORMALS => {
                 let output_path = add_suffix(output_path, name);
 
                 raytracing_cpu::utils::png::normals_to_rgb(render_output.normals.as_mut().unwrap());
@@ -346,7 +346,7 @@ fn save_to_png(mut render_output: RenderOutput, aov_flags: AOVFlags, output_path
                     &output_path
                 );
             }
-            AOVFlags::UV_COORDS => {
+            AovFlags::UV_COORDS => {
                 let output_path = add_suffix(output_path, name);
                 let uv_rgb = raytracing_cpu::utils::png::uvs_to_rgb(render_output.uv.as_ref().unwrap());
                 raytracing_cpu::utils::png::save_png(
@@ -357,7 +357,7 @@ fn save_to_png(mut render_output: RenderOutput, aov_flags: AOVFlags, output_path
                     &output_path
                 );
             }
-            AOVFlags::MIP_LEVEL => {
+            AovFlags::MIP_LEVEL => {
                 // TODO: ideally, we would palettize + round to get a nice plot, using something like matplotlib to generate
                 // a legend
                 warn!("MIP_LEVEL png output not supported (yet)");
@@ -368,12 +368,12 @@ fn save_to_png(mut render_output: RenderOutput, aov_flags: AOVFlags, output_path
     }
 }
 
-fn save_to_exr(render_output: RenderOutput, aov_flags: AOVFlags, output_path: &Path) {
+fn save_to_exr(render_output: RenderOutput, aov_flags: AovFlags, output_path: &Path) {
     let mut channels = Vec::new();
 
     for (_, flag) in aov_flags.iter_names() {
         bitflags_match!(flag, {
-            AOVFlags::BEAUTY => {
+            AovFlags::BEAUTY => {
                 if let Some(ref beauty) = render_output.beauty {
                     raytracing_cpu::utils::exr::channels_from_vec3(
                         &mut channels,
@@ -382,7 +382,7 @@ fn save_to_exr(render_output: RenderOutput, aov_flags: AOVFlags, output_path: &P
                     );
                 }
             }
-            AOVFlags::NORMALS => {
+            AovFlags::NORMALS => {
                 if let Some(ref normals) = render_output.normals {
                     raytracing_cpu::utils::exr::channels_from_vec3(
                         &mut channels,
@@ -391,7 +391,7 @@ fn save_to_exr(render_output: RenderOutput, aov_flags: AOVFlags, output_path: &P
                     );
                 }
             }
-            AOVFlags::UV_COORDS => {
+            AovFlags::UV_COORDS => {
                 if let Some(ref uvs) = render_output.uv {
                     let u: Vec<f32> = uvs.iter().map(|v| v.0).collect();
                     let v: Vec<f32> = uvs.iter().map(|v| v.1).collect();
@@ -409,7 +409,7 @@ fn save_to_exr(render_output: RenderOutput, aov_flags: AOVFlags, output_path: &P
                 }
             }
 
-            AOVFlags::MIP_LEVEL => {
+            AovFlags::MIP_LEVEL => {
                 if let Some(ref mip_level) = render_output.mip_level {
                     raytracing_cpu::utils::exr::channel_from_f32_array(
                         &mut channels,

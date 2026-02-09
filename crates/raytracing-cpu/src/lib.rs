@@ -7,7 +7,7 @@ use indicatif::{ProgressState, ProgressStyle};
 use lights::{light_radiance, occluded, sample_light};
 use materials::CpuMaterial;
 use ray::Ray;
-use raytracing::{geometry::{AABB, Matrix4x4, Vec2, Vec3}, renderer::{AOVFlags, RaytracerSettings, RenderOutput}, scene::{Camera, Scene}};
+use raytracing::{geometry::{AABB, Matrix4x4, Vec2, Vec3}, renderer::{AovFlags, RaytracerSettings, RenderOutput}, scene::{Camera, Scene}};
 use tracing::{info, trace_span, warn};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
@@ -551,13 +551,13 @@ fn render_aovs(
 ) {
     let output_buffer_size = (render_output.width * render_output.height) as usize;
 
-    if raytracer_settings.outputs.contains(AOVFlags::NORMALS) {
+    if raytracer_settings.outputs.contains(AovFlags::NORMALS) {
         render_output.normals = Some(Vec::with_capacity(output_buffer_size));
     }
-    if raytracer_settings.outputs.contains(AOVFlags::UV_COORDS) {
+    if raytracer_settings.outputs.contains(AovFlags::UV_COORDS) {
         render_output.uv = Some(Vec::with_capacity(output_buffer_size));
     }
-    if raytracer_settings.outputs.contains(AOVFlags::MIP_LEVEL) {
+    if raytracer_settings.outputs.contains(AovFlags::MIP_LEVEL) {
         render_output.mip_level = Some(Vec::with_capacity(output_buffer_size));
     }
 
@@ -591,13 +591,13 @@ fn render_aovs(
                 mip_level 
             } = first_hit_aovs;
 
-            if raytracer_settings.outputs.contains(AOVFlags::NORMALS) {
+            if raytracer_settings.outputs.contains(AovFlags::NORMALS) {
                 render_output.normals.as_mut().unwrap().push(normals);
             }
-            if raytracer_settings.outputs.contains(AOVFlags::UV_COORDS) {
+            if raytracer_settings.outputs.contains(AovFlags::UV_COORDS) {
                 render_output.uv.as_mut().unwrap().push(uv);
             }
-            if raytracer_settings.outputs.contains(AOVFlags::MIP_LEVEL) {
+            if raytracer_settings.outputs.contains(AovFlags::MIP_LEVEL) {
                 render_output.mip_level.as_mut().unwrap().push(mip_level.unwrap_or(0.0));
             }
         }
@@ -641,7 +641,7 @@ pub fn render(
     let mut single_threaded_sampler = CpuSampler::from_sampler(&raytracer_settings.sampler, raytracer_settings.seed);
 
     // first hit AOVs, then render beauty
-    if raytracer_settings.outputs.intersects(AOVFlags::FIRST_HIT_AOVS) {
+    if raytracer_settings.outputs.intersects(AovFlags::FIRST_HIT_AOVS) {
         let mut traversal_cache = TraversalCache::new(&cpu_raytracing_context);
         let start_aov = std::time::Instant::now();
         render_aovs(
@@ -657,7 +657,7 @@ pub fn render(
     }
 
     // exit early if beauty is not needed
-    if !raytracer_settings.outputs.contains(AOVFlags::BEAUTY) {
+    if !raytracer_settings.outputs.contains(AovFlags::BEAUTY) {
         return render_output;
     }
 

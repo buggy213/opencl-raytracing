@@ -7,7 +7,7 @@
 //! Can always move code into Rust later if need be...
 
 use raytracing::{
-    renderer::{AOVFlags, RaytracerSettings, RenderOutput},
+    renderer::{AovFlags, RaytracerSettings, RenderOutput},
     scene::Scene,
 };
 
@@ -27,7 +27,7 @@ pub fn render_normals(
     raytracer_settings: &RaytracerSettings,
     _backend_settings: OptixBackendSettings,
 ) -> RenderOutput {
-    if raytracer_settings.outputs != AOVFlags::NORMALS {
+    if raytracer_settings.outputs != AovFlags::NORMALS {
         todo!("only normals for now");
     }
 
@@ -75,7 +75,7 @@ pub fn render(
     raytracer_settings: &RaytracerSettings,
     _backend_settings: OptixBackendSettings,
 ) -> RenderOutput {
-    if raytracer_settings.outputs != AOVFlags::BEAUTY {
+    if raytracer_settings.outputs != AovFlags::BEAUTY {
         todo!("only beauty for now");
     }
 
