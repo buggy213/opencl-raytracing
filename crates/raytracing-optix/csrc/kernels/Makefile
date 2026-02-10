@@ -39,27 +39,27 @@ all: $(OPTIXIR)
 
 else
 OPTIXIR := $(addprefix $(OUT_DIR)/,$(KERNELS:.cu=.optixir))
-OPTIXIR_DEBUG := $(addsuffix .debug,$(OPTIXIR))
+OPTIXIR_DEBUG := $(addprefix $(OUT_DIR)/,$(KERNELS:.cu=.debug.optixir))
 PTX := $(addprefix $(OUT_DIR)/,$(KERNELS:.cu=.ptx))
-PTX_DEBUG := $(addsuffix .debug,$(PTX))
+PTX_DEBUG := $(addprefix $(OUT_DIR)/,$(KERNELS:.cu=.debug.ptx))
 
 NVCCFLAGS += -MMD -MP
-OPTIXIR_DEPS := $(addsuffix .d,$(OPTIXIR))
-OPTIXIR_DEBUG_DEPS := $(addsuffix .d,$(OPTIXIR_DEBUG))
-PTX_DEPS := $(addsuffix .d,$(PTX))
-PTX_DEBUG_DEPS := $(addsuffix .d,$(PTX_DEPS))
+OPTIXIR_DEPS := $(OPTIXIR:%.optixir=%.optixir.d)
+OPTIXIR_DEBUG_DEPS := $(OPTIXIR_DEBUG:%.debug.optixir=%.debug.optixir.d)
+PTX_DEPS := $(PTX:%.ptx=%.ptx.d)
+PTX_DEBUG_DEPS := $(PTX_DEBUG:%.debug.ptx=%.debug.ptx.d)
 
 $(OUT_DIR)/%.optixir: %.cu
-	$(NVCC) $(NVCCFLAGS) --optix-ir $< -o $@
+	$(NVCC) $(NVCCFLAGS) -MF $@.d --optix-ir $< -o $@
 
 $(OUT_DIR)/%.ptx: %.cu
-	$(NVCC) $(NVCCFLAGS) --ptx $< -o $@
+	$(NVCC) $(NVCCFLAGS) -MF $@.d --ptx $< -o $@
 
 $(OUT_DIR)/%.optixir.debug: %.cu
-	$(NVCC) $(NVCCFLAGS) --optix-ir -G --generate-line-info $< -o $@
+	$(NVCC) $(NVCCFLAGS) -MF $@.d --optix-ir -G --generate-line-info $< -o $@
 
 $(OUT_DIR)/%.ptx.debug: %.cu
-	$(NVCC) $(NVCCFLAGS) --ptx -G --generate-line-info $< -o $@
+	$(NVCC) $(NVCCFLAGS) -MF $@.d --ptx -G --generate-line-info $< -o $@
 
 -include $(OPTIXIR_DEPS)
 -include $(PTX_DEPS)
