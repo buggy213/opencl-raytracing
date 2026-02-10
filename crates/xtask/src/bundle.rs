@@ -278,7 +278,7 @@ fn print_summary(output_dir: &Path) -> anyhow::Result<()> {
     }
 
     println!();
-    println!("Run with: ./{}/cli --help", output_dir.file_name().unwrap().to_string_lossy());
+    println!("Run with: {}/cli --help", output_dir.display());
 
     Ok(())
 }
