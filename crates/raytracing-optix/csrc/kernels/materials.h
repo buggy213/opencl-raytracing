@@ -64,11 +64,11 @@ inline __device__ OptixBsdfDiffuse get_diffuse_bsdf(const Material& material, fl
 struct BsdfComponentFlags {
     u32 value;
 
-    static constexpr BsdfComponentFlags EMPTY { 0 };
-    static constexpr BsdfComponentFlags NONSPECULAR_REFLECTION { 1 << 0 };
-    static constexpr BsdfComponentFlags SPECULAR_REFLECTION { 1 << 1 };
-    static constexpr BsdfComponentFlags NONSPECULAR_TRANSMISSION { 1 << 2 };
-    static constexpr BsdfComponentFlags SPECULAR_TRANSMISSION { 1 << 3 };
+    __device__ constexpr static BsdfComponentFlags EMPTY() { return { 0 }; }
+    __device__ constexpr static BsdfComponentFlags NONSPECULAR_REFLECTION() { return { 1 << 0 }; }
+    __device__ constexpr static BsdfComponentFlags SPECULAR_REFLECTION() { return { 1 << 1 }; }
+    __device__ constexpr static BsdfComponentFlags NONSPECULAR_TRANSMISSION() { return { 1 << 2 }; }
+    __device__ constexpr static BsdfComponentFlags SPECULAR_TRANSMISSION() { return { 1 << 3 }; }
 
     __device__ constexpr BsdfComponentFlags operator|(BsdfComponentFlags o) const {
         return BsdfComponentFlags { value | o.value };
@@ -99,15 +99,15 @@ struct BsdfComponentFlags {
         return value != o.value;
     }
 
-    static constexpr BsdfComponentFlags REFLECTION { NONSPECULAR_REFLECTION | SPECULAR_REFLECTION };
-    static constexpr BsdfComponentFlags TRANSMISSION { NONSPECULAR_TRANSMISSION | SPECULAR_TRANSMISSION };
-    static constexpr BsdfComponentFlags SPECULAR { SPECULAR_REFLECTION | SPECULAR_TRANSMISSION };
-    static constexpr BsdfComponentFlags NONSPECULAR { NONSPECULAR_REFLECTION | NONSPECULAR_TRANSMISSION };
-    static constexpr BsdfComponentFlags ALL { REFLECTION | TRANSMISSION };
+    __device__ constexpr static BsdfComponentFlags REFLECTION() { return NONSPECULAR_REFLECTION() | SPECULAR_REFLECTION(); }
+    __device__ constexpr static BsdfComponentFlags TRANSMISSION() { return NONSPECULAR_TRANSMISSION() | SPECULAR_TRANSMISSION(); }
+    __device__ constexpr static BsdfComponentFlags SPECULAR() { return SPECULAR_REFLECTION() | SPECULAR_TRANSMISSION(); }
+    __device__ constexpr static BsdfComponentFlags NONSPECULAR() { return NONSPECULAR_REFLECTION() | NONSPECULAR_TRANSMISSION(); }
+    __device__ constexpr static BsdfComponentFlags ALL() { return REFLECTION() | TRANSMISSION(); }
 
     __device__ constexpr bool is_specular() const
     {
-        return (*this & SPECULAR) != EMPTY;
+        return (*this & SPECULAR()) != EMPTY();
     }
 };
 
@@ -172,7 +172,7 @@ inline __device__ float3 evaluate_bsdf(OptixBsdfSmoothConductor bsdf, float3 wo,
 // @raytracing_cpu::materials::CpuBsdf::evaluate_pdf
 inline __device__ float evaluate_pdf(OptixBsdfDiffuse bsdf, float3 wo, float3 wi, BsdfComponentFlags component)
 {
-    if ((component & BsdfComponentFlags::NONSPECULAR_TRANSMISSION) == BsdfComponentFlags::EMPTY)
+    if ((component & BsdfComponentFlags::NONSPECULAR_TRANSMISSION()) == BsdfComponentFlags::EMPTY())
     {
         return 0.0f;
     }
@@ -192,7 +192,7 @@ inline __device__ float evaluate_pdf(OptixBsdfDiffuse bsdf, float3 wo, float3 wi
 inline __device__ BsdfSample sample_bsdf(
     OptixBsdfDiffuse bsdf, float3 wo, BsdfComponentFlags component, sample::OptixSampler& sampler
 ) {
-    if ((component & BsdfComponentFlags::NONSPECULAR_REFLECTION) == BsdfComponentFlags::EMPTY)
+    if ((component & BsdfComponentFlags::NONSPECULAR_REFLECTION()) == BsdfComponentFlags::EMPTY())
     {
         return {};
     }
@@ -205,7 +205,7 @@ inline __device__ BsdfSample sample_bsdf(
         .wi = wi,
         .bsdf = bsdf.albedo / M_PIf,
         .pdf = pdf,
-        .component = BsdfComponentFlags::NONSPECULAR_REFLECTION,
+        .component = BsdfComponentFlags::NONSPECULAR_REFLECTION(),
         .valid = true
     };
 }

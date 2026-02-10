@@ -520,6 +520,7 @@ __host__ void launchPathtracerPipelineImpl(
     cudaFree(d_camera);
     cudaFree(d_lights);
     cudaFree(d_textures);
+    cudaFree(d_ray_datas);
     cudaFree(d_pipelineParams);
 }
 

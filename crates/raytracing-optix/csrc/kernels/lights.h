@@ -74,8 +74,27 @@ inline __device__ LightSample sample_light(
             };
         }
     case Light::DiffuseAreaLight:
-        break;
+        // TODO: area light sampling not yet implemented
+        return LightSample {
+            .radiance = float3_zero,
+            .shadow_ray = Ray {
+                .origin = point,
+                .direction = make_float3(0.0f, 0.0f, 1.0f)
+            },
+            .distance = 1.0f,
+            .pdf = 1.0f
+        };
     }
+
+    return LightSample {
+        .radiance = float3_zero,
+        .shadow_ray = Ray {
+            .origin = point,
+            .direction = make_float3(0.0f, 0.0f, 1.0f)
+        },
+        .distance = 1.0f,
+        .pdf = 1.0f
+    };
 }
 
 // @raytracing_cpu::lights::occluded

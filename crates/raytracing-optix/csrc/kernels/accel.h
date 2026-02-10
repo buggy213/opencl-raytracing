@@ -18,29 +18,27 @@ struct HitInfo {
 };
 
 // following functions must be only be called from closest-hit programs
-// also, they return HitInfo in object-space
+// also, they return HitInfo in world-space. note that this is different
+// from convention in cpu references
 
 // @raytracing_cpu::geometry::ray_sphere_intersect
 inline __device__ HitInfo get_hit_info_sphere() {
     float4 sphere_data[1];
     optixGetSphereData(sphere_data);
 
-    // w is the radius
-    float3 sphere_center = make_float3(sphere_data->x, sphere_data->y, sphere_data->z);
+    // w component is the radius
+    float3 sphere_center_o = make_float3(sphere_data->x, sphere_data->y, sphere_data->z);
+    float3 sphere_center_w = optixTransformPointFromObjectToWorldSpace(sphere_center_o);
     float sphere_radius = sphere_data->w;
 
-    // not the most efficient to be doing this, since we have to transform back to world-space later
-    // however, getting object-space ray is not possible in CH
     float3 ray_origin_w = optixGetWorldRayOrigin();
     float3 ray_direction_w = optixGetWorldRayDirection();
-    float3 ray_origin_o = optixTransformPointFromWorldToObjectSpace(ray_origin_w);
-    float3 ray_direction_o = optixTransformVectorFromWorldToObjectSpace(ray_direction_w);
     float t = optixGetRayTmax();
 
-    float3 intersection_point = ray_origin_o + ray_direction_o * t;
-    float3 normal = (intersection_point - sphere_center) / sphere_radius;
+    float3 intersection_point = ray_origin_w + ray_direction_w * t;
+    float3 normal = (intersection_point - sphere_center_w) / sphere_radius;
 
-    float3 local = intersection_point - sphere_center;
+    float3 local = intersection_point - sphere_center_w;
     float r_cos_theta = local.z;
     float theta = acosf(r_cos_theta / sphere_radius);
     float r_sin_theta_cos_phi = local.x;
@@ -67,19 +65,19 @@ inline __device__ HitInfo get_hit_info_tri() {
     float v = barycentric.y;
     float w = 1.0f - barycentric.x - barycentric.y;
 
-    float3 normal;
+    float3 normal_o;
     if (!mesh_data->normals) {
         float3 p[3];
         optixGetTriangleVertexData(p);
 
-        normal = normalize(cross(p[2] - p[0], p[1] - p[0]));
+        normal_o = normalize(cross(p[2] - p[0], p[1] - p[0]));
     }
     else {
         float3 n0 = mesh_data->normals[tri.x];
         float3 n1 = mesh_data->normals[tri.y];
         float3 n2 = mesh_data->normals[tri.z];
 
-        normal = normalize(w * n0 + u * n1 + v * n2);
+        normal_o = normalize(w * n0 + u * n1 + v * n2);
     }
 
     float2 uv0, uv1, uv2;
@@ -96,9 +94,9 @@ inline __device__ HitInfo get_hit_info_tri() {
 
     float2 uv = w * uv0 + u * uv1 + v * uv2;
 
-    float3 o_ray_origin = optixGetObjectRayOrigin();
-    float3 o_ray_direction = optixGetObjectRayDirection();
-    auto o_ray = Ray { o_ray_origin, o_ray_direction };
+    float3 ray_origin = optixGetWorldRayOrigin();
+    float3 ray_direction = optixGetWorldRayDirection();
+    float3 normal_w = optixTransformNormalFromObjectToWorldSpace(normal_o);
 
-    return HitInfo { .uv = uv, .point = o_ray.at(t), .normal = normal };
+    return HitInfo { .uv = uv, .point = ray_origin + ray_direction * t, .normal = normal_w };
 }

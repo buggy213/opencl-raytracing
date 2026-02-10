@@ -146,7 +146,7 @@ __host__ void PathtracerSbt::finalize(PathtracerPipeline &pipeline) {
             .normals = (float3*)d_normals,
             .uvs = (float2*)d_uvs
         };
-        radianceHitgroupRecord.material_data = payload.material;
+        shadowHitgroupRecord.material_data = payload.material;
         optixSbtRecordPackHeader(shadowHit, &shadowHitgroupRecord);
         hitgroupRecords.push_back(shadowHitgroupRecord);
     }

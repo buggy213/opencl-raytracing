@@ -275,9 +275,9 @@ __host__ OptixAabb getAabb(OptixDeviceContext ctx, OptixTraversableHandle as) {
         .type = OptixAccelPropertyType::OPTIX_PROPERTY_TYPE_AABBS
     };
     optixAccelEmitProperty(ctx, stream, as, &emit_desc);
+    cudaStreamSynchronize(stream);
     cudaMemcpy(&h_aabb, d_aabb, sizeof(OptixAabb), cudaMemcpyDeviceToHost);
     cudaFree(d_aabb);
-    cudaStreamSynchronize(stream);
     cudaStreamDestroy(stream);
 
     return h_aabb;

@@ -213,7 +213,7 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
         radiance += path_weight * direct_illumination;
     }
 
-    materials::BsdfSample bsdf_sample = materials::sample_bsdf(bsdf, wo, materials::BsdfComponentFlags::ALL, prd.sampler);
+    materials::BsdfSample bsdf_sample = materials::sample_bsdf(bsdf, wo, materials::BsdfComponentFlags::ALL(), prd.sampler);
     // some divergence, but unavoidable.
     if (!bsdf_sample.valid || bsdf_sample.bsdf == float3_zero || bsdf_sample.pdf == 0.0f)
     {
@@ -236,7 +236,7 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
     uint next_bounce_r, next_bounce_g, next_bounce_b;
     uint path_weight_r = __float_as_uint(path_weight.x), path_weight_g = __float_as_uint(path_weight.y), path_weight_b = __float_as_uint(path_weight.z);
     optixTrace(
-        OPTIX_PAYLOAD_TYPE_ID_1,
+        OPTIX_PAYLOAD_TYPE_ID_0,
         pipeline_params.root_handle,
         new_ray.origin,
         new_ray.direction,
