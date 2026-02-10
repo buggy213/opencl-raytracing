@@ -5,15 +5,22 @@
 #include "kernel_math.h"
 #include "sample.h"
 
+// TODO: temporary while AOV pass is still lacking sampler
 inline __device__ Ray generate_ray(
     const Camera& camera,
     u32 x,
     u32 y,
-    sample::OptixSampler& sampler
+    sample::OptixSampler* sampler
 ) {
-    auto [x_disp, y_disp] = sampler.sample_uniform2();
-    float xf = static_cast<float>(x) + x_disp;
-    float yf = static_cast<float>(y) + y_disp;
+    float xf = static_cast<float>(x);
+    float yf = static_cast<float>(y);
+    if (sampler)
+    {
+        auto [x_disp, y_disp] = sampler->sample_uniform2();
+        xf += x_disp;
+        yf += y_disp;
+    }
+
     float3 raster_loc = make_float3(xf, yf, 0.0f);
 
     switch (camera.camera_type.kind) {

@@ -1,5 +1,7 @@
 #pragma once
 
+// texturing operations should only be occurring in pathtracer kernel
+#include "pathtracer.h"
 #include "kernel_math.h"
 #include "kernel_params.h"
 #include "types.h"

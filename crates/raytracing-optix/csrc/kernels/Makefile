@@ -11,7 +11,7 @@ $(error MATHDX_25_12_PATH must be set)
 endif
 
 KERNELS := \
-	normals.cu \
+	aov.cu \
 	pathtracer.cu
 SHARED_HEADERS := $(realpath ../common)
 NVCC := nvcc

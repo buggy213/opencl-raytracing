@@ -1,5 +1,7 @@
 #pragma once
 
+// lighting calculation only should be occurring in pathtracer kernel, not aov kernel
+#include "pathtracer.h"
 #include "kernel_params.h"
 #include "sample.h"
 #include "types.h"
@@ -74,6 +76,30 @@ inline __device__ LightSample sample_light(
     case Light::DiffuseAreaLight:
         break;
     }
+}
+
+// @raytracing_cpu::lights::occluded
+inline __device__ bool occluded(const LightSample& light_sample)
+{
+    unsigned int hit;
+    // OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT corresponds to early exit
+    optixTrace(
+        OPTIX_PAYLOAD_TYPE_ID_1,
+        pipeline_params.root_handle,
+        light_sample.shadow_ray.origin,
+        light_sample.shadow_ray.direction,
+        0.001f,
+        light_sample.distance - 0.001f,
+        0.0f,
+        (OptixVisibilityMask)(-1),
+        OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT,
+        RayType::SHADOW_RAY,
+        RayType::RAY_TYPE_COUNT,
+        RayType::SHADOW_RAY,
+        hit
+    );
+
+    return hit != 0;
 }
 
 } // namespace lights

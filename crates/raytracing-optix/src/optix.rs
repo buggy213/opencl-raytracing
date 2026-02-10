@@ -11,7 +11,7 @@ pub(crate) mod kernels {
     // we include the text of the kernels directly; it's more convenient than
     // doing it at runtime and doesn't require linker shenanigans
 
-    pub(crate) const NORMALS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/normals.optixir"));
+    pub(crate) const AOV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/aov.optixir"));
     pub(crate) const PATHTRACER: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/pathtracer.optixir"));
 }
 

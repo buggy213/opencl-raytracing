@@ -1,6 +1,5 @@
-// Ray-generation w/ pinhole camera; only performs primary visibility and only calculates geometric normals
-#include "kernel_params.h"
-extern "C" __constant__ AovPipelineParams pipeline_params;
+// Ray-generation w/ pinhole camera; only performs primary visibility and only calculates geometric normals for now (more aovs later)
+#include "aov.h"
 
 #include "types.h"
 
@@ -16,7 +15,7 @@ extern "C" __global__ void __raygen__debug() {
     uint3 dim = optixGetLaunchDimensions();
     uint3 tid = optixGetLaunchIndex();
 
-    Ray ray = generate_ray(*pipeline_params.camera, tid.x, tid.y);
+    Ray ray = generate_ray(*pipeline_params.camera, tid.x, tid.y, nullptr);
 
     uint x, y, z, w;
     optixTrace(

@@ -34,7 +34,7 @@ pub fn render_normals(
     // SAFETY: no preconditions
     let optix_ctx = unsafe { optix::initOptix(true) };
 
-    let normals_kernel = optix::kernels::NORMALS;
+    let normals_kernel = optix::kernels::AOV;
     let normals_pipeline = unsafe { 
         optix::makeAovPipeline(
             optix_ctx, 

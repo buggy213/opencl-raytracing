@@ -1,5 +1,4 @@
-#include "kernel_params.h"
-extern "C" __constant__ PathtracerPipelineParams pipeline_params;
+#include "pathtracer.h"
 
 #include <optix_device.h>
 
@@ -14,27 +13,6 @@ extern "C" __constant__ PathtracerPipelineParams pipeline_params;
 #include "sbt.h"
 #include "accel.h"
 #include "lights.h"
-
-enum RayType
-{
-    RADIANCE_RAY,
-    SHADOW_RAY,
-    RAY_TYPE_COUNT
-};
-
-struct PerRayData {
-    sample::OptixSampler sampler;
-};
-
-static_assert(sizeof(PerRayData) == sizeof(PathtracerPerRayData), "pathtracer per-ray data size mismatch");
-static_assert(alignof(PerRayData) == alignof(PathtracerPerRayData), "pathtracer per-ray data alignment mismatch");
-
-inline __device__ PerRayData& get_ray_data() {
-    uint3 dim = optixGetLaunchDimensions();
-    uint3 tid = optixGetLaunchIndex();
-
-    return (reinterpret_cast<PerRayData*>(pipeline_params.ray_datas))[tid.y * dim.x + tid.x];
-}
 
 // returns ray in world-space, intended to be called from closest-hit program
 inline __device__ Ray get_ray()
@@ -64,7 +42,7 @@ extern "C" __global__ void __raygen__main() {
     {
         prd.sampler.start_sample(make_uint2(tid.x, tid.y), sample_index);
 
-        Ray ray = generate_ray(*scene.camera, tid.x, tid.y, prd.sampler);
+        Ray ray = generate_ray(*scene.camera, tid.x, tid.y, &prd.sampler);
 
         uint r, g, b;
         uint r_weight, g_weight, b_weight;
@@ -80,9 +58,9 @@ extern "C" __global__ void __raygen__main() {
             0.0f,
             (OptixVisibilityMask)(-1),
             OPTIX_RAY_FLAG_NONE,
-            RADIANCE_RAY,
-            RAY_TYPE_COUNT,
-            RADIANCE_RAY,
+            RayType::RADIANCE_RAY,
+            RayType::RAY_TYPE_COUNT,
+            RayType::RADIANCE_RAY,
             r,
             g,
             b,
@@ -216,16 +194,7 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
             for (int sample_idx = 0; sample_idx < light_samples; sample_idx += 1)
             {
                 lights::LightSample light_sample = lights::sample_light(light, hit.point, prd.sampler);
-                unsigned int occluded;
-                /*
-                optixTrace(
-                    OPTIX_PAYLOAD_TYPE_ID_1,
-                    pipeline_params.root_handle,
-                    float3_zero,
-                    float3_zero,
-
-                );
-                */
+                bool occluded = lights::occluded(light_sample);
 
                 if (!occluded)
                 {
