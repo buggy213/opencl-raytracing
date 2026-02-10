@@ -27,7 +27,6 @@ struct PathtracerPipelineParams
     OptixAabb scene_aabb;
     float scene_diameter;
     OptixTraversableHandle root_handle;
-    Texture* textures;
     PathtracerPerRayData* ray_datas;
     OptixRaytracerSettings settings;
 };

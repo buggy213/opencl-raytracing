@@ -13,6 +13,7 @@ pub(crate) mod kernels {
 
     pub(crate) const AOV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/aov.optixir"));
     pub(crate) const PATHTRACER: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/pathtracer.optixir"));
+    pub(crate) const PATHTRACER_DEBUG: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/pathtracer.debug.optixir"));
 }
 
 use std::{ops::Deref, slice};
