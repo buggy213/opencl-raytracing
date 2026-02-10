@@ -61,26 +61,55 @@ inline __device__ OptixBsdfDiffuse get_diffuse_bsdf(const Material& material, fl
     return OptixBsdfDiffuse { .albedo = make_float3(albedo.x, albedo.y, albedo.z) };
 }
 
-enum class BsdfComponentFlags : u32 {
-    EMPTY = 0,
-    NONSPECULAR_REFLECTION = 1 << 0,
-    SPECULAR_REFLECTION = 1 << 1,
-    NONSPECULAR_TRANSMISSION = 1 << 2,
-    SPECULAR_TRANSMISSION = 1 << 3,
+struct BsdfComponentFlags {
+    u32 value;
+
+    static constexpr BsdfComponentFlags EMPTY { 0 };
+    static constexpr BsdfComponentFlags NONSPECULAR_REFLECTION { 1 << 0 };
+    static constexpr BsdfComponentFlags SPECULAR_REFLECTION { 1 << 1 };
+    static constexpr BsdfComponentFlags NONSPECULAR_TRANSMISSION { 1 << 2 };
+    static constexpr BsdfComponentFlags SPECULAR_TRANSMISSION { 1 << 3 };
+
+    __device__ constexpr BsdfComponentFlags operator|(BsdfComponentFlags o) const {
+        return BsdfComponentFlags { value | o.value };
+    }
+
+    __device__ constexpr BsdfComponentFlags operator&(BsdfComponentFlags o) const {
+        return BsdfComponentFlags { value & o.value };
+    }
+
+    __device__ constexpr BsdfComponentFlags& operator|=(BsdfComponentFlags o) {
+        value |= o.value;
+        return *this;
+    }
+
+    __device__ constexpr BsdfComponentFlags& operator&=(BsdfComponentFlags o)
+    {
+        value &= o.value;
+        return *this;
+    }
+
+    __device__ constexpr bool operator==(BsdfComponentFlags o) const
+    {
+        return value == o.value;
+    }
+
+    __device__ constexpr bool operator!=(BsdfComponentFlags o) const
+    {
+        return value != o.value;
+    }
+
+    static constexpr BsdfComponentFlags REFLECTION { NONSPECULAR_REFLECTION | SPECULAR_REFLECTION };
+    static constexpr BsdfComponentFlags TRANSMISSION { NONSPECULAR_TRANSMISSION | SPECULAR_TRANSMISSION };
+    static constexpr BsdfComponentFlags SPECULAR { SPECULAR_REFLECTION | SPECULAR_TRANSMISSION };
+    static constexpr BsdfComponentFlags NONSPECULAR { NONSPECULAR_REFLECTION | NONSPECULAR_TRANSMISSION };
+    static constexpr BsdfComponentFlags ALL { REFLECTION | TRANSMISSION };
+
+    __device__ constexpr bool is_specular() const
+    {
+        return (*this & SPECULAR) != EMPTY;
+    }
 };
-
-inline __device__ BsdfComponentFlags operator|(BsdfComponentFlags a, BsdfComponentFlags b) {
-    return static_cast<BsdfComponentFlags>(static_cast<u32>(a) | static_cast<u32>(b));
-}
-
-inline __device__ BsdfComponentFlags operator&(BsdfComponentFlags a, BsdfComponentFlags b) {
-    return static_cast<BsdfComponentFlags>(static_cast<u32>(a) & static_cast<u32>(b));
-}
-
-inline __device__ BsdfComponentFlags& operator|=(BsdfComponentFlags& a, BsdfComponentFlags b) {
-    a = a | b;
-    return a;
-}
 
 struct BsdfSample
 {

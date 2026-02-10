@@ -198,7 +198,11 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
 
                 if (!occluded)
                 {
+                    float3 wi = matrix4x4_apply_vector(w2o, -light_sample.shadow_ray.direction);
+                    float3 bsdf_value = materials::evaluate_bsdf(bsdf, wo, wi);
 
+                    float cos_theta = wi.z;
+                    light_contribution += bsdf_value * light_sample.radiance * fmax(0.0f, cos_theta) / light_sample.pdf;
                 }
             }
 
@@ -209,10 +213,58 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
         radiance += path_weight * direct_illumination;
     }
 
+    materials::BsdfSample bsdf_sample = materials::sample_bsdf(bsdf, wo, materials::BsdfComponentFlags::ALL, prd.sampler);
+    // some divergence, but unavoidable.
+    if (!bsdf_sample.valid || bsdf_sample.bsdf == float3_zero || bsdf_sample.pdf == 0.0f)
+    {
+        optixSetPayload_0(__float_as_uint(radiance.x));
+        optixSetPayload_1(__float_as_uint(radiance.y));
+        optixSetPayload_2(__float_as_uint(radiance.z));
+        return;
+    }
 
-    // optixSetPayload_0(__float_as_uint(t));
-    optixSetPayload_1(__float_as_uint(1.0f));
-    optixSetPayload_2(__float_as_uint(0.0f));
+    float cos_theta = fabs(bsdf_sample.wi.z);
+    path_weight *= bsdf_sample.bsdf * cos_theta / bsdf_sample.pdf;
+    specular_bounce = bsdf_sample.component.is_specular() ? 1 : 0;
+
+    float3 world_dir = matrix4x4_apply_vector(o2w, bsdf_sample.wi);
+    auto new_ray = Ray {
+        .origin = hit.point,
+        .direction = world_dir
+    };
+
+    uint next_bounce_r, next_bounce_g, next_bounce_b;
+    uint path_weight_r = __float_as_uint(path_weight.x), path_weight_g = __float_as_uint(path_weight.y), path_weight_b = __float_as_uint(path_weight.z);
+    optixTrace(
+        OPTIX_PAYLOAD_TYPE_ID_1,
+        pipeline_params.root_handle,
+        new_ray.origin,
+        new_ray.direction,
+        0.0001f,
+        // idk how well optix deals with +inf, so this is a conservative bound on scene size
+        pipeline_params.scene_diameter * 2.0f,
+        0.0f,
+        (OptixVisibilityMask)(-1),
+        OPTIX_RAY_FLAG_NONE,
+        RayType::RADIANCE_RAY,
+        RayType::RAY_TYPE_COUNT,
+        RayType::RADIANCE_RAY,
+        next_bounce_r,
+        next_bounce_g,
+        next_bounce_b,
+        path_weight_r,
+        path_weight_g,
+        path_weight_b,
+        specular_bounce
+    );
+
+    radiance.x += __uint_as_float(next_bounce_r);
+    radiance.y += __uint_as_float(next_bounce_g);
+    radiance.z += __uint_as_float(next_bounce_b);
+
+    optixSetPayload_0(__float_as_uint(radiance.x));
+    optixSetPayload_1(__float_as_uint(radiance.y));
+    optixSetPayload_2(__float_as_uint(radiance.z));
 }
 
 // -- Shadow Rays
