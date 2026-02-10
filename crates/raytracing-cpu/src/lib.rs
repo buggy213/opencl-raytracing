@@ -203,8 +203,7 @@ fn generate_ray(
     sampler: &mut CpuSampler,
     spp: u32,
 ) -> (Ray, RayDifferentials) {
-    let x_disp = sampler.sample_uniform();
-    let y_disp = sampler.sample_uniform();
+    let Vec2(x_disp, y_disp) = sampler.sample_uniform2();
     let x = (x as f32) + x_disp;
     let y = (y as f32) + y_disp;
 
