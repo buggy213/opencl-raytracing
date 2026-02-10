@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kernel_params.h"
 #include "sample.h"
 #include "types.h"
 
@@ -40,14 +41,14 @@ inline __device__ LightSample sample_light(
     case Light::PointLight:
         {
             Light::LightVariant::PointLight point_light = light.variant.point_light;
-            float3 dir = point - point_light.position;
+            float3 dir = point - vec3_to_float3(point_light.position);
             float d = length(dir);
             float d2 = d * d;
 
             return LightSample {
-                .radiance = point_light.intensity / d2,
+                .radiance = vec3_to_float3(point_light.intensity) / d2,
                 .shadow_ray = Ray {
-                    .origin = point_light.position,
+                    .origin = vec3_to_float3(point_light.position),
                     .direction = dir
                 },
                 .distance = d,
@@ -56,7 +57,19 @@ inline __device__ LightSample sample_light(
         }
     case Light::DirectionLight:
         {
-            float scene_diameter = pipeline_params.
+            Light::LightVariant::DirectionLight direction_light = light.variant.direction_light;
+            float scene_diameter = pipeline_params.scene_diameter;
+            float3 light_origin = point - vec3_to_float3(direction_light.direction) * scene_diameter;
+
+            return LightSample {
+                .radiance = vec3_to_float3(direction_light.radiance),
+                .shadow_ray = Ray {
+                    .origin = light_origin,
+                    .direction = normalize(vec3_to_float3(direction_light.direction)),
+                },
+                .distance = scene_diameter,
+                .pdf = 1.0f
+            };
         }
     case Light::DiffuseAreaLight:
         break;

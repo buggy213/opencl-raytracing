@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "types.h"
+#include "util.h"
 
 // TODO: can probably optimize by using separate streams for every IAS, and adding synchronization between them
 __host__ OptixAccelerationStructure makeSphereGAS(
@@ -259,4 +260,25 @@ __host__ OptixAccelerationStructure makeIAS(
         .primitive_type = OPTIX_BUILD_INPUT_TYPE_INSTANCES,
         .handle = output
     };
+}
+
+// TODO: get rid of this nonsense
+__host__ OptixAabb getAabb(OptixDeviceContext ctx, OptixTraversableHandle as) {
+    // this is massively overkill / wasteful to have a stream and malloc just to get the AABB, but it should only happen once
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+    OptixAabb *d_aabb;
+    OptixAabb h_aabb;
+    cudaMalloc(&d_aabb, sizeof(OptixAabb));
+    OptixAccelEmitDesc emit_desc = {
+        .result = reinterpret_cast<CUdeviceptr>(d_aabb),
+        .type = OptixAccelPropertyType::OPTIX_PROPERTY_TYPE_AABBS
+    };
+    optixAccelEmitProperty(ctx, stream, as, &emit_desc);
+    cudaMemcpy(&h_aabb, d_aabb, sizeof(OptixAabb), cudaMemcpyDeviceToHost);
+    cudaFree(d_aabb);
+    cudaStreamSynchronize(stream);
+    cudaStreamDestroy(stream);
+
+    return h_aabb;
 }

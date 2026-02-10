@@ -1,6 +1,4 @@
-#include "accel.h"
 #include "kernel_params.h"
-#include "lights.h"
 extern "C" __constant__ PathtracerPipelineParams pipeline_params;
 
 #include <optix_device.h>
@@ -14,6 +12,8 @@ extern "C" __constant__ PathtracerPipelineParams pipeline_params;
 #include "geometry.h"
 #include "sample.h"
 #include "sbt.h"
+#include "accel.h"
+#include "lights.h"
 
 enum RayType
 {
@@ -52,44 +52,58 @@ extern "C" __global__ void __raygen__main() {
     uint3 tid = optixGetLaunchIndex();
 
     const Scene& scene = pipeline_params.scene;
+    const OptixRaytracerSettings& settings = pipeline_params.settings;
 
     // initialize per-ray data with sampler
     PerRayData& prd = get_ray_data();
     prd.sampler = sample::OptixSampler::from_sampler(pipeline_params.settings.sampler, pipeline_params.settings.seed);
 
-    Ray ray = generate_ray(*scene.camera, tid.x, tid.y);
+    float3 radiance = float3_zero;
 
-    uint r, g, b;
-    uint r_weight, g_weight, b_weight;
-    r_weight = g_weight = b_weight = __float_as_uint(1.0f);
-    uint specular_bounce = 1;
-    optixTrace(
-        OPTIX_PAYLOAD_TYPE_ID_0,
-        pipeline_params.root_handle,
-        ray.origin,
-        ray.direction,
-        scene.camera->near_clip,
-        scene.camera->far_clip,
-        0.0f,
-        (OptixVisibilityMask)(-1),
-        OPTIX_RAY_FLAG_NONE,
-        RADIANCE_RAY,
-        RAY_TYPE_COUNT,
-        RADIANCE_RAY,
-        r,
-        g,
-        b,
-        r_weight,
-        g_weight,
-        b_weight,
-        specular_bounce
-    );
+    for (int sample_index = 0; sample_index < settings.samples_per_pixel; sample_index += 1)
+    {
+        prd.sampler.start_sample(make_uint2(tid.x, tid.y), sample_index);
+
+        Ray ray = generate_ray(*scene.camera, tid.x, tid.y, prd.sampler);
+
+        uint r, g, b;
+        uint r_weight, g_weight, b_weight;
+        r_weight = g_weight = b_weight = __float_as_uint(1.0f);
+        uint specular_bounce = 1;
+        optixTrace(
+            OPTIX_PAYLOAD_TYPE_ID_0,
+            pipeline_params.root_handle,
+            ray.origin,
+            ray.direction,
+            scene.camera->near_clip,
+            scene.camera->far_clip,
+            0.0f,
+            (OptixVisibilityMask)(-1),
+            OPTIX_RAY_FLAG_NONE,
+            RADIANCE_RAY,
+            RAY_TYPE_COUNT,
+            RADIANCE_RAY,
+            r,
+            g,
+            b,
+            r_weight,
+            g_weight,
+            b_weight,
+            specular_bounce
+        );
+
+        radiance.x += __uint_as_float(r);
+        radiance.y += __uint_as_float(g);
+        radiance.z += __uint_as_float(b);
+    }
+
+    radiance /= settings.samples_per_pixel;
 
     float4& target = pipeline_params.radiance[tid.y * dim.x + tid.x];
     target = make_float4(
-        __uint_as_float(r),
-        __uint_as_float(g),
-        __uint_as_float(b),
+        radiance.x,
+        radiance.y,
+        radiance.z,
         1.0f
     );
 }
@@ -127,6 +141,7 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
     const OptixRaytracerSettings& settings = pipeline_params.settings;
 
     Ray ray = get_ray();
+    PerRayData& prd = get_ray_data();
     HitInfo hit {};
     unsigned int hit_kind = optixGetHitKind();
     OptixPrimitiveType geometry = optixGetPrimitiveType(hit_kind);
@@ -195,17 +210,23 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
         float3 direct_illumination = float3_zero;
         for (int light_idx = 0; light_idx < scene.num_lights; light_idx += 1)
         {
+            const Light& light = scene.lights[light_idx];
             float3 light_contribution = float3_zero;
-            unsigned int light_samples = lights::is_delta_light(scene.lights[light_idx]) ? 1 : settings.light_sample_count;
+            unsigned int light_samples = lights::is_delta_light(light) ? 1 : settings.light_sample_count;
             for (int sample_idx = 0; sample_idx < light_samples; sample_idx += 1)
             {
+                lights::LightSample light_sample = lights::sample_light(light, hit.point, prd.sampler);
                 unsigned int occluded;
+                /*
                 optixTrace(
                     OPTIX_PAYLOAD_TYPE_ID_1,
                     pipeline_params.root_handle,
                     float3_zero,
                     float3_zero,
-                    )
+
+                );
+                */
+
                 if (!occluded)
                 {
 

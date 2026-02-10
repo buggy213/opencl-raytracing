@@ -1,6 +1,57 @@
 #pragma once
 #include "types.h"
 
+// conversion between scene-description types and native CUDA types
+inline __device__ float4 vec4_to_float4(Vec4 v)
+{
+    return make_float4(v.x, v.y, v.z, v.w);
+}
+
+inline __device__ float3 vec3_to_float3(Vec3 v)
+{
+    return make_float3(v.x, v.y, v.z);
+}
+
+inline __device__ float2 vec2_to_float2(Vec2 v)
+{
+    return make_float2(v.x, v.y);
+}
+
+inline __device__ uint3 vec3u_to_uint3(Vec3u v)
+{
+    return make_uint3(v.x, v.y, v.z);
+}
+
+inline __device__ uint2 vec2u_to_uint2(Vec2u v)
+{
+    return make_uint2(v.x, v.y);
+}
+
+inline __device__ Vec4 float4_to_vec4(float4 v)
+{
+    return Vec4 { v.x, v.y, v.z, v.w };
+}
+
+inline __device__ Vec3 float3_to_vec3(float3 v)
+{
+    return Vec3 { v.x, v.y, v.z };
+}
+
+inline __device__ Vec2 float2_to_vec2(float2 v)
+{
+    return Vec2 { v.x, v.y };
+}
+
+inline __device__ Vec3u uint3_to_vec3u(uint3 v)
+{
+    return Vec3u { v.x, v.y, v.z };
+}
+
+inline __device__ Vec2u uint2_to_vec2u(uint2 v)
+{
+    return Vec2u { v.x, v.y };
+}
+
 inline constexpr float4 float4_zero = float4 {0.0f, 0.0f, 0.0f, 0.0f };
 inline constexpr float3 float3_zero = float3 {0.0f, 0.0f, 0.0f };
 inline constexpr float2 float2_zero = float2 {0.0f, 0.0f };

@@ -24,6 +24,8 @@ struct PathtracerPipelineParams
 {
     float4* radiance;
     Scene scene;
+    OptixAabb scene_aabb;
+    float scene_diameter;
     OptixTraversableHandle root_handle;
     Texture* textures;
     PathtracerPerRayData* ray_datas;

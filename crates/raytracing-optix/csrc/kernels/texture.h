@@ -14,7 +14,6 @@ inline __device__ float4 _sample(F f, TextureId texture_id, float2 uv)
     static_assert(std::is_invocable_r_v<float4, F, TextureId, float2>, "(TextureId, float2) -> float4");
 
     Texture& texture = pipeline_params.textures[texture_id];
-    auto vec4_to_float4 = [](Vec4 v) { return make_float4(v.x, v.y, v.z, v.w); };
     switch (texture.kind)
     {
     case Texture::ImageTexture: {

@@ -29,6 +29,9 @@ void launchAovPipelineImpl(
 void releaseAovPipelineImpl(AovPipeline& pipeline);
 
 struct PathtracerPipeline {
+    // no ownership of context
+    OptixDeviceContext ctx;
+
     OptixPipeline pipeline;
 
     enum RayType {

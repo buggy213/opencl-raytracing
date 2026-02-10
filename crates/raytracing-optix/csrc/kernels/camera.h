@@ -3,14 +3,17 @@
 #include "types.h"
 #include "kernel_types.h"
 #include "kernel_math.h"
+#include "sample.h"
 
 inline __device__ Ray generate_ray(
     const Camera& camera,
     u32 x,
-    u32 y
+    u32 y,
+    sample::OptixSampler& sampler
 ) {
-    float xf = static_cast<float>(x);
-    float yf = static_cast<float>(y);
+    auto [x_disp, y_disp] = sampler.sample_uniform2();
+    float xf = static_cast<float>(x) + x_disp;
+    float yf = static_cast<float>(y) + y_disp;
     float3 raster_loc = make_float3(xf, yf, 0.0f);
 
     switch (camera.camera_type.kind) {

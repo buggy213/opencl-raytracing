@@ -9,6 +9,7 @@
 #include "sbt.h"
 #include "kernel_params.h"
 #include "sbt_host.h"
+#include "scene.h"
 
 __host__ AovPipeline makeAovPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData, size_t progSize) {
     OptixModuleCompileOptions moduleCompileOptions = {};
@@ -436,6 +437,8 @@ __host__ PathtracerPipeline makePathtracerPipelineImpl(
     OPTIX_CHECK(res);
     pathtracerPipeline.pipeline = pipeline;
 
+    pathtracerPipeline.ctx = ctx;
+
     return pathtracerPipeline;
 }
 
@@ -480,6 +483,14 @@ __host__ void launchPathtracerPipelineImpl(
     pipelineParams.root_handle = rootHandle;
     pipelineParams.ray_datas = static_cast<PathtracerPerRayData*>(d_ray_datas);
     pipelineParams.settings = settings;
+    pipelineParams.scene_aabb = getAabb(pipeline.ctx, rootHandle);
+
+    float3 d = make_float3(
+        pipelineParams.scene_aabb.maxX - pipelineParams.scene_aabb.minX,
+        pipelineParams.scene_aabb.maxY - pipelineParams.scene_aabb.minY,
+        pipelineParams.scene_aabb.maxZ - pipelineParams.scene_aabb.minZ
+    );
+    pipelineParams.scene_diameter = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
 
     void* d_pipelineParams;
     cudaMalloc(&d_pipelineParams, sizeof(pipelineParams));

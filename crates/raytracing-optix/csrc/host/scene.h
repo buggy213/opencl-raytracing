@@ -25,3 +25,5 @@ OptixAccelerationStructure makeIAS(
     const unsigned int* sbtOffsets,
     size_t len
 );
+
+OptixAabb getAabb(OptixDeviceContext ctx, OptixTraversableHandle as);
