@@ -195,18 +195,22 @@ fn camera_ray(
 }
 
 
-
 fn generate_ray(
     camera: &Camera,
     x: u32,
     y: u32,
     sampler: &mut CpuSampler,
     spp: u32,
+    jitter_film_position: bool,
 ) -> (Ray, RayDifferentials) {
-    let Vec2(x_disp, y_disp) = sampler.sample_uniform2();
-    let x = (x as f32) + x_disp;
-    let y = (y as f32) + y_disp;
-
+    let (x, y) = if jitter_film_position {
+        let Vec2(x_disp, y_disp) = sampler.sample_uniform2();
+        ((x as f32) + x_disp, (y as f32) + y_disp)
+    }
+    else {
+        ((x as f32) + 0.5, (y as f32) + 0.5)
+    };
+    
     // For thin-lens camera, sample the disk
     let lens_sample = match camera.camera_type {
         raytracing::scene::CameraType::ThinLensPerspective { .. } => {
@@ -522,6 +526,7 @@ fn render_tile(
                     y,
                     sampler,
                     raytracer_settings.samples_per_pixel,
+                    true
                 );
 
                 radiance += ray_radiance(
@@ -576,6 +581,7 @@ fn render_aovs(
                 y,
                 sampler,
                 raytracer_settings.samples_per_pixel,
+                false
             );
 
             let first_hit_aovs = first_hit_aovs(
@@ -874,26 +880,37 @@ pub fn render_single_pixel(
 
     let mut traversal_cache = TraversalCache::new(&cpu_raytracing_context);
     let mut single_pixel_sampler = CpuSampler::from_sampler(&raytracer_settings.sampler, raytracer_settings.seed);
+    
     single_pixel_sampler.start_sample((x, y), sample_index);
-
-    let (ray, ray_differentials) = generate_ray(
+    let (aov_ray, aov_ray_differentials) = generate_ray(
         &scene.camera,
         x,
         y,
         &mut single_pixel_sampler,
-        raytracer_settings.samples_per_pixel
+        raytracer_settings.samples_per_pixel,
+        false
     );
 
     let aovs = first_hit_aovs(
-        ray, 
-        ray_differentials, 
+        aov_ray, 
+        aov_ray_differentials, 
         &cpu_raytracing_context, 
         &mut traversal_cache
     );
 
+    single_pixel_sampler.start_sample((x, y), sample_index);
+    let (radiance_ray, radiance_ray_differentials) = generate_ray(
+        &scene.camera,
+        x,
+        y,
+        &mut single_pixel_sampler,
+        raytracer_settings.samples_per_pixel,
+        true
+    );
+
     let radiance = ray_radiance(
-        ray, 
-        ray_differentials, 
+        radiance_ray, 
+        radiance_ray_differentials, 
         &cpu_raytracing_context, 
         &mut single_pixel_sampler,
         &mut traversal_cache, 
