@@ -3,10 +3,10 @@
 #define CCCL_DISABLE_INT128_SUPPORT
 #include <cuda/std/optional>
 
-#include "kernel_math.h"
-#include "kernel_types.h"
-#include "sample.h"
-#include "texture.h"
+#include "kernel_math.hpp"
+#include "kernel_types.hpp"
+#include "sample.hpp"
+#include "texture.hpp"
 
 namespace materials
 {

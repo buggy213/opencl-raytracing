@@ -1,9 +1,9 @@
 #pragma once
 
 // lighting calculation only should be occurring in pathtracer kernel, not aov kernel
-#include "pathtracer.h"
-#include "kernel_params.h"
-#include "sample.h"
+#include "pathtracer.hpp"
+#include "kernel_params.hpp"
+#include "sample.hpp"
 #include "types.h"
 
 namespace lights

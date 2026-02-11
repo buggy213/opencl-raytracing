@@ -1,9 +1,9 @@
 #pragma once
 
 // texturing operations should only be occurring in pathtracer kernel
-#include "pathtracer.h"
-#include "kernel_math.h"
-#include "kernel_params.h"
+#include "pathtracer.hpp"
+#include "kernel_math.hpp"
+#include "kernel_params.hpp"
 #include "types.h"
 
 namespace texture

@@ -1,7 +1,7 @@
-#include "texture.h"
+#include "texture.hpp"
 #include "lib_optix_types.h"
 #include "types.h"
-#include "util.h"
+#include "util.hpp"
 
 __host__ cudaChannelFormatDesc fromTextureFormat(TextureFormat fmt) {
     switch (fmt) {

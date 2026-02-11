@@ -1,13 +1,13 @@
 #pragma once
 
-#include "sample.h"
+#include "sample.hpp"
 
 #ifdef USE_AOV_PIPELINE_PARAMS
 #error mixing aov and pathtracer code not allowed
 #endif
 
 #define USE_PATHTRACER_PIPELINE_PARAMS
-#include "kernel_params.h"
+#include "kernel_params.hpp"
 extern "C" __constant__ PathtracerPipelineParams pipeline_params;
 
 enum RayType

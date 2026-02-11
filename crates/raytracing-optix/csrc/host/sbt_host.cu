@@ -1,10 +1,10 @@
-#include "sbt_host.h"
+#include "sbt_host.hpp"
 
 #include <cuda.h>
 #include <optix_stubs.h>
 
-#include "pipeline.h"
-#include "sbt.h"
+#include "pipeline.hpp"
+#include "sbt.hpp"
 
 __host__ size_t AovSbt::addHitgroupRecord(GeometryData geometryData) {
     payloads.push_back(geometryData);

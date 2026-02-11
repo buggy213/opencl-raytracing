@@ -1,10 +1,8 @@
 #pragma once
 
-#include <memory>
-
-#include "kernel_math.h"
-#include "kernel_types.h"
-#include "sbt.h"
+#include "kernel_math.hpp"
+#include "kernel_types.hpp"
+#include "sbt.hpp"
 
 #include <optix_device.h>
 

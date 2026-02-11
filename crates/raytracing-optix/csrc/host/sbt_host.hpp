@@ -3,7 +3,7 @@
 #include <optix_types.h>
 #include <vector>
 
-#include "sbt_host.h"
+#include "sbt_host.hpp"
 #include "types.h"
 #include "lib_optix_types.h"
 

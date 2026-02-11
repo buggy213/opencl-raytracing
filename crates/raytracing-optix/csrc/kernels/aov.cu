@@ -1,13 +1,13 @@
 // Ray-generation w/ pinhole camera; only performs primary visibility and only calculates geometric normals for now (more aovs later)
-#include "aov.h"
+#include "aov.hpp"
 
 #include "types.h"
 
-#include "kernel_math.h"
-#include "kernel_types.h"
+#include "kernel_math.hpp"
+#include "kernel_types.hpp"
 
-#include "accel.h"
-#include "camera.h"
+#include "accel.hpp"
+#include "camera.hpp"
 
 #include <optix_device.h>
 

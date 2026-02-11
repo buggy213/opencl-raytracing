@@ -1,15 +1,15 @@
-#include "pipeline.h"
+#include "pipeline.hpp"
 
 #include <cstdint>
 #include <vector>
 
 #include "types.h"
 #include "optix.h"
-#include "util.h"
-#include "sbt.h"
-#include "kernel_params.h"
-#include "sbt_host.h"
-#include "scene.h"
+#include "util.hpp"
+#include "sbt.hpp"
+#include "kernel_params.hpp"
+#include "sbt_host.hpp"
+#include "scene.hpp"
 
 __host__ AovPipeline makeAovPipelineImpl(OptixDeviceContext ctx, const uint8_t* progData, size_t progSize) {
     OptixModuleCompileOptions moduleCompileOptions = {};

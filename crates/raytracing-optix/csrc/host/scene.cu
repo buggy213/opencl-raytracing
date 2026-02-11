@@ -1,4 +1,4 @@
-#include "scene.h"
+#include "scene.hpp"
 
 #include <cuda.h>
 #include <optix_stubs.h>
@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "types.h"
-#include "util.h"
+#include "util.hpp"
 
 // TODO: can probably optimize by using separate streams for every IAS, and adding synchronization between them
 __host__ OptixAccelerationStructure makeSphereGAS(

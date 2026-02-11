@@ -8,8 +8,8 @@
 
 #include <curanddx.hpp>
 
-#include "hash.h"
-#include "kernel_math.h"
+#include "hash.hpp"
+#include "kernel_math.hpp"
 #include "types.h"
 
 namespace sample {

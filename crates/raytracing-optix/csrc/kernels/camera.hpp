@@ -1,9 +1,9 @@
 #pragma once
 
 #include "types.h"
-#include "kernel_types.h"
-#include "kernel_math.h"
-#include "sample.h"
+#include "kernel_types.hpp"
+#include "kernel_math.hpp"
+#include "sample.hpp"
 
 // TODO: temporary while AOV pass is still lacking sampler
 inline __device__ Ray generate_ray(

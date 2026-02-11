@@ -1,4 +1,4 @@
-#include "util.h"
+#include "util.hpp"
 
 #include <array>
 
@@ -6,10 +6,10 @@
 
 #include <optix_stubs.h>
 
-#include "scene.h"
-#include "pipeline.h"
-#include "sbt_host.h"
-#include "texture.h"
+#include "scene.hpp"
+#include "pipeline.hpp"
+#include "sbt_host.hpp"
+#include "texture.hpp"
 
 __host__ void optixLogCallback(unsigned int level, const char* tag, const char* msg, void *cbdata) {
     printf("[%s] %s\n", tag, msg);

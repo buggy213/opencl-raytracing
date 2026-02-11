@@ -1,18 +1,18 @@
-#include "pathtracer.h"
+#include "pathtracer.hpp"
 
 #include <optix_device.h>
 
 #include "types.h"
-#include "kernel_types.h"
-#include "kernel_math.h"
+#include "kernel_types.hpp"
+#include "kernel_math.hpp"
 
-#include "camera.h"
-#include "materials.h"
-#include "geometry.h"
-#include "sample.h"
-#include "sbt.h"
-#include "accel.h"
-#include "lights.h"
+#include "camera.hpp"
+#include "materials.hpp"
+#include "geometry.hpp"
+#include "sample.hpp"
+#include "sbt.hpp"
+#include "accel.hpp"
+#include "lights.hpp"
 
 // returns ray in world-space, intended to be called from closest-hit program
 inline __device__ Ray get_ray()

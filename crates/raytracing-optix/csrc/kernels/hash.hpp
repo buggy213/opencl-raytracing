@@ -1,6 +1,6 @@
 #pragma once
 
-#include "kernel_types.h"
+#include "kernel_types.hpp"
 
 // dead simple xor / shift based hash function. maybe not the fastest or most optimal hash function but should be
 // good enough for any rendering task

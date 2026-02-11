@@ -5,5 +5,5 @@
 #endif
 
 #define USE_AOV_PIPELINE_PARAMS
-#include "kernel_params.h"
+#include "kernel_params.hpp"
 extern "C" __constant__ AovPipelineParams pipeline_params;
