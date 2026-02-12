@@ -176,10 +176,10 @@ __host__ void PathtracerSbt::finalize(PathtracerPipeline &pipeline) {
     MissRecord shadowMissRecord;
     optixSbtRecordPackHeader(pipeline.missProgram(PathtracerPipeline::SHADOW), &shadowMissRecord);
 
-    void* d_missRecord;
+    MissRecord* d_missRecord;
     cudaMalloc(&d_missRecord, 2 * sizeof(MissRecord));
-    cudaMemcpy(d_missRecord, &radianceMissRecord, sizeof(MissRecord), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_missRecord + sizeof(MissRecord), &shadowMissRecord, sizeof(MissRecord), cudaMemcpyHostToDevice);
+    cudaMemcpy(&d_missRecord[0], &radianceMissRecord, sizeof(MissRecord), cudaMemcpyHostToDevice);
+    cudaMemcpy(&d_missRecord[1], &shadowMissRecord, sizeof(MissRecord), cudaMemcpyHostToDevice);
 
     sbt = {
         .raygenRecord = (CUdeviceptr)d_raygenRecord,
