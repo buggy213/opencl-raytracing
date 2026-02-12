@@ -10,7 +10,6 @@ Everything lives under a shared Cargo workspace; a brief description of each cra
 - `crates/embree4`: higher-level wrapper around Embree used by the CPU backend for BVH construction.
 - `crates/embree4-sys`: raw Embree FFI bindings used by `embree4`.
 - `crates/raytracing`: scene description and shared math/vocabulary types (e.g. `Vec3`).
-- `crates/raytracing-cl`: old OpenCL backend (likely rotted; may be removed).
 - `crates/raytracing-cpu`: primary reference renderer that runs on the CPU.
 - `crates/raytracing-optix`: NVIDIA OptiX backend (mostly a stub at the moment).
 - `crates/viewer`: WebGPU-based viewer for render output; intended for AoV/BVH visualization later.
