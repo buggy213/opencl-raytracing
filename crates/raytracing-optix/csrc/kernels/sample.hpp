@@ -232,7 +232,7 @@ inline __device__ float2 sample_unit_disk_concentric(float2 u) {
 // @raytracing_cpu::sample::sample_cosine_hemisphere
 inline __device__ float3 sample_cosine_hemisphere(float2 u) {
     float2 d = sample_unit_disk(u);
-    float z = sqrtf(1.0f - d.x * d.x - d.y * d.y);
+    float z = sqrtf(fmaxf(0.0f, 1.0f - d.x * d.x - d.y * d.y));
     return make_float3(d.x, d.y, z);
 }
 

@@ -20,19 +20,10 @@ enum RayType
     RAY_TYPE_COUNT
 };
 
-inline __device__ OptixPayloadTypeID payloadTypeFromRayType(RayType ray_type)
-{
-    switch (ray_type)
-    {
-    case RADIANCE_RAY:
-        return OPTIX_PAYLOAD_TYPE_ID_0;
-    case SHADOW_RAY:
-        return OPTIX_PAYLOAD_TYPE_ID_1;
-    default:
-        printf("bad ray type %d in payloadTypeFromRayType\n", ray_type);
-        return OPTIX_PAYLOAD_TYPE_ID_0;
-    }
-}
+// these are not actually even evaluated at runtime, and OptiX compiler will complain
+// if they aren't constants (which can happen in debug builds)
+#define RADIANCE_RAY_PAYLOAD_TYPE OPTIX_PAYLOAD_TYPE_ID_0
+#define SHADOW_RAY_PAYLOAD_TYPE OPTIX_PAYLOAD_TYPE_ID_1
 
 // global memory per ray
 // TODO: this is wasteful, every ray has a copy of the whole sampler configuration - they only need sampler state, and that can go in payload possibly
@@ -156,6 +147,16 @@ inline __device__ RadianceRayPayloadMSRead readRadiancePayloadMS()
     };
 }
 
+inline __device__ void writeRadiancePayloadMS(const RadianceRayPayloadMSWrite& payload)
+{
+    auto [radiance_r, radiance_g, radiance_b] = payload.radiance;
+    optixSetPayload_0(__float_as_uint(radiance_r));
+    optixSetPayload_1(__float_as_uint(radiance_g));
+    optixSetPayload_2(__float_as_uint(radiance_b));
+
+    optixSetPayload_7(payload.done);
+}
+
 inline __device__ RadianceRayPayloadTraceRead traceRadianceRay(
     float3 ray_o,
     float3 ray_d,
@@ -171,7 +172,7 @@ inline __device__ RadianceRayPayloadTraceRead traceRadianceRay(
     p14 = payload_in.depth;
 
     optixTrace(
-        payloadTypeFromRayType(RayType::RADIANCE_RAY),
+        RADIANCE_RAY_PAYLOAD_TYPE,
         pipeline_params.root_handle,
         ray_o,
         ray_d,
@@ -266,7 +267,7 @@ inline __device__ ShadowRayPayload traceShadowRay(
 ) {
     u32 p0;
     optixTrace(
-        payloadTypeFromRayType(RayType::SHADOW_RAY),
+        SHADOW_RAY_PAYLOAD_TYPE,
         pipeline_params.root_handle,
         ray_o,
         ray_d,

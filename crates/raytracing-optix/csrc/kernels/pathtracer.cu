@@ -129,12 +129,13 @@ extern "C" __global__ void __raygen__main() {
 
 // one miss program for radiance rays
 extern "C" __global__ void __miss__radiance() {
-    optixSetPayloadTypes(payloadTypeFromRayType(RayType::RADIANCE_RAY));
+    optixSetPayloadTypes(RADIANCE_RAY_PAYLOAD_TYPE);
 
     // todo: environment map
-    optixSetPayload_0(__float_as_uint(1.0f));
-    optixSetPayload_1(__float_as_uint(0.0f));
-    optixSetPayload_2(__float_as_uint(0.0f));
+    RadianceRayPayloadMSWrite payload_out = {};
+    payload_out.done = true;
+    payload_out.radiance = make_float3(1.0f, 0.0f, 0.0f);
+    writeRadiancePayloadMS(payload_out);
 }
 
 // one closest-hit program per material
@@ -147,7 +148,7 @@ inline __device__ const Material& get_material_data() {
 }
 
 extern "C" __global__ void __closesthit__radiance_diffuse() {
-    optixSetPayloadTypes(payloadTypeFromRayType(RayType::RADIANCE_RAY));
+    optixSetPayloadTypes(RADIANCE_RAY_PAYLOAD_TYPE);
 
     const Scene& scene = pipeline_params.scene;
     const OptixRaytracerSettings& settings = pipeline_params.settings;
@@ -290,7 +291,7 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
 
 // one miss program for shadow rays
 extern "C" __global__ void __miss__shadow() {
-    optixSetPayloadTypes(payloadTypeFromRayType(RayType::SHADOW_RAY));
+    optixSetPayloadTypes(SHADOW_RAY_PAYLOAD_TYPE);
     ShadowRayPayload payload_out = {
         .hit = false
     };
@@ -300,7 +301,7 @@ extern "C" __global__ void __miss__shadow() {
 
 // one closest-hit program for shadow rays
 extern "C" __global__ void __closesthit__shadow() {
-    optixSetPayloadTypes(payloadTypeFromRayType(RayType::SHADOW_RAY));
+    optixSetPayloadTypes(SHADOW_RAY_PAYLOAD_TYPE);
     ShadowRayPayload payload_out = {
         .hit = true
     };
