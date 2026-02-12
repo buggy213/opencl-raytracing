@@ -206,7 +206,7 @@ pub(crate) fn sample_unit_disk_concentric(u: Vec2) -> Vec2 {
 // samples unit hemisphere distributed according to cos(theta) (i.e. z)
 pub(crate) fn sample_cosine_hemisphere(u: Vec2) -> Vec3 {
     let d = sample_unit_disk(u);
-    let z = f32::sqrt(1.0 - d.0 * d.0 - d.1 * d.1);
+    let z = f32::sqrt(f32::max(1.0 - d.0 * d.0 - d.1 * d.1, 0.0));
     
     Vec3(d.0, d.1, z)
 }
