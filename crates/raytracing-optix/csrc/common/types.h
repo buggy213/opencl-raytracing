@@ -144,8 +144,9 @@ struct Light
 };
 
 // corresponds roughly to @raytracing::renderer::RaytracerSettings
-// but with some fields handled by the host side (e.g. default seed, AovFlags, max_ray_depth)
+// but with some fields handled by the host side (e.g. default seed, AovFlags)
 struct OptixRaytracerSettings {
+    unsigned int max_ray_depth;
     bool accumulate_bounces;
 
     unsigned int light_sample_count;

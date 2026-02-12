@@ -6,6 +6,8 @@
 
 #include <optix_device.h>
 
+#include "kernel_sbt.h"
+
 // the name "accel.h" is a little misleading, since the actual acceleration structure traversal is handled elsewhere
 // this file just captures the functionality of constructing a HitInfo
 
@@ -13,6 +15,7 @@ struct HitInfo {
     float2 uv;
     float3 point;
     float3 normal;
+    cuda::std::optional<u32> area_light;
 };
 
 // following functions must be only be called from closest-hit programs
@@ -21,6 +24,8 @@ struct HitInfo {
 
 // @raytracing_cpu::geometry::ray_sphere_intersect
 inline __device__ HitInfo get_hit_info_sphere() {
+    const HitgroupRecord& hitgroup_record = sbt::get_hitgroup_record();
+
     float4 sphere_data[1];
     optixGetSphereData(sphere_data);
 
@@ -47,15 +52,21 @@ inline __device__ HitInfo get_hit_info_sphere() {
     float phi = local.y > 0.0f ? acosf(cos_phi) : M_2_PIf - acosf(cos_phi);
     float2 uv = make_float2(phi / (2.0f * M_PIf), theta * M_1_PIf);
 
-    return HitInfo { .uv = uv, .point = intersection_point, .normal = normal };
+    return HitInfo {
+        uv,
+        .point = intersection_point,
+        normal,
+        .area_light = hitgroup_record.area_light
+    };
 }
 
 // @raytracing_cpu::geometry::ray_mesh_intersect
 inline __device__ HitInfo get_hit_info_tri() {
-    auto mesh_data = reinterpret_cast<HitgroupRecord::MeshData*>(optixGetSbtDataPointer());
+    const HitgroupRecord& hitgroup_record = sbt::get_hitgroup_record();
+    const HitgroupRecord::MeshData& mesh_data = hitgroup_record.mesh_data;
     u32 tri_index = optixGetPrimitiveIndex();
 
-    uint3 tri = mesh_data->indices[tri_index];
+    uint3 tri = mesh_data.indices[tri_index];
 
     float2 barycentric = optixGetTriangleBarycentrics();
     float t = optixGetRayTmax();
@@ -64,30 +75,30 @@ inline __device__ HitInfo get_hit_info_tri() {
     float w = 1.0f - barycentric.x - barycentric.y;
 
     float3 normal_o;
-    if (!mesh_data->normals) {
+    if (!mesh_data.normals) {
         float3 p[3];
         optixGetTriangleVertexData(p);
 
         normal_o = normalize(cross(p[2] - p[0], p[1] - p[0]));
     }
     else {
-        float3 n0 = mesh_data->normals[tri.x];
-        float3 n1 = mesh_data->normals[tri.y];
-        float3 n2 = mesh_data->normals[tri.z];
+        float3 n0 = mesh_data.normals[tri.x];
+        float3 n1 = mesh_data.normals[tri.y];
+        float3 n2 = mesh_data.normals[tri.z];
 
         normal_o = normalize(w * n0 + u * n1 + v * n2);
     }
 
     float2 uv0, uv1, uv2;
-    if (!mesh_data->uvs) {
+    if (!mesh_data.uvs) {
         uv0 = make_float2(0.0f, 0.0f);
         uv1 = make_float2(1.0f, 0.0f);
         uv2 = make_float2(0.0f, 1.0f);
     }
     else {
-        uv0 = mesh_data->uvs[tri.x];
-        uv1 = mesh_data->uvs[tri.y];
-        uv2 = mesh_data->uvs[tri.z];
+        uv0 = mesh_data.uvs[tri.x];
+        uv1 = mesh_data.uvs[tri.y];
+        uv2 = mesh_data.uvs[tri.z];
     }
 
     float2 uv = w * uv0 + u * uv1 + v * uv2;
@@ -96,5 +107,10 @@ inline __device__ HitInfo get_hit_info_tri() {
     float3 ray_direction = optixGetWorldRayDirection();
     float3 normal_w = optixTransformNormalFromObjectToWorldSpace(normal_o);
 
-    return HitInfo { .uv = uv, .point = ray_origin + ray_direction * t, .normal = normal_w };
+    return HitInfo {
+        uv,
+        .point = ray_origin + ray_direction * t,
+        .normal = normal_w,
+        .area_light = hitgroup_record.area_light
+    };
 }

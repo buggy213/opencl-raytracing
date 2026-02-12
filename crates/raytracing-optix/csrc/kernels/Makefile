@@ -20,7 +20,9 @@ NVCCFLAGS := \
 	-arch=compute_86 \
 	-I$(SHARED_HEADERS) \
 	-I$(OPTIX_INCLUDE_DIR) \
-	-I$(MATHDX_25_12_PATH)/nvidia/mathdx/25.12/include
+	-I$(MATHDX_25_12_PATH)/nvidia/mathdx/25.12/include \
+	-Werror all-warnings \
+	--diag-suppress 20044 # extern "C" used for global variable is blessed by OptiX programming guide
 
 
 ifeq ($(origin OUT_DIR),undefined)

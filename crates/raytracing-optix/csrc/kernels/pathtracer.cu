@@ -23,8 +23,76 @@ inline __device__ Ray get_ray()
     };
 }
 
-// primary entry point
-// uses radiance ray type payload only to read out reported radiance from primary (camera) ray
+// @raytracing_cpu::ray_radiance
+inline __device__ float3 ray_radiance(Ray camera_ray)
+{
+    const Scene& scene = pipeline_params.scene;
+
+    Ray ray = camera_ray;
+    u32 depth = 0;
+
+    bool specular_bounce = true;
+    float3 radiance = float3_zero;
+    float3 path_weight = make_float3(1.0f, 1.0f, 1.0f);
+
+    while (true)
+    {
+        // TODO: try use +infty instead? not sure if it makes a difference
+        float t_min = depth == 0 ? scene.camera->near_clip : 0.0001f;
+        float t_max = depth == 0 ? scene.camera->far_clip : pipeline_params.scene_diameter;
+
+        RadianceRayPayloadTraceWrite payload_in = {
+            path_weight,
+            specular_bounce,
+            depth
+        };
+
+        RadianceRayPayloadTraceRead payload_out = traceRadianceRay(
+            ray.origin,
+            ray.direction,
+            t_min,
+            t_max,
+            payload_in
+        );
+
+        depth += 1;
+        radiance += payload_out.radiance;
+
+        // this can cause divergence
+        // 1. miss shader causes writes done = true, causes some threads in warp to finish earlier than others.
+        //    in theory, the compiler already has enough information to deal with this case
+        // 2. it's the last bounce, and so closest-hit will write done = true. i don't think the compiler can reason
+        //    about this one, though if it never reorders anyways, then this won't be a problem since depth is uniform
+        //    across the warp
+        // 3. closest-hit writes done = true because an invalid sample was drawn or the path weight falls to zero.
+        //    this case is hardest to deal with, since it's hard to know a priori before invoking CH whether
+        //    or not the ray will finish. if we hoist the russian-roulette logic out of CH, maybe it's easier?
+
+        // TODO: try out SER to fix this? SER can maybe help with
+        //  1. divergence caused by hit vs miss shader
+        //  2. divergence caused by switch over geometry in closest-hit shaders
+        //  3. divergence from last bounce
+        //  4. divergence from russian-roulette / other ways path is terminated early
+        //     - question: if some threads already exited loop, do they participate in reorder? how does this actually work under the hood??
+        //  5. spatial divergence in hit shaders
+        //  however, it seems unlikely that SER can resolve divergence caused by lights being occluded and the bsdf evaluation
+        //  that occurs as a result without major restructuring of the code, and the overhead is probably too high anyways
+        if (payload_out.done)
+        {
+            break;
+        }
+
+        path_weight = payload_out.path_weight;
+        specular_bounce = payload_out.specular_bounce;
+        ray.origin = payload_out.origin_w;
+        ray.direction = payload_out.dir_w;
+    }
+
+    return radiance;
+}
+
+// primary entry point, roughly corresponds to inner loop for one pixel of
+// @raytracing_cpu::render_tile
 extern "C" __global__ void __raygen__main() {
     uint3 dim = optixGetLaunchDimensions();
     uint3 tid = optixGetLaunchIndex();
@@ -32,47 +100,19 @@ extern "C" __global__ void __raygen__main() {
     const Scene& scene = pipeline_params.scene;
     const OptixRaytracerSettings& settings = pipeline_params.settings;
 
+    float3 radiance = float3_zero;
+
     // initialize per-ray data with sampler
     PerRayData& prd = get_ray_data();
-    prd.sampler = sample::OptixSampler::from_sampler(pipeline_params.settings.sampler, pipeline_params.settings.seed);
-
-    float3 radiance = float3_zero;
+    prd.sampler = sample::OptixSampler::from_sampler(settings.sampler, settings.seed);
 
     for (int sample_index = 0; sample_index < settings.samples_per_pixel; sample_index += 1)
     {
         prd.sampler.start_sample(make_uint2(tid.x, tid.y), sample_index);
 
-        Ray ray = generate_ray(*scene.camera, tid.x, tid.y, &prd.sampler);
+        Ray camera_ray = generate_ray(*scene.camera, tid.x, tid.y, &prd.sampler);
 
-        uint r, g, b;
-        uint r_weight, g_weight, b_weight;
-        r_weight = g_weight = b_weight = __float_as_uint(1.0f);
-        uint specular_bounce = 1;
-        optixTrace(
-            OPTIX_PAYLOAD_TYPE_ID_0,
-            pipeline_params.root_handle,
-            ray.origin,
-            ray.direction,
-            scene.camera->near_clip,
-            scene.camera->far_clip,
-            0.0f,
-            (OptixVisibilityMask)(-1),
-            OPTIX_RAY_FLAG_NONE,
-            RayType::RADIANCE_RAY,
-            RayType::RAY_TYPE_COUNT,
-            RayType::RADIANCE_RAY,
-            r,
-            g,
-            b,
-            r_weight,
-            g_weight,
-            b_weight,
-            specular_bounce
-        );
-
-        radiance.x += __uint_as_float(r);
-        radiance.y += __uint_as_float(g);
-        radiance.z += __uint_as_float(b);
+        radiance += ray_radiance(camera_ray);
     }
 
     radiance /= settings.samples_per_pixel;
@@ -86,16 +126,10 @@ extern "C" __global__ void __raygen__main() {
     );
 }
 
-// -- Radiance Rays
-// The radiance ray type uses OPTIX_PAYLOAD_TYPE_ID_0,
-// which contains the following fields
-// - radiance: float3. written in closest-hit / miss, read out after trace
-// - path weight: float3. written before trace, read out in closest-hit / miss
-// - specular bounce: bool. written before trace, read out in closest-hit / miss
 
 // one miss program for radiance rays
 extern "C" __global__ void __miss__radiance() {
-    optixSetPayloadTypes(OPTIX_PAYLOAD_TYPE_ID_0);
+    optixSetPayloadTypes(payloadTypeFromRayType(RayType::RADIANCE_RAY));
 
     // todo: environment map
     optixSetPayload_0(__float_as_uint(1.0f));
@@ -113,7 +147,7 @@ inline __device__ const Material& get_material_data() {
 }
 
 extern "C" __global__ void __closesthit__radiance_diffuse() {
-    optixSetPayloadTypes(OPTIX_PAYLOAD_TYPE_ID_0);
+    optixSetPayloadTypes(payloadTypeFromRayType(RayType::RADIANCE_RAY));
 
     const Scene& scene = pipeline_params.scene;
     const OptixRaytracerSettings& settings = pipeline_params.settings;
@@ -133,28 +167,31 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
             break;
         default:
             // TODO: handle more geometry types
-            optixSetPayload_0(__float_as_uint(0.0f));
-            optixSetPayload_1(__float_as_uint(0.0f));
-            optixSetPayload_2(__float_as_uint(0.0f));
+            RadianceRayPayloadCHWrite payload_out = {};
+            payload_out.done = true;
+            payload_out.radiance = float3_zero;
+            writeRadiancePayloadCH(payload_out);
             return;
     }
 
-    unsigned int specular_bounce = optixGetPayload_6();
+    RadianceRayPayloadCHRead payload_in = readRadiancePayloadCH();
+    auto [path_weight, specular_bounce, depth] = payload_in;
     float3 radiance = float3_zero;
-    float3 path_weight = make_float3(
-        __uint_as_float(optixGetPayload_3()),
-        __uint_as_float(optixGetPayload_4()),
-        __uint_as_float(optixGetPayload_5())
-    );
 
-    // TODO: direct lighting from intersection with light
+
+    bool add_zero_bounce = settings.accumulate_bounces || settings.max_ray_depth == depth;
+    if (specular_bounce && add_zero_bounce && hit.area_light)
+    {
+        const Light& light = scene.lights[*hit.area_light];
+        radiance += path_weight * lights::light_radiance(light);
+    }
 
     const Material& material = get_material_data();
     float3 o2w_x, o2w_y;
     cuda::std::tie(o2w_x, o2w_y) = geometry::make_orthonormal_basis(hit.normal);
 
     // so hopefully OptiX can optimize this lol. it seems especially problematic for both matrices
-    // to be live across direct lighting / indirect lighting optixTrace.....
+    // to be live across direct lighting optixTrace... rematerializing might be more performant
     // TODO: is this a perf issue?
     Matrix4x4 o2w = {
         o2w_x.x, o2w_y.x, hit.normal.x, 0.0f,
@@ -171,11 +208,14 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
     };
 
     float3 wo = matrix4x4_apply_vector(w2o, -ray.direction);
-    if (optixGetRemainingTraceDepth() == 0)
+    // some divergence, see note in raygen program
+    depth += 1;
+    if (depth > settings.max_ray_depth)
     {
-        optixSetPayload_0(__float_as_uint(radiance.x));
-        optixSetPayload_1(__float_as_uint(radiance.y));
-        optixSetPayload_2(__float_as_uint(radiance.z));
+        RadianceRayPayloadCHWrite payload_out = {};
+        payload_out.radiance = radiance;
+        payload_out.done = true;
+        writeRadiancePayloadCH(payload_out);
         return;
     }
 
@@ -194,6 +234,7 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
             for (int sample_idx = 0; sample_idx < light_samples; sample_idx += 1)
             {
                 lights::LightSample light_sample = lights::sample_light(light, hit.point, prd.sampler);
+                // traces a shadow ray
                 bool occluded = lights::occluded(light_sample);
 
                 if (!occluded)
@@ -214,18 +255,20 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
     }
 
     materials::BsdfSample bsdf_sample = materials::sample_bsdf(bsdf, wo, materials::BsdfComponentFlags::ALL(), prd.sampler);
-    // some divergence, but unavoidable.
+
+    // some divergence: see note in raygen program
     if (!bsdf_sample.valid || bsdf_sample.bsdf == float3_zero || bsdf_sample.pdf == 0.0f)
     {
-        optixSetPayload_0(__float_as_uint(radiance.x));
-        optixSetPayload_1(__float_as_uint(radiance.y));
-        optixSetPayload_2(__float_as_uint(radiance.z));
+        RadianceRayPayloadCHWrite payload_out = {};
+        payload_out.radiance = radiance;
+        payload_out.done = true;
+        writeRadiancePayloadCH(payload_out);
         return;
     }
 
     float cos_theta = fabs(bsdf_sample.wi.z);
     path_weight *= bsdf_sample.bsdf * cos_theta / bsdf_sample.pdf;
-    specular_bounce = bsdf_sample.component.is_specular() ? 1 : 0;
+    specular_bounce = bsdf_sample.component.is_specular();
 
     float3 world_dir = matrix4x4_apply_vector(o2w, bsdf_sample.wi);
     auto new_ray = Ray {
@@ -233,52 +276,34 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
         .direction = world_dir
     };
 
-    uint next_bounce_r, next_bounce_g, next_bounce_b;
-    uint path_weight_r = __float_as_uint(path_weight.x), path_weight_g = __float_as_uint(path_weight.y), path_weight_b = __float_as_uint(path_weight.z);
-    optixTrace(
-        OPTIX_PAYLOAD_TYPE_ID_0,
-        pipeline_params.root_handle,
+    RadianceRayPayloadCHWrite payload_out = {
+        radiance,
+        path_weight,
+        specular_bounce,
+        .done = false,
         new_ray.origin,
         new_ray.direction,
-        0.0001f,
-        // idk how well optix deals with +inf, so this is a conservative bound on scene size
-        pipeline_params.scene_diameter * 2.0f,
-        0.0f,
-        (OptixVisibilityMask)(-1),
-        OPTIX_RAY_FLAG_NONE,
-        RayType::RADIANCE_RAY,
-        RayType::RAY_TYPE_COUNT,
-        RayType::RADIANCE_RAY,
-        next_bounce_r,
-        next_bounce_g,
-        next_bounce_b,
-        path_weight_r,
-        path_weight_g,
-        path_weight_b,
-        specular_bounce
-    );
+    };
 
-    radiance.x += __uint_as_float(next_bounce_r);
-    radiance.y += __uint_as_float(next_bounce_g);
-    radiance.z += __uint_as_float(next_bounce_b);
-
-    optixSetPayload_0(__float_as_uint(radiance.x));
-    optixSetPayload_1(__float_as_uint(radiance.y));
-    optixSetPayload_2(__float_as_uint(radiance.z));
+    writeRadiancePayloadCH(payload_out);
 }
-
-// -- Shadow Rays
-// The shadow ray type uses OPTIX_PAYLOAD_TYPE_ID_1,
-// which defines a single payload value corresponding to whether there was a hit or not
 
 // one miss program for shadow rays
 extern "C" __global__ void __miss__shadow() {
-    optixSetPayloadTypes(OPTIX_PAYLOAD_TYPE_ID_1);
-    optixSetPayload_0(0);
+    optixSetPayloadTypes(payloadTypeFromRayType(RayType::SHADOW_RAY));
+    ShadowRayPayload payload_out = {
+        .hit = false
+    };
+
+    writeShadowPayload(payload_out);
 }
 
 // one closest-hit program for shadow rays
 extern "C" __global__ void __closesthit__shadow() {
-    optixSetPayloadTypes(OPTIX_PAYLOAD_TYPE_ID_1);
-    optixSetPayload_0(1);
+    optixSetPayloadTypes(payloadTypeFromRayType(RayType::SHADOW_RAY));
+    ShadowRayPayload payload_out = {
+        .hit = true
+    };
+
+    writeShadowPayload(payload_out);
 }

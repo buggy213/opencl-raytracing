@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <optix_types.h>
 #include <vector>
 
@@ -26,13 +27,14 @@ struct PathtracerSbt {
     struct StagedHitgroupRecord {
         GeometryData geometry;
         Material material;
+        std::optional<unsigned int> area_light;
     };
 
     std::vector<StagedHitgroupRecord> payloads;
 
     OptixShaderBindingTable sbt;
 
-    size_t addHitgroupRecord(GeometryData geometryData, Material material);
+    size_t addHitgroupRecord(GeometryData geometryData, Material material, std::optional<unsigned int> area_light);
     void finalize(PathtracerPipeline& pipeline);
     ~PathtracerSbt();
 };

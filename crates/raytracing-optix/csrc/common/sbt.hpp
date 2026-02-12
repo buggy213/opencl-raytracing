@@ -4,6 +4,8 @@
  * SBT record definitions, shared between host/device C++ code
  */
 
+#define CCCL_DISABLE_INT128_SUPPORT
+#include <cuda/std/optional>
 #include <optix_types.h>
 
 struct RaygenRecord {
@@ -23,5 +25,6 @@ struct HitgroupRecord {
         float2* uvs;
     } mesh_data;
 
-    struct Material material_data;
+    Material material_data;
+    cuda::std::optional<unsigned int> area_light;
 };

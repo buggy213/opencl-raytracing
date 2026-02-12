@@ -97,28 +97,35 @@ inline __device__ LightSample sample_light(
     };
 }
 
+// @raytracing_cpu::lights::light_radiance
+inline __device__ float3 light_radiance(const Light& light)
+{
+    switch (light.kind)
+    {
+    case Light::PointLight:
+    case Light::DirectionLight:
+        return float3_zero;
+    case Light::DiffuseAreaLight:
+        {
+            const Light::LightVariant::DiffuseAreaLight& area_light = light.variant.area_light;
+            return vec3_to_float3(area_light.radiance);
+        }
+    }
+
+    return float3_zero;
+}
+
 // @raytracing_cpu::lights::occluded
 inline __device__ bool occluded(const LightSample& light_sample)
 {
-    unsigned int hit;
-    // OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT corresponds to early exit
-    optixTrace(
-        OPTIX_PAYLOAD_TYPE_ID_1,
-        pipeline_params.root_handle,
+    ShadowRayPayload res = traceShadowRay(
         light_sample.shadow_ray.origin,
         light_sample.shadow_ray.direction,
-        0.001f,
-        light_sample.distance - 0.001f,
-        0.0f,
-        (OptixVisibilityMask)(-1),
-        OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT,
-        RayType::SHADOW_RAY,
-        RayType::RAY_TYPE_COUNT,
-        RayType::SHADOW_RAY,
-        hit
+        0.0001f,
+        light_sample.distance - 0.0001f
     );
 
-    return hit != 0;
+    return res.hit != 0;
 }
 
 } // namespace lights

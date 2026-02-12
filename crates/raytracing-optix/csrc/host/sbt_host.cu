@@ -47,6 +47,7 @@ __host__ void AovSbt::finalize(AovPipeline& pipeline) {
             .normals = (float3*)d_normals,
             .uvs = (float2*)d_uvs
         };
+        hitgroupRecord.area_light = cuda::std::nullopt;
 
         hitgroupRecords.push_back(hitgroupRecord);
     }
@@ -94,10 +95,11 @@ __host__ AovSbt::~AovSbt() {
     cudaFree((void*)sbt.missRecordBase);
 }
 
-__host__ size_t PathtracerSbt::addHitgroupRecord(GeometryData geometryData, Material material) {
+__host__ size_t PathtracerSbt::addHitgroupRecord(GeometryData geometryData, Material material, std::optional<unsigned int> area_light) {
     payloads.push_back(StagedHitgroupRecord {
         .geometry = geometryData,
-        .material = material
+        material,
+        area_light
     });
 
     return 2;
@@ -136,6 +138,11 @@ __host__ void PathtracerSbt::finalize(PathtracerPipeline &pipeline) {
             .uvs = (float2*)d_uvs
         };
         radianceHitgroupRecord.material_data = payload.material;
+        if (payload.area_light) {
+            radianceHitgroupRecord.area_light = *payload.area_light;
+        } else {
+            radianceHitgroupRecord.area_light = cuda::std::nullopt;
+        }
         optixSbtRecordPackHeader(radianceHit, &radianceHitgroupRecord);
         hitgroupRecords.push_back(radianceHitgroupRecord);
 
@@ -147,6 +154,7 @@ __host__ void PathtracerSbt::finalize(PathtracerPipeline &pipeline) {
             .uvs = (float2*)d_uvs
         };
         shadowHitgroupRecord.material_data = payload.material;
+        shadowHitgroupRecord.area_light = cuda::std::nullopt;
         optixSbtRecordPackHeader(shadowHit, &shadowHitgroupRecord);
         hitgroupRecords.push_back(shadowHitgroupRecord);
     }

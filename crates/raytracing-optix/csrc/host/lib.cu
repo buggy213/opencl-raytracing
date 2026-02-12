@@ -135,10 +135,9 @@ RT_API __host__ void releaseAovPipeline(AovPipelineWrapper pipeline) {
 RT_API __host__ PathtracerPipelineWrapper makePathtracerPipeline(
     OptixDeviceContext ctx,
     const uint8_t* progData,
-    size_t progSize,
-    unsigned int maxRayDepth
+    size_t progSize
 ) {
-    PathtracerPipeline pathtracerPipeline = makePathtracerPipelineImpl(ctx, progData, progSize, maxRayDepth);
+    PathtracerPipeline pathtracerPipeline = makePathtracerPipelineImpl(ctx, progData, progSize);
     return new PathtracerPipeline(pathtracerPipeline);
 }
 
@@ -149,9 +148,18 @@ RT_API __host__ PathtracerSbtWrapper makePathtracerSbt() {
 RT_API __host__ size_t addHitRecordPathtracerSbt(
     PathtracerSbtWrapper sbt,
     GeometryData geometryData,
-    Material material
+    Material material,
+    // -1 = no light
+    int area_light
 ) {
-    return sbt->addHitgroupRecord(geometryData, material);
+    std::optional<unsigned int> area_light_opt;
+    if (area_light == -1) {
+        area_light_opt = std::nullopt;
+    } else {
+        area_light_opt = area_light;
+    }
+
+    return sbt->addHitgroupRecord(geometryData, material, area_light_opt);
 }
 
 RT_API __host__ void finalizePathtracerSbt(PathtracerSbtWrapper sbt, PathtracerPipelineWrapper pipeline) {

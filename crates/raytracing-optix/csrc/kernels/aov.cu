@@ -25,7 +25,7 @@ extern "C" __global__ void __raygen__debug() {
         pipeline_params.camera->near_clip,
         pipeline_params.camera->far_clip,
         0.0f,
-        (OptixVisibilityMask)(-1),
+        OptixVisibilityMask(0xFF),
         OPTIX_RAY_FLAG_NONE,
         0,
         0,

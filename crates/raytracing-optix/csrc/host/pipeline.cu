@@ -237,8 +237,7 @@ __host__ void releaseAovPipelineImpl(AovPipeline& pipeline) {
 __host__ PathtracerPipeline makePathtracerPipelineImpl(
     OptixDeviceContext ctx,
     const uint8_t *progData,
-    size_t progSize,
-    unsigned int maxRayDepth
+    size_t progSize
 ) {
     PathtracerPipeline pathtracerPipeline;
     std::vector<OptixProgramGroup> programGroups;
@@ -421,8 +420,9 @@ __host__ PathtracerPipeline makePathtracerPipelineImpl(
 
     OptixPipeline pipeline = nullptr;
     OptixPipelineLinkOptions pipelineLinkOptions = {};
-    // maxTraceDepth = 1 corresponds to max_ray_depth = 0 in cpu implementation
-    pipelineLinkOptions.maxTraceDepth = maxRayDepth + 1;
+    // iterative pathtracer kernel only traces 2 deep at most 
+    // level 1 for the main path and level 2 for direct-lighting next-event estimation
+    pipelineLinkOptions.maxTraceDepth = 2;
 
     res = optixPipelineCreate(
         ctx,

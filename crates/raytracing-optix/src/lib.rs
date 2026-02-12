@@ -88,7 +88,6 @@ pub fn render(
             optix_ctx, 
             pathtracer_kernel.as_ptr(), 
             pathtracer_kernel.len(),
-            raytracer_settings.max_ray_depth
         ) 
     };
     

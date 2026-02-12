@@ -66,12 +66,17 @@ RT_API void releaseAovPipeline(AovPipelineWrapper pipeline);
 RT_API PathtracerPipelineWrapper makePathtracerPipeline(
     OptixDeviceContext ctx,
     const uint8_t* progData,
-    size_t progSize,
-    unsigned int maxRayDepth
+    size_t progSize
 );
 
 RT_API PathtracerSbtWrapper makePathtracerSbt();
-RT_API size_t addHitRecordPathtracerSbt(PathtracerSbtWrapper, struct GeometryData geometryData, struct Material material);
+RT_API size_t addHitRecordPathtracerSbt(
+    PathtracerSbtWrapper,
+    struct GeometryData geometryData,
+    struct Material material,
+    // -1 = no light
+    int area_light
+);
 RT_API void finalizePathtracerSbt(PathtracerSbtWrapper sbt, PathtracerPipelineWrapper pipeline);
 RT_API void releasePathtracerSbt(PathtracerSbtWrapper sbt);
 

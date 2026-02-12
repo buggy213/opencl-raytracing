@@ -127,7 +127,7 @@ impl Drop for AovSbt {
 }
 
 impl SbtVisitor for AovSbtBuilder<'_> {
-    fn visit_geometry_as(&mut self, shape: &Shape, _material: &Material) -> u32 {
+    fn visit_geometry_as(&mut self, shape: &Shape, _material: &Material, _area_light: Option<u32>) -> u32 {
         let old_sbt_offset = self.current_sbt_offset;
         self.add_hitgroup_record(shape);
 
@@ -160,11 +160,18 @@ impl<'scene> PathtracerSbtBuilder<'scene> {
         }
     }
 
-    fn add_hitgroup_record(&mut self, shape: &Shape, material: &Material) {
+    fn add_hitgroup_record(&mut self, shape: &Shape, material: &Material, area_light: Option<u32>) {
         let geometry_data = geometry_data_from_shape(shape);
         let optix_material = optix_material_from_material(material);
+        let area_light = if let Some(idx) = area_light {
+            idx as i32
+        } else {
+            -1
+        };
 
-        let sbt_entries = unsafe { addHitRecordPathtracerSbt(self.ptr, geometry_data, optix_material) };
+        let sbt_entries = unsafe { 
+            addHitRecordPathtracerSbt(self.ptr, geometry_data, optix_material, area_light) 
+        };
 
         self.current_sbt_offset += sbt_entries as u32;
     }
@@ -183,9 +190,9 @@ impl Drop for PathtracerSbt {
 }
 
 impl SbtVisitor for PathtracerSbtBuilder<'_> {
-    fn visit_geometry_as(&mut self, shape: &Shape, material: &Material) -> u32 {
+    fn visit_geometry_as(&mut self, shape: &Shape, material: &Material, area_light: Option<u32>) -> u32 {
         let old_sbt_offset = self.current_sbt_offset;
-        self.add_hitgroup_record(shape, material);
+        self.add_hitgroup_record(shape, material, area_light);
 
         old_sbt_offset
     }

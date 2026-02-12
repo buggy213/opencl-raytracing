@@ -307,6 +307,7 @@ impl From<Transform> for raytracing::geometry::Transform {
 impl From<raytracing::renderer::RaytracerSettings> for OptixRaytracerSettings {
     fn from(value: raytracing::renderer::RaytracerSettings) -> Self {
         OptixRaytracerSettings { 
+            max_ray_depth: value.max_ray_depth,
             accumulate_bounces: value.accumulate_bounces, 
             light_sample_count: value.light_sample_count, 
             samples_per_pixel: value.samples_per_pixel, 
