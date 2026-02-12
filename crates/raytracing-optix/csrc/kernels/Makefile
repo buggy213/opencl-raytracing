@@ -6,8 +6,12 @@ ifndef OPTIX_INCLUDE_DIR
   endif
 endif
 
-ifeq ($(origin MATHDX_25_12_PATH),undefined)
-$(error MATHDX_25_12_PATH must be set)
+ifndef MATHDX_INCLUDE_DIR
+  ifdef MATHDX_25_12_PATH
+    MATHDX_INCLUDE_DIR := $(MATHDX_25_12_PATH)/nvidia/mathdx/25.12/include
+  else
+    $(error Set MATHDX_25_12_PATH for standalone builds; MATHDX_INCLUDE_DIR is set automatically by cargo)
+  endif
 endif
 
 KERNELS := \
@@ -20,7 +24,7 @@ NVCCFLAGS := \
 	-arch=compute_86 \
 	-I$(SHARED_HEADERS) \
 	-I$(OPTIX_INCLUDE_DIR) \
-	-I$(MATHDX_25_12_PATH)/nvidia/mathdx/25.12/include \
+	-I$(MATHDX_INCLUDE_DIR) \
 	-Werror all-warnings \
 	--diag-suppress 20044 # extern "C" used for global variable is blessed by OptiX programming guide
 

@@ -54,9 +54,12 @@ fn main() {
     // compile OptiX IR through make
     println!("cargo:rerun-if-changed=csrc/kernels");
     let kernels_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("csrc/kernels");
+    let mathdx_include_path = dst.join("mathdx_include");
+
     let exit_code = std::process::Command::new("make")
         .current_dir(&kernels_dir)
         .env("OPTIX_INCLUDE_DIR", &optix_include_path)
+        .env("MATHDX_INCLUDE_DIR", &mathdx_include_path)
         .arg("all")
         .spawn()
         .expect("failed to run make")

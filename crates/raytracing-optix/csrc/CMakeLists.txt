@@ -57,6 +57,14 @@ endif()
 
 set(OPTIX_INCLUDE_DIR "${OPTIX91_INCLUDE_DIR}")
 
+# find MathDx 25.12 (cuRANDDx), or download it if not found
+find_package(MathDx2512)
+if(NOT MathDx2512_FOUND)
+  include(DownloadMathDx2512)
+endif()
+
+set(MATHDX_INCLUDE_DIR "${MATHDX2512_INCLUDE_DIR}")
+
 set(CU_SOURCE
   host/lib.cu
   host/scene.cu
@@ -109,3 +117,4 @@ install(TARGETS raytracing_optix
 )
 
 install(DIRECTORY "${OPTIX_INCLUDE_DIR}/" DESTINATION "optix_include")
+install(DIRECTORY "${MATHDX_INCLUDE_DIR}/" DESTINATION "mathdx_include")
