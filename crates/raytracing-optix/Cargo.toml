@@ -7,6 +7,8 @@ edition = "2024"
 raytracing = { workspace = true }
 image = { workspace = true }
 tracing = { workspace = true }
+indicatif = "0.18.3"
+tracing-indicatif = "0.3.14"
 
 [build-dependencies]
 cmake = "0.1"
