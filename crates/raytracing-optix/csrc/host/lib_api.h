@@ -65,7 +65,8 @@ RT_API void releaseAovPipeline(AovPipelineWrapper pipeline);
 RT_API PathtracerPipelineWrapper makePathtracerPipeline(
     OptixDeviceContext ctx,
     const uint8_t* progData,
-    size_t progSize
+    size_t progSize,
+    bool debug
 );
 
 RT_API PathtracerSbtWrapper makePathtracerSbt();
@@ -86,6 +87,16 @@ RT_API void launchPathtracerPipeline(
     struct Scene scene,
     OptixTraversableHandle rootHandle,
     struct Vec4* radiance
+);
+
+RT_API void launchPathtracerPipelineDebug(
+    PathtracerPipelineWrapper pipeline,
+    PathtracerSbtWrapper sbt,
+    struct OptixRaytracerSettings settings,
+    struct Scene scene,
+    OptixTraversableHandle rootHandle,
+    struct Vec4* radiance,
+    struct SinglePixelDebug debug
 );
 
 RT_API void releasePathtracerPipeline(PathtracerPipelineWrapper pipeline);

@@ -34,7 +34,6 @@ if(UNIX)
   else()
     message(STATUS "Using env. var. CUDACXX: $ENV{CUDACXX}")
   endif()
-  set(CMAKE_BUILD_TYPE Release)
 endif()
 
 project(raytracing_optix LANGUAGES CXX CUDA)

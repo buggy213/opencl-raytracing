@@ -253,3 +253,11 @@ struct Material {
         // TODO: add other variants
     } variant;
 };
+
+// used for single-pixel debugging
+struct SinglePixelDebug {
+    unsigned int x;
+    unsigned int y;
+    unsigned int sample_index_lo;
+    unsigned int sample_index_hi;
+};

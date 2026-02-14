@@ -59,6 +59,15 @@ impl RenderOutput {
     }
 }
 
+#[derive(Debug)]
+pub struct SinglePixelOutput {
+    pub sample_index: u32,
+    pub hit: bool,
+    pub uv: Vec2,
+    pub normal: Vec3,
+    pub radiance: Vec3,
+}
+
 #[derive(Debug, Clone)]
 pub struct RaytracerSettings {
     pub max_ray_depth: u32,

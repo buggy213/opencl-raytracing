@@ -31,4 +31,5 @@ struct PathtracerPipelineParams
     HitgroupRecord *sbt_hitgroup_records;
     PathtracerPerRayData* ray_datas;
     OptixRaytracerSettings settings;
+    SinglePixelDebug debug;
 };

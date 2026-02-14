@@ -166,9 +166,10 @@ RT_API __host__ void releaseAovPipeline(AovPipelineWrapper pipeline) {
 RT_API __host__ PathtracerPipelineWrapper makePathtracerPipeline(
     OptixDeviceContext ctx,
     const uint8_t* progData,
-    size_t progSize
+    size_t progSize,
+    bool debug
 ) {
-    PathtracerPipeline pathtracerPipeline = makePathtracerPipelineImpl(ctx, progData, progSize);
+    PathtracerPipeline pathtracerPipeline = makePathtracerPipelineImpl(ctx, progData, progSize, debug);
     return new PathtracerPipeline(pathtracerPipeline);
 }
 
@@ -216,7 +217,28 @@ RT_API __host__ void launchPathtracerPipeline(
         settings,
         scene,
         rootHandle,
-        radiance
+        radiance,
+        std::nullopt
+    );
+}
+
+RT_API __host__ void launchPathtracerPipelineDebug(
+    PathtracerPipelineWrapper pipeline,
+    PathtracerSbtWrapper sbt,
+    struct OptixRaytracerSettings settings,
+    struct Scene scene,
+    OptixTraversableHandle rootHandle,
+    struct Vec4 *radiance,
+    struct SinglePixelDebug debug
+) {
+    launchPathtracerPipelineImpl(
+        *pipeline,
+        *sbt,
+        settings,
+        scene,
+        rootHandle,
+        radiance,
+        debug
     );
 }
 

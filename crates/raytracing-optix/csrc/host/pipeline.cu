@@ -237,7 +237,8 @@ __host__ void releaseAovPipelineImpl(AovPipeline& pipeline) {
 __host__ PathtracerPipeline makePathtracerPipelineImpl(
     OptixDeviceContext ctx,
     const uint8_t *progData,
-    size_t progSize
+    size_t progSize,
+    bool debug
 ) {
     PathtracerPipeline pathtracerPipeline;
     std::vector<OptixProgramGroup> programGroups;
@@ -248,6 +249,11 @@ __host__ PathtracerPipeline makePathtracerPipelineImpl(
     moduleCompileOptions.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_MINIMAL;
     moduleCompileOptions.numPayloadTypes = 2;
     moduleCompileOptions.payloadTypes = PathtracerPipeline::payloadTypes;
+
+    if (debug) {
+        moduleCompileOptions.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
+        moduleCompileOptions.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
+    }
 
     OptixPipelineCompileOptions pipelineCompileOptions = {};
     pipelineCompileOptions.usesMotionBlur = false;
@@ -300,6 +306,10 @@ __host__ PathtracerPipeline makePathtracerPipelineImpl(
     raygenGroupDesc.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
     raygenGroupDesc.raygen.module = module;
     raygenGroupDesc.raygen.entryFunctionName = "__raygen__main";
+
+    if (debug) {
+        raygenGroupDesc.raygen.entryFunctionName = "__raygen__debug";
+    }
 
     OptixProgramGroupOptions raygenGroupOptions = {};
     OptixProgramGroup raygenGroup = nullptr;
@@ -448,13 +458,24 @@ __host__ void launchPathtracerPipelineImpl(
     OptixRaytracerSettings settings,
     Scene scene,
     OptixTraversableHandle rootHandle,
-    Vec4* radiance
+    Vec4* radiance,
+    std::optional<SinglePixelDebug> debug
 ) {
     size_t width = scene.camera->raster_width;
     size_t height = scene.camera->raster_height;
+    if (debug) {
+        width = 1;
+        height = 1;
+    }
 
     void* d_radiance;
-    cudaMalloc(&d_radiance, sizeof(float4) * width * height);
+    if (debug) {
+        size_t samples = debug->sample_index_hi - debug->sample_index_lo;
+        cudaMalloc(&d_radiance, sizeof(float4) * samples);
+    }
+    else {
+        cudaMalloc(&d_radiance, sizeof(float4) * width * height);
+    }
 
     void* d_camera;
     cudaMalloc(&d_camera, sizeof(Camera));
@@ -492,6 +513,10 @@ __host__ void launchPathtracerPipelineImpl(
         pipelineParams.scene_aabb.maxZ - pipelineParams.scene_aabb.minZ
     );
     pipelineParams.scene_diameter = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
+
+    if (debug) {
+        pipelineParams.debug = *debug;
+    }
 
     void* d_pipelineParams;
     cudaMalloc(&d_pipelineParams, sizeof(pipelineParams));

@@ -126,6 +126,31 @@ extern "C" __global__ void __raygen__main() {
     );
 }
 
+// entry point for single-pixel debug runs
+extern "C" __global__ void __raygen__debug()
+{
+    const Scene& scene = pipeline_params.scene;
+    const OptixRaytracerSettings& settings = pipeline_params.settings;
+    const SinglePixelDebug& debug_settings = pipeline_params.debug;
+
+    PerRayData& prd = get_ray_data();
+    prd.sampler = sample::OptixSampler::from_sampler(settings.sampler, settings.seed);
+
+    for (auto sample_index = debug_settings.sample_index_lo; sample_index < debug_settings.sample_index_hi; sample_index += 1)
+    {
+        prd.sampler.start_sample(make_uint2(debug_settings.x, debug_settings.y), sample_index);
+        Ray camera_ray = generate_ray(*scene.camera, debug_settings.x, debug_settings.y, &prd.sampler);
+        float3 radiance = ray_radiance(camera_ray);
+
+        pipeline_params.radiance[sample_index - debug_settings.sample_index_lo] = make_float4(
+            radiance.x,
+            radiance.y,
+            radiance.z,
+            1.0f
+        );
+    }
+}
+
 
 // one miss program for radiance rays
 extern "C" __global__ void __miss__radiance() {

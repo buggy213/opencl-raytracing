@@ -4,6 +4,7 @@
 #include <optix_types.h>
 #include <string_view>
 
+#include "kernel_params.hpp"
 #include "lib_optix_types.h"
 #include "types.h"
 
@@ -138,7 +139,8 @@ struct PathtracerPipeline {
 PathtracerPipeline makePathtracerPipelineImpl(
     OptixDeviceContext ctx,
     const uint8_t* progData,
-    size_t progSize
+    size_t progSize,
+    bool debug
 );
 
 void launchPathtracerPipelineImpl(
@@ -147,7 +149,8 @@ void launchPathtracerPipelineImpl(
     OptixRaytracerSettings settings,
     Scene scene,
     OptixTraversableHandle rootHandle,
-    Vec4* radiance
+    Vec4* radiance,
+    std::optional<SinglePixelDebug> debug
 );
 
 void releasePathtracerPipelineImpl(PathtracerPipeline& pipeline);

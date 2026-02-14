@@ -202,14 +202,30 @@ fn main() {
     if let Some(RenderCommand::Pixel { x, y, sample_count, sample_offset }) = render_command {
         let low = sample_offset.unwrap_or(0);
         let high = low + sample_count.unwrap_or(1);
-        for i in low..high {
-            let pixel = render_single_pixel(&scene, &raytracer_settings, x, y, Some(i));
+        
+        let outputs: Vec<_> = match cli_args.backend {
+            Backend::Cpu => {
+                (low..high).map(|i| raytracing_cpu::render_single_pixel(&scene, &raytracer_settings, x, y, Some(i))).collect()
+            },
+            Backend::Optix => {
+                #[cfg(feature = "optix")]
+                {
+                    raytracing_optix::render_single_pixel(&scene, &raytracer_settings, x, y, (low..high))
+                }
+                #[cfg(not(feature = "optix"))]
+                {
+                    eprintln!("error: OptiX backend not compiled (enable 'optix' feature)");
+                    std::process::exit(1);
+                }
+            },
+        };
 
-            println!("sample {i}");
-            println!("hit: {}", pixel.hit);
-            println!("uv: {}", pixel.uv);
-            println!("normal: {}", pixel.normal);
-            println!("radiance: {}", pixel.radiance);
+        for output in outputs {
+            println!("sample {}", output.sample_index);
+            println!("hit: {}", output.hit);
+            println!("uv: {}", output.uv);
+            println!("normal: {}", output.normal);
+            println!("radiance: {}", output.radiance);
         }
 
         return;

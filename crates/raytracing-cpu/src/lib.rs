@@ -7,7 +7,7 @@ use indicatif::{ProgressState, ProgressStyle};
 use lights::{light_radiance, occluded, sample_light};
 use materials::CpuMaterial;
 use ray::Ray;
-use raytracing::{geometry::{AABB, Matrix4x4, Vec2, Vec3}, renderer::{AovFlags, RaytracerSettings, RenderOutput}, scene::{Camera, Scene}};
+use raytracing::{geometry::{AABB, Matrix4x4, Vec2, Vec3}, renderer::{AovFlags, RaytracerSettings, RenderOutput, SinglePixelOutput}, scene::{Camera, Scene}};
 use tracing::{info, trace_span, warn};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
@@ -844,14 +844,6 @@ pub fn render(
     render_output
 }
 
-#[derive(Debug)]
-pub struct SinglePixelOutput {
-    pub hit: bool,
-    pub uv: Vec2,
-    pub normal: Vec3,
-    pub radiance: Vec3,
-}
-
 pub fn render_single_pixel(
     scene: &Scene, 
     raytracer_settings: &RaytracerSettings,
@@ -917,5 +909,11 @@ pub fn render_single_pixel(
         raytracer_settings
     );
 
-    SinglePixelOutput { hit: aovs.hit, uv: aovs.uv, normal: aovs.normals, radiance }
+    SinglePixelOutput { 
+        sample_index: sample_index as u32,
+        hit: aovs.hit, 
+        uv: aovs.uv, 
+        normal: aovs.normals, 
+        radiance 
+    }
 }

@@ -43,6 +43,8 @@ pub(crate) use detail::{
     PathtracerPipelineWrapper,
     makePathtracerPipeline,
     launchPathtracerPipeline,
+    SinglePixelDebug,
+    launchPathtracerPipelineDebug,
 
     HostGeometryData,
     DeviceGeometryData,

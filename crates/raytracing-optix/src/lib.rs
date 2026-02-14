@@ -6,15 +6,14 @@
 //! So, interfacing w/ OptiX + CUDA (runtime + driver) is done in C++
 //! Can always move code into Rust later if need be...
 
-use std::{collections::HashMap, time::Instant};
+use std::{collections::HashMap, ops::Range, time::Instant};
 
 use indicatif::ProgressStyle;
 use tracing::{info, trace_span};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use raytracing::{
-    renderer::{AovFlags, RaytracerSettings, RenderOutput},
-    scene::Scene,
+    geometry::{Vec2, Vec3}, renderer::{AovFlags, RaytracerSettings, RenderOutput, SinglePixelOutput}, scene::Scene
 };
 
 use crate::scene::OptixScene;
@@ -113,6 +112,7 @@ pub fn render(
             optix_ctx,
             pathtracer_kernel.as_ptr(),
             pathtracer_kernel.len(),
+            false,
         )
     };
 
@@ -167,4 +167,68 @@ pub fn render(
     let radiance = radiance.iter().map(|v| raytracing::geometry::Vec3(v.x, v.y, v.z)).collect();
     render_output.beauty = Some(radiance);
     render_output
+}
+
+pub fn render_single_pixel(
+    scene: &Scene, 
+    raytracer_settings: &RaytracerSettings,
+    x: u32,
+    y: u32,
+    sample_indices: Range<u32>,
+) -> Vec<SinglePixelOutput> {
+    // SAFETY: no preconditions
+    let optix_ctx = unsafe { optix::initOptix(true) };
+
+    let pathtracer_kernel = optix::kernels::PATHTRACER_DEBUG;
+    let pathtracer_pipeline = unsafe {
+        optix::makePathtracerPipeline(
+            optix_ctx,
+            pathtracer_kernel.as_ptr(),
+            pathtracer_kernel.len(),
+            true
+        )
+    };
+
+    let mut scene_sbt = sbt::PathtracerSbtBuilder::new(scene);
+    let mut primitive_to_sbt_map = HashMap::new();
+    let scene_as = scene::prepare_optix_acceleration_structures(optix_ctx, scene, &mut scene_sbt, &mut primitive_to_sbt_map);
+    let scene_sbt = scene_sbt.finalize(pathtracer_pipeline);
+    
+    let scene_textures = scene::prepare_optix_textures(scene);
+    let scene_data = scene::prepare_optix_scene_data(scene, scene_textures, &primitive_to_sbt_map);
+    let optix_scene = OptixScene::new(&scene_data);
+    let optix_settings: optix::OptixRaytracerSettings = raytracer_settings.clone().into();
+
+    let zero: optix::Vec4 = raytracing::geometry::Vec4::zero().into();
+    let mut radiance = vec![
+        zero;
+        sample_indices.len()
+    ];
+    unsafe {
+        optix::launchPathtracerPipelineDebug(
+            pathtracer_pipeline,
+            scene_sbt.ptr,
+            optix_settings,
+            optix_scene.ffi,
+            scene_as.handle,
+            radiance.as_mut_ptr(),
+            optix::SinglePixelDebug { 
+                x, 
+                y, 
+                sample_index_lo: sample_indices.start, 
+                sample_index_hi: sample_indices.end 
+            }
+        );
+    };
+
+    radiance.into_iter()
+        .enumerate()
+        .map(|(idx, radiance)| SinglePixelOutput { 
+            sample_index: idx as u32, 
+            hit: true, 
+            uv: Vec2::zero(), 
+            normal: Vec3::zero(), 
+            radiance: Vec3(radiance.x, radiance.y, radiance.z) 
+        })
+        .collect()
 }
