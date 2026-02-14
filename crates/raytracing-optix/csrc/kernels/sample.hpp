@@ -65,6 +65,21 @@ struct OptixSamplerStratified
 
     unsigned int dimension;
     unsigned int sample_index;
+
+    __device__ float sample_uniform()
+    {
+        unsigned int total_samples = x_strata * y_strata;
+
+        curanddx::uniform uniform {0.0f, 1.0f};
+        unsigned long long hash = hash_u32(dimension);
+        hash = hash_u32(seed, hash);
+
+        unsigned int strata = permute(sample_index, total_samples, hash);
+        float delta = jitter ? uniform.generate(rng) : 0.5f;
+
+        dimension += 1;
+        return (strata + delta) / total_samples;
+    }
 };
 
 struct OptixSampler
@@ -149,20 +164,32 @@ struct OptixSampler
             }
             __device__ float operator()(OptixSamplerStratified& stratified)
             {
-                unsigned int total_samples = stratified.x_strata * stratified.y_strata;
-
-                curanddx::uniform uniform {0.0f, 1.0f};
-                unsigned long long hash = hash_u32(stratified.dimension);
-                hash = hash_u32(stratified.seed, hash);
-
-                unsigned int strata = permute(stratified.sample_index, total_samples, hash);
-                float delta = stratified.jitter ? uniform.generate(stratified.rng) : 0.5f;
-
-                stratified.dimension += 1;
-                return (strata + delta) / total_samples;
+                return stratified.sample_uniform();
             }
         };
         return cuda::std::visit(Visitor{}, inner);
+    }
+
+    // [lo, hi)
+    // @raytracing_cpu::sample::CpuSampler::sample_u32
+    __device__ u32 sample_u32(u32 lo, u32 hi)
+    {
+        struct Visitor
+        {
+            u32 lo, hi;
+            __device__ u32 operator()(OptixSamplerIndependent& independent)
+            {
+                return lo + independent.rng.generate() % (hi - lo);
+            }
+            __device__ u32 operator()(OptixSamplerStratified& stratified)
+            {
+                float u = stratified.sample_uniform();
+                u32 offset = u * (hi - lo);
+                return lo + offset;
+            }
+        };
+
+        return cuda::std::visit(Visitor{ lo, hi }, inner);
     }
 
     __device__ float2 sample_uniform2()

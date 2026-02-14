@@ -24,9 +24,7 @@ NVCCFLAGS := \
 	-arch=compute_86 \
 	-I$(SHARED_HEADERS) \
 	-I$(OPTIX_INCLUDE_DIR) \
-	-I$(MATHDX_INCLUDE_DIR) \
-	-Werror all-warnings \
-	--diag-suppress 20044 # extern "C" used for global variable is blessed by OptiX programming guide
+	-I$(MATHDX_INCLUDE_DIR)
 
 
 ifeq ($(origin OUT_DIR),undefined)
@@ -44,6 +42,8 @@ OPTIXIR := $(KERNELS:.cu=.optixir)
 all: $(OPTIXIR)
 
 else
+NVCCFLAGS += -Werror all-warnings \
+             --diag-suppress 20044 # extern "C" used for global variable is blessed by OptiX programming guide
 OPTIXIR := $(addprefix $(OUT_DIR)/,$(KERNELS:.cu=.optixir))
 OPTIXIR_DEBUG := $(addprefix $(OUT_DIR)/,$(KERNELS:.cu=.debug.optixir))
 PTX := $(addprefix $(OUT_DIR)/,$(KERNELS:.cu=.ptx))

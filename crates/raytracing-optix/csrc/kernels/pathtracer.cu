@@ -134,7 +134,7 @@ extern "C" __global__ void __miss__radiance() {
     // todo: environment map
     RadianceRayPayloadMSWrite payload_out = {};
     payload_out.done = true;
-    payload_out.radiance = make_float3(1.0f, 0.0f, 0.0f);
+    payload_out.radiance = make_float3(0.0f, 0.0f, 0.0f);
     writeRadiancePayloadMS(payload_out);
 }
 

@@ -17,4 +17,9 @@ inline __device__ cuda::std::pair<float3, float3> make_orthonormal_basis(float3 
     return cuda::std::make_pair(x, y);
 }
 
+inline __device__ float tri_area(float3 p0, float3 p1, float3 p2)
+{
+    return length(cross(p1 - p0, p2 - p0)) / 2.0f;
+}
+
 }
