@@ -86,12 +86,6 @@ use detail::{
     CameraType_CameraVariant_PinholePerspective,
     CameraType_CameraVariant_ThinLensPerspective,
 
-    Light_LightKind,
-    Light_LightVariant,
-    Light_LightVariant_PointLight,
-    Light_LightVariant_DirectionLight,
-    Light_LightVariant_DiffuseAreaLight,
-
     Sampler_SamplerKind,
     Sampler_SamplerVariant,
     Sampler_SamplerVariant_Independent,
@@ -111,6 +105,12 @@ pub(crate) use detail::{
     Material_MaterialKind,
     Material_MaterialVariant,
     Material_MaterialVariant_Diffuse,
+
+    Light_LightKind,
+    Light_LightVariant,
+    Light_LightVariant_PointLight,
+    Light_LightVariant_DirectionLight,
+    Light_LightVariant_DiffuseAreaLight,
 };
 
 use detail::{
@@ -385,44 +385,6 @@ impl From<raytracing::sampling::Sampler> for Sampler {
                     variant: Sampler_SamplerVariant {
                         stratified: Sampler_SamplerVariant_Stratified { jitter, x_strata, y_strata }
                     } 
-                }
-            },
-        }
-    }
-}
-
-impl From<raytracing::lights::Light> for Light {
-    fn from(value: raytracing::lights::Light) -> Self {
-        match value {
-            raytracing::lights::Light::PointLight { position, intensity } => {
-                Light { 
-                    kind: Light_LightKind::PointLight, 
-                    variant: Light_LightVariant { 
-                        point_light: Light_LightVariant_PointLight { position: position.into(), intensity: intensity.into() } 
-                    } 
-                }
-            },
-            raytracing::lights::Light::DirectionLight { direction, radiance } => {
-                Light {
-                    kind: Light_LightKind::DirectionLight,
-                    variant: Light_LightVariant {
-                        direction_light: Light_LightVariant_DirectionLight {
-                            direction: direction.into(),
-                            radiance: radiance.into(),
-                        }
-                    }
-                }
-            },
-            raytracing::lights::Light::DiffuseAreaLight { prim_id: _, radiance, light_to_world } => {
-                Light {
-                    kind: Light_LightKind::DiffuseAreaLight,
-                    variant: Light_LightVariant {
-                        area_light: Light_LightVariant_DiffuseAreaLight {
-                            prim_id: 0, // TODO: support area light sampling
-                            radiance: radiance.into(),
-                            light_to_world: light_to_world.into(),
-                        }
-                    }
                 }
             },
         }

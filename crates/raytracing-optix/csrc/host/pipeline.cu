@@ -481,6 +481,7 @@ __host__ void launchPathtracerPipelineImpl(
         .textures = static_cast<const Texture*>(d_textures)
     };
     pipelineParams.root_handle = rootHandle;
+    pipelineParams.sbt_hitgroup_records = reinterpret_cast<HitgroupRecord*>(sbt.sbt.hitgroupRecordBase);
     pipelineParams.ray_datas = static_cast<PathtracerPerRayData*>(d_ray_datas);
     pipelineParams.settings = settings;
     pipelineParams.scene_aabb = getAabb(pipeline.ctx, rootHandle);

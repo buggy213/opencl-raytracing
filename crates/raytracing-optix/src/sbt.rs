@@ -2,9 +2,9 @@
 
 use std::marker::PhantomData;
 
-use raytracing::{geometry::Shape, materials::Material, scene::Scene};
+use raytracing::{materials::Material, scene::Scene};
 
-use crate::{optix::{self, AovPipelineWrapper, AovSbtWrapper, GeometryKind, Material_MaterialVariant, Material_MaterialVariant_Diffuse, PathtracerPipelineWrapper, PathtracerSbtWrapper, Vec2SliceWrap, Vec3SliceWrap, Vec3uSliceWrap, addHitRecordAovSbt, addHitRecordPathtracerSbt, finalizeAovSbt, finalizePathtracerSbt, makeAovSbt, makePathtracerSbt, releaseAovSbt, releasePathtracerSbt}, scene::SbtVisitor};
+use crate::{optix::{self, AovPipelineWrapper, AovSbtWrapper, Material_MaterialVariant, Material_MaterialVariant_Diffuse, PathtracerPipelineWrapper, PathtracerSbtWrapper, addHitRecordAovSbt, addHitRecordPathtracerSbt, finalizeAovSbt, finalizePathtracerSbt, makeAovSbt, makePathtracerSbt, releaseAovSbt, releasePathtracerSbt}, scene::SbtVisitor};
 
 // PhantomData tells borrowck that AovSbtWrapper acts as though it references scene data (it does)
 // Once finalized, the AovSbt doesn't reference scene data anymore, and lifetime annotation is unneeded

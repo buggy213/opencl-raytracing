@@ -2,10 +2,10 @@
 //! that calls into C++ in order to generate hierarchy of Geometry-AS / Instance-AS for OptiX.
 //! We do it this way to avoid having to make the whole scene description #[repr(C)]
 
-use std::{marker::PhantomData, os::raw::c_void};
+use std::{collections::HashMap, marker::PhantomData, os::raw::c_void};
 
 use image::metadata::Cicp;
-use raytracing::{geometry::Shape, materials::Material, scene::{AggregatePrimitiveIndex, Primitive, Scene}};
+use raytracing::{geometry::Shape, lights::Light, materials::Material, scene::{AggregatePrimitiveIndex, BasicPrimitiveIndex, Primitive, Scene}};
 use tracing::warn;
 
 use crate::optix::{self, CudaArray, OptixAccelerationStructure, Texture, Texture_TextureVariant, Texture_TextureVariant_ConstantTexture, Texture_TextureVariant_ImageTexture, Vec3SliceWrap, Vec3uSliceWrap, makeCudaArray, makeCudaTexture};
@@ -124,11 +124,13 @@ pub(crate) fn prepare_optix_acceleration_structures(
     ctx: optix::OptixDeviceContext,
     scene: &Scene,
     sbt_visitor: &mut dyn SbtVisitor,
+    primitive_to_sbt: &mut HashMap<BasicPrimitiveIndex, u32>
 ) -> OptixAccelerationStructure { 
     fn recursive_helper(
         ctx: optix::OptixDeviceContext,
         scene: &Scene,
         sbt_visitor: &mut dyn SbtVisitor, 
+        primitive_to_sbt: &mut HashMap<BasicPrimitiveIndex, u32>,
         aggregate_primitive_index: AggregatePrimitiveIndex
     ) -> OptixAccelerationStructure {
 
@@ -148,6 +150,7 @@ pub(crate) fn prepare_optix_acceleration_structures(
                     let leaf_gas_sbt_offset = sbt_visitor.visit_geometry_as(leaf_geometry_data, leaf_gas_material, basic.area_light);
                     descendant_acceleration_structures.push(leaf_gas);
                     descendant_sbt_offsets.push(leaf_gas_sbt_offset);
+                    primitive_to_sbt.insert(primitive_index.try_into().unwrap(), leaf_gas_sbt_offset);
                 }
                 Primitive::Aggregate(_) => {
                     let aggregate_index = primitive_index.try_into().expect("this should be an aggregate index");
@@ -155,6 +158,7 @@ pub(crate) fn prepare_optix_acceleration_structures(
                         ctx,
                         scene,
                         sbt_visitor,
+                        primitive_to_sbt,
                         aggregate_index
                     );
                     let _child_ias_sbt_offset = sbt_visitor.visit_instance_as();
@@ -176,6 +180,7 @@ pub(crate) fn prepare_optix_acceleration_structures(
         ctx,
         scene,
         sbt_visitor,
+        primitive_to_sbt,
         scene.root_index()
     )
 }
@@ -331,6 +336,52 @@ pub(crate) fn prepare_optix_textures(
     optix_textures
 }
 
+fn prepare_optix_lights(
+    scene: &Scene,
+    primitive_to_sbt: &HashMap<BasicPrimitiveIndex, u32>
+) -> Vec<optix::Light> {
+    let mut optix_lights = Vec::with_capacity(scene.lights.len());
+    for light in &scene.lights {
+        let optix_light = match light {
+            Light::PointLight { position, intensity } => {
+                optix::Light { 
+                    kind: optix::Light_LightKind::PointLight, 
+                    variant: optix::Light_LightVariant { 
+                        point_light: optix::Light_LightVariant_PointLight { position: (*position).into(), intensity: (*intensity).into() } 
+                    } 
+                }
+            },
+            Light::DirectionLight { direction, radiance } => {
+                optix::Light {
+                    kind: optix::Light_LightKind::DirectionLight,
+                    variant: optix::Light_LightVariant {
+                        direction_light: optix::Light_LightVariant_DirectionLight {
+                            direction: (*direction).into(),
+                            radiance: (*radiance).into(),
+                        }
+                    }
+                }
+            },
+            Light::DiffuseAreaLight { prim_id, radiance, light_to_world } => {
+                optix::Light {
+                    kind: optix::Light_LightKind::DiffuseAreaLight,
+                    variant: optix::Light_LightVariant {
+                        area_light: optix::Light_LightVariant_DiffuseAreaLight {
+                            prim_id: primitive_to_sbt[prim_id],
+                            radiance: (*radiance).into(),
+                            light_to_world: (*light_to_world).into(),
+                        }
+                    }
+                }
+            },
+        };
+
+        optix_lights.push(optix_light);
+    }
+
+    optix_lights
+}
+
 pub(crate) struct OptixSceneData {
     pub(crate) optix_camera: optix::Camera,
     pub(crate) optix_lights: Vec<optix::Light>,
@@ -340,10 +391,11 @@ pub(crate) struct OptixSceneData {
 pub(crate) fn prepare_optix_scene_data(
     scene: &Scene,
     optix_textures: Vec<optix::Texture>,
+    primitive_to_sbt: &HashMap<BasicPrimitiveIndex, u32>,
 ) -> OptixSceneData {
     OptixSceneData { 
         optix_camera: scene.camera.clone().into(), 
-        optix_lights: scene.lights.iter().cloned().map(Into::into).collect(), 
+        optix_lights: prepare_optix_lights(scene, primitive_to_sbt), 
         optix_textures 
     }
 }

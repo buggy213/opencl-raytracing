@@ -7,6 +7,7 @@
 #include <optix_device.h>
 
 #include "types.h"
+#include "sbt.hpp"
 
 struct AovPipelineParams {
     float3* normals;
@@ -15,7 +16,7 @@ struct AovPipelineParams {
 };
 
 // this field is deliberately opaque to the host C++ code, which is only responsible for allocating it
-// a static assert within the kernel code ensures that it is sufficiently large for actual contents
+// a static assert within the kernel code ensures that it is matched in layout with actual contents
 struct PathtracerPerRayData {
     __align__(8) char data[64];
 };
@@ -27,6 +28,7 @@ struct PathtracerPipelineParams
     OptixAabb scene_aabb;
     float scene_diameter;
     OptixTraversableHandle root_handle;
+    HitgroupRecord *sbt_hitgroup_records;
     PathtracerPerRayData* ray_datas;
     OptixRaytracerSettings settings;
 };

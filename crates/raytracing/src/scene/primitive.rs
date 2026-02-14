@@ -41,14 +41,14 @@ use crate::geometry::{Shape, Transform};
 /// Index into the owning Scene's arrays
 pub type MaterialIndex = u32;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BasicPrimitiveIndex(pub u32);
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TransformPrimitiveIndex(pub u32);
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AggregatePrimitiveIndex(pub u32);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PrimitiveIndex {
     BasicPrimitiveIndex(BasicPrimitiveIndex),
     TransformPrimitiveIndex(TransformPrimitiveIndex),

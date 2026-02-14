@@ -6,7 +6,7 @@
 //! So, interfacing w/ OptiX + CUDA (runtime + driver) is done in C++
 //! Can always move code into Rust later if need be...
 
-use std::time::Instant;
+use std::{collections::HashMap, time::Instant};
 
 use indicatif::ProgressStyle;
 use tracing::{info, trace_span};
@@ -52,7 +52,8 @@ pub fn render_normals(
     };
 
     let mut scene_sbt = sbt::AovSbtBuilder::new(scene);
-    let scene_as = scene::prepare_optix_acceleration_structures(optix_ctx, scene, &mut scene_sbt);
+    let mut primitive_to_sbt_map = HashMap::new();
+    let scene_as = scene::prepare_optix_acceleration_structures(optix_ctx, scene, &mut scene_sbt, &mut primitive_to_sbt_map);
     let scene_sbt = scene_sbt.finalize(normals_pipeline);
 
     info!("setup: {:.2}s", t.elapsed().as_secs_f64());
@@ -119,14 +120,15 @@ pub fn render(
     let t = Instant::now();
 
     let mut scene_sbt = sbt::PathtracerSbtBuilder::new(scene);
-    let scene_as = scene::prepare_optix_acceleration_structures(optix_ctx, scene, &mut scene_sbt);
+    let mut primitive_to_sbt_map = HashMap::new();
+    let scene_as = scene::prepare_optix_acceleration_structures(optix_ctx, scene, &mut scene_sbt, &mut primitive_to_sbt_map);
     let scene_sbt = scene_sbt.finalize(pathtracer_pipeline);
 
     info!("acceleration structures: {:.2}s", t.elapsed().as_secs_f64());
     let t = Instant::now();
 
     let scene_textures = scene::prepare_optix_textures(scene);
-    let scene_data = scene::prepare_optix_scene_data(scene, scene_textures);
+    let scene_data = scene::prepare_optix_scene_data(scene, scene_textures, &primitive_to_sbt_map);
     let optix_scene = OptixScene::new(&scene_data);
     let optix_settings: optix::OptixRaytracerSettings = raytracer_settings.clone().into();
 
