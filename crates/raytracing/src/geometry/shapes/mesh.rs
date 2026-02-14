@@ -142,7 +142,21 @@ impl Mesh {
                         Vec3u(indices[0], indices[i], indices[i + 1])
                     };
 
-                    tris.push(tri);
+                    // check for degenerate triangle
+                    let va = vertices[tri.0 as usize];
+                    let vb = vertices[tri.1 as usize];
+                    let vc = vertices[tri.2 as usize];
+                    let ab = vb - va;
+                    let ac = vc - va;
+                    let area = 0.5 * Vec3::cross(ab, ac).length();
+                    if area == 0.0 || area.is_nan() {
+                        tracing::warn!(
+                            "degenerate triangle found in PLY mesh (tri: {:?}, positions: {:?}, {:?}, {:?}, area: {:?})",
+                            tri, va, vb, vc, area
+                        );
+                    } else {
+                        tris.push(tri);
+                    }
                 }
             }
         }

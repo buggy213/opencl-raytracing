@@ -540,7 +540,13 @@ __host__ void launchPathtracerPipelineImpl(
     cudaStreamSynchronize(stream);
     cudaStreamDestroy(stream);
 
-    cudaMemcpy(radiance, d_radiance, sizeof(float4) * width * height, cudaMemcpyDeviceToHost);
+    if (debug) {
+        size_t samples = debug->sample_index_hi - debug->sample_index_lo;
+        cudaMemcpy(radiance, d_radiance, sizeof(float4) * samples, cudaMemcpyDeviceToHost);
+    }
+    else {
+        cudaMemcpy(radiance, d_radiance, sizeof(float4) * width * height, cudaMemcpyDeviceToHost);
+    }
 
     cudaFree(d_radiance);
     cudaFree(d_camera);
