@@ -13,3 +13,4 @@ tracing-indicatif = "0.3.14"
 [build-dependencies]
 cmake = "0.1"
 bindgen = "0.72.1"
+num_cpus = { workspace = true }
