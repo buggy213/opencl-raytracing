@@ -208,7 +208,7 @@ pub(crate) fn prepare_optix_textures(
             _ => image_buffer,
         };
 
-        let (data_ptr, layout) = match image_buffer.color() {
+        let (data_ptr, layout, bytes_per_sample) = match image_buffer.color() {
             image::ColorType::L8
             | image::ColorType::La8
             | image::ColorType::Rgb8
@@ -218,7 +218,7 @@ pub(crate) fn prepare_optix_textures(
                     unreachable!("ImageBuffer should always be row-major packed data");
                 }
 
-                (flat.samples.as_ptr() as *const c_void, flat.layout)
+                (flat.samples.as_ptr() as *const c_void, flat.layout, size_of::<u8>())
             },
             image::ColorType::L16
             | image::ColorType::La16
@@ -229,7 +229,7 @@ pub(crate) fn prepare_optix_textures(
                     unreachable!("ImageBuffer should always be row-major packed data");
                 }
 
-                (flat.samples.as_ptr() as *const c_void, flat.layout)
+                (flat.samples.as_ptr() as *const c_void, flat.layout, size_of::<u16>())
             },
             image::ColorType::Rgb32F
             | image::ColorType::Rgba32F => {
@@ -237,8 +237,8 @@ pub(crate) fn prepare_optix_textures(
                 if !flat.is_normal(image::flat::NormalForm::RowMajorPacked) {
                     unreachable!("ImageBuffer should always be row-major packed data");
                 }
-
-                (flat.samples.as_ptr() as *const c_void, flat.layout)
+                
+                (flat.samples.as_ptr() as *const c_void, flat.layout, size_of::<f32>())
             },
             
             _ => unimplemented!("unsupported dynamic image format for optix texture upload"),
@@ -255,10 +255,11 @@ pub(crate) fn prepare_optix_textures(
             _ => unimplemented!("unsupported dynamic image format for optix texture upload"),
         };
 
+        let pitch = layout.height_stride * bytes_per_sample;
         let cuda_array = unsafe {
             makeCudaArray(
                 data_ptr, 
-                layout.height_stride, 
+                pitch, 
                 layout.width as usize, 
                 layout.height as usize, 
                 fmt

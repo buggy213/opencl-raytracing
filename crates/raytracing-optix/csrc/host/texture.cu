@@ -90,7 +90,7 @@ __host__ cudaArray_t createCudaArray(const void* src, size_t pitch, size_t width
     cudaArray_t backing_array;
     cudaChannelFormatDesc channel_format = fromTextureFormat(fmt);
 
-    CUDA_CHECK(cudaMallocArray(&backing_array, &channel_format, pitch, height));
+    CUDA_CHECK(cudaMallocArray(&backing_array, &channel_format, width, height));
 
     cudaError_t err = cudaMemcpy2DToArray(
         backing_array,
@@ -98,7 +98,7 @@ __host__ cudaArray_t createCudaArray(const void* src, size_t pitch, size_t width
         0,
         src,
         pitch,
-        width,
+        pitch,
         height,
         cudaMemcpyHostToDevice
     );
