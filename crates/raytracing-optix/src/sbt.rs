@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use raytracing::{geometry::Shape, materials::Material, scene::Scene};
 
-use crate::{optix::{self, AovPipelineWrapper, AovSbtWrapper, GeometryData, GeometryKind, Material_MaterialVariant, Material_MaterialVariant_Diffuse, PathtracerPipelineWrapper, PathtracerSbtWrapper, Vec2SliceWrap, Vec3SliceWrap, Vec3uSliceWrap, addHitRecordAovSbt, addHitRecordPathtracerSbt, finalizeAovSbt, finalizePathtracerSbt, makeAovSbt, makePathtracerSbt, releaseAovSbt, releasePathtracerSbt}, scene::SbtVisitor};
+use crate::{optix::{self, AovPipelineWrapper, AovSbtWrapper, GeometryKind, Material_MaterialVariant, Material_MaterialVariant_Diffuse, PathtracerPipelineWrapper, PathtracerSbtWrapper, Vec2SliceWrap, Vec3SliceWrap, Vec3uSliceWrap, addHitRecordAovSbt, addHitRecordPathtracerSbt, finalizeAovSbt, finalizePathtracerSbt, makeAovSbt, makePathtracerSbt, releaseAovSbt, releasePathtracerSbt}, scene::SbtVisitor};
 
 // PhantomData tells borrowck that AovSbtWrapper acts as though it references scene data (it does)
 // Once finalized, the AovSbt doesn't reference scene data anymore, and lifetime annotation is unneeded
@@ -16,51 +16,6 @@ pub(crate) struct AovSbtBuilder<'scene> {
 
 pub(crate) struct AovSbt {
     pub(crate) ptr: AovSbtWrapper
-}
-
-fn geometry_data_from_shape(shape: &Shape) -> GeometryData {
-    match shape {
-        Shape::TriangleMesh(mesh) => {
-            let tris: Vec3uSliceWrap = mesh.tris.as_slice().into();
-            let (tris, num_tris) = (tris.as_ptr(), tris.len());
-            
-            let num_vertices = mesh.vertices.len();
-            let normals = if mesh.normals.len() == mesh.vertices.len() {
-                let normals: Vec3SliceWrap = mesh.normals.as_slice().into();
-                normals.as_ptr()
-            }
-            else {
-                std::ptr::null()
-            };
-
-            let uvs = if mesh.uvs.len() == mesh.vertices.len() {
-                let uvs: Vec2SliceWrap = mesh.uvs.as_slice().into();
-                uvs.as_ptr()
-            }
-            else {
-                std::ptr::null()
-            };
-
-            GeometryData {
-                kind: GeometryKind::TRIANGLE,
-                num_tris,
-                tris,
-                num_vertices,
-                normals,
-                uvs,
-            }
-        },
-        Shape::Sphere { .. } => {
-            GeometryData {
-                kind: GeometryKind::SPHERE,
-                num_tris: 0,
-                tris: std::ptr::null(),
-                num_vertices: 0,
-                normals: std::ptr::null(),
-                uvs: std::ptr::null(),
-            }
-        },
-    }
 }
 
 fn optix_material_from_material(material: &Material) -> optix::Material {
@@ -105,8 +60,7 @@ impl<'scene> AovSbtBuilder<'scene> {
         }
     }
 
-    fn add_hitgroup_record(&mut self, shape: &Shape) {
-        let geometry_data = geometry_data_from_shape(shape);
+    fn add_hitgroup_record(&mut self, geometry_data: optix::DeviceGeometryData) {
 
         let sbt_entries = unsafe { addHitRecordAovSbt(self.ptr, geometry_data) };
 
@@ -127,9 +81,9 @@ impl Drop for AovSbt {
 }
 
 impl SbtVisitor for AovSbtBuilder<'_> {
-    fn visit_geometry_as(&mut self, shape: &Shape, _material: &Material, _area_light: Option<u32>) -> u32 {
+    fn visit_geometry_as(&mut self, geometry_data: optix::DeviceGeometryData, _material: &Material, _area_light: Option<u32>) -> u32 {
         let old_sbt_offset = self.current_sbt_offset;
-        self.add_hitgroup_record(shape);
+        self.add_hitgroup_record(geometry_data);
 
         old_sbt_offset
     }
@@ -160,8 +114,7 @@ impl<'scene> PathtracerSbtBuilder<'scene> {
         }
     }
 
-    fn add_hitgroup_record(&mut self, shape: &Shape, material: &Material, area_light: Option<u32>) {
-        let geometry_data = geometry_data_from_shape(shape);
+    fn add_hitgroup_record(&mut self, geometry_data: optix::DeviceGeometryData, material: &Material, area_light: Option<u32>) {
         let optix_material = optix_material_from_material(material);
         let area_light = if let Some(idx) = area_light {
             idx as i32
@@ -190,9 +143,9 @@ impl Drop for PathtracerSbt {
 }
 
 impl SbtVisitor for PathtracerSbtBuilder<'_> {
-    fn visit_geometry_as(&mut self, shape: &Shape, material: &Material, area_light: Option<u32>) -> u32 {
+    fn visit_geometry_as(&mut self, geometry_data: optix::DeviceGeometryData, material: &Material, area_light: Option<u32>) -> u32 {
         let old_sbt_offset = self.current_sbt_offset;
-        self.add_hitgroup_record(shape, material, area_light);
+        self.add_hitgroup_record(geometry_data, material, area_light);
 
         old_sbt_offset
     }

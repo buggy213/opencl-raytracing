@@ -88,10 +88,7 @@ __host__ OptixAccelerationStructure makeSphereGAS(
 
 __host__ OptixAccelerationStructure makeMeshGAS(
     OptixDeviceContext ctx,
-    const Vec3* vertices, /* packed */
-    size_t verticesLen, /* number of float3's */
-    const Vec3u* tris, /* packed */
-    size_t trisLen /* number of uint3's */
+    struct DeviceGeometryData geometry_data
 ) {
     OptixAccelBuildOptions accelOptions;
     OptixBuildInput buildInput;
@@ -103,14 +100,6 @@ __host__ OptixAccelerationStructure makeMeshGAS(
 
     memset(&buildInput, 0, sizeof(buildInput));
 
-    void* d_vertices;
-    void* d_tris;
-
-    cudaMalloc(&d_vertices, sizeof(Vec3) * verticesLen);
-    cudaMalloc(&d_tris, sizeof(Vec3u) * trisLen);
-    cudaMemcpy(d_vertices, vertices, sizeof(Vec3) * verticesLen, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_tris, tris, sizeof(Vec3u) * trisLen, cudaMemcpyHostToDevice);
-
     buildInput.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
     OptixBuildInputTriangleArray& triangleBuildInput = buildInput.triangleArray;
     triangleBuildInput.numSbtRecords = 1;
@@ -119,13 +108,13 @@ __host__ OptixAccelerationStructure makeMeshGAS(
     triangleBuildInput.flags = &flags;
 
     // runtime / device APIs are interoperable, so this should "just work"
-    triangleBuildInput.vertexBuffers = (CUdeviceptr*)(&d_vertices);
-    triangleBuildInput.numVertices = verticesLen;
+    triangleBuildInput.vertexBuffers = reinterpret_cast<const CUdeviceptr*>(&geometry_data.d_vertices);
+    triangleBuildInput.numVertices = geometry_data.num_vertices;
     triangleBuildInput.vertexFormat = OPTIX_VERTEX_FORMAT_FLOAT3;
     triangleBuildInput.vertexStrideInBytes = sizeof(float) * 3;
 
-    triangleBuildInput.indexBuffer = (CUdeviceptr)d_tris;
-    triangleBuildInput.numIndexTriplets = trisLen;
+    triangleBuildInput.indexBuffer = reinterpret_cast<CUdeviceptr>(geometry_data.d_tris);
+    triangleBuildInput.numIndexTriplets = geometry_data.num_tris;
     triangleBuildInput.indexFormat = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
     triangleBuildInput.indexStrideInBytes = sizeof(unsigned int) * 3;
     triangleBuildInput.preTransform = 0;
@@ -159,8 +148,6 @@ __host__ OptixAccelerationStructure makeMeshGAS(
 
     cudaStreamSynchronize(stream);
     cudaStreamDestroy(stream);
-    cudaFree(d_vertices);
-    cudaFree(d_tris);
     cudaFree(d_temp);
 
     // we need to return d_output and output together

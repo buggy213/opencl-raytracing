@@ -20,6 +20,8 @@ struct HitgroupRecord {
     __align__(OPTIX_SBT_RECORD_ALIGNMENT) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
 
     struct MeshData {
+        size_t num_tris;
+        float3* vertices;
         uint3* indices;
         float3* normals;
         float2* uvs;

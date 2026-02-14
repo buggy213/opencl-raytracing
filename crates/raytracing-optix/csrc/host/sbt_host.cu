@@ -6,7 +6,7 @@
 #include "pipeline.hpp"
 #include "sbt.hpp"
 
-__host__ size_t AovSbt::addHitgroupRecord(GeometryData geometryData) {
+__host__ size_t AovSbt::addHitgroupRecord(DeviceGeometryData geometryData) {
     payloads.push_back(geometryData);
     return 1;
 }
@@ -17,22 +17,6 @@ __host__ void AovSbt::finalize(AovPipeline& pipeline) {
     hitgroupRecords.reserve(payloads.size());
 
     for (HitgroupRecordPayload& payload : payloads) {
-        void* d_tris;
-        cudaMalloc(&d_tris, payload.num_tris * sizeof(uint3));
-        cudaMemcpy(d_tris, payload.tris, payload.num_tris * sizeof(uint3), cudaMemcpyHostToDevice);
-
-        void* d_normals = nullptr;
-        if (payload.normals) {
-            cudaMalloc(&d_normals, payload.num_vertices * sizeof(float3));
-            cudaMemcpy(d_normals, payload.normals, payload.num_vertices * sizeof(float3), cudaMemcpyHostToDevice);
-        }
-
-        void* d_uvs = nullptr;
-        if (payload.uvs) {
-            cudaMalloc(&d_uvs, payload.num_vertices * sizeof(float2));
-            cudaMemcpy(d_uvs, payload.uvs, payload.num_vertices * sizeof(float2), cudaMemcpyHostToDevice);
-        }
-
         HitgroupRecord hitgroupRecord = {};
         switch (payload.kind) {
             case GeometryKind::TRIANGLE:
@@ -43,9 +27,11 @@ __host__ void AovSbt::finalize(AovPipeline& pipeline) {
                 break;
         }
         hitgroupRecord.mesh_data = {
-            .indices = (uint3*)d_tris,
-            .normals = (float3*)d_normals,
-            .uvs = (float2*)d_uvs
+            .num_tris = payload.num_tris,
+            .vertices = (float3*)payload.d_vertices,
+            .indices = (uint3*)payload.d_tris,
+            .normals = (float3*)payload.d_normals,
+            .uvs = (float2*)payload.d_uvs
         };
         hitgroupRecord.area_light = cuda::std::nullopt;
 
@@ -95,7 +81,7 @@ __host__ AovSbt::~AovSbt() {
     cudaFree((void*)sbt.missRecordBase);
 }
 
-__host__ size_t PathtracerSbt::addHitgroupRecord(GeometryData geometryData, Material material, std::optional<unsigned int> area_light) {
+__host__ size_t PathtracerSbt::addHitgroupRecord(DeviceGeometryData geometryData, Material material, std::optional<unsigned int> area_light) {
     payloads.push_back(StagedHitgroupRecord {
         .geometry = geometryData,
         material,
@@ -111,31 +97,17 @@ __host__ void PathtracerSbt::finalize(PathtracerPipeline &pipeline) {
     hitgroupRecords.reserve(2 * payloads.size());
 
     for (StagedHitgroupRecord& payload : payloads) {
-        void* d_tris;
-        cudaMalloc(&d_tris, payload.geometry.num_tris * sizeof(uint3));
-        cudaMemcpy(d_tris, payload.geometry.tris, payload.geometry.num_tris * sizeof(uint3), cudaMemcpyHostToDevice);
-
-        void* d_normals = nullptr;
-        if (payload.geometry.normals) {
-            cudaMalloc(&d_normals, payload.geometry.num_vertices * sizeof(float3));
-            cudaMemcpy(d_normals, payload.geometry.normals, payload.geometry.num_vertices * sizeof(float3), cudaMemcpyHostToDevice);
-        }
-
-        void* d_uvs = nullptr;
-        if (payload.geometry.uvs) {
-            cudaMalloc(&d_uvs, payload.geometry.num_vertices * sizeof(float2));
-            cudaMemcpy(d_uvs, payload.geometry.uvs, payload.geometry.num_vertices * sizeof(float2), cudaMemcpyHostToDevice);
-        }
-
         auto geometryType = static_cast<PathtracerPipeline::GeometryType>(payload.geometry.kind);
         auto materialType = static_cast<PathtracerPipeline::MaterialType>(payload.material.kind);
 
         HitgroupRecord radianceHitgroupRecord = {};
         OptixProgramGroup radianceHit = pipeline.radianceHitProgram(geometryType, materialType);
         radianceHitgroupRecord.mesh_data = {
-            .indices = (uint3*)d_tris,
-            .normals = (float3*)d_normals,
-            .uvs = (float2*)d_uvs
+            .num_tris = payload.geometry.num_tris,
+            .vertices = (float3*)payload.geometry.d_vertices,
+            .indices = (uint3*)payload.geometry.d_tris,
+            .normals = (float3*)payload.geometry.d_normals,
+            .uvs = (float2*)payload.geometry.d_uvs
         };
         radianceHitgroupRecord.material_data = payload.material;
         if (payload.area_light) {
@@ -148,12 +120,8 @@ __host__ void PathtracerSbt::finalize(PathtracerPipeline &pipeline) {
 
         HitgroupRecord shadowHitgroupRecord = {};
         OptixProgramGroup shadowHit = pipeline.shadowHitProgram(geometryType);
-        shadowHitgroupRecord.mesh_data = {
-            .indices = (uint3*)d_tris,
-            .normals = (float3*)d_normals,
-            .uvs = (float2*)d_uvs
-        };
-        shadowHitgroupRecord.material_data = payload.material;
+        shadowHitgroupRecord.mesh_data = radianceHitgroupRecord.mesh_data;
+        shadowHitgroupRecord.material_data = radianceHitgroupRecord.material_data;
         shadowHitgroupRecord.area_light = cuda::std::nullopt;
         optixSbtRecordPackHeader(shadowHit, &shadowHitgroupRecord);
         hitgroupRecords.push_back(shadowHitgroupRecord);

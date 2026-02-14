@@ -1,6 +1,7 @@
 #include "util.hpp"
 
 #include <array>
+#include <cassert>
 
 #include "lib_api.h"
 
@@ -46,6 +47,42 @@ RT_API __host__ void destroyOptix(OptixDeviceContext ctx) {
     OPTIX_CHECK(optixDeviceContextDestroy(ctx));
 }
 
+RT_API __host__ struct DeviceGeometryData uploadGeometryData(struct HostGeometryData data) {
+    if (data.kind != GeometryKind::TRIANGLE) {
+        assert(false); // don't use this for non-triangle data
+    }
+
+    void* d_vertices;
+    void* d_tris;
+
+    cudaMalloc(&d_vertices, sizeof(Vec3) * data.num_vertices);
+    cudaMalloc(&d_tris, sizeof(Vec3u) * data.num_tris);
+    cudaMemcpy(d_vertices, data.vertices, sizeof(Vec3) * data.num_vertices, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_tris, data.tris, sizeof(Vec3u) * data.num_tris, cudaMemcpyHostToDevice);
+
+    void* d_normals = nullptr;
+    if (data.normals) {
+        cudaMalloc(&d_normals, data.num_vertices * sizeof(Vec3));
+        cudaMemcpy(d_normals, data.normals, data.num_vertices * sizeof(Vec3), cudaMemcpyHostToDevice);
+    }
+
+    void* d_uvs = nullptr;
+    if (data.uvs) {
+        cudaMalloc(&d_uvs, data.num_vertices * sizeof(Vec2));
+        cudaMemcpy(d_uvs, data.uvs, data.num_vertices * sizeof(Vec2), cudaMemcpyHostToDevice);
+    }
+
+    return DeviceGeometryData {
+        data.kind,
+        data.num_tris,
+        d_tris,
+        data.num_vertices,
+        d_vertices,
+        d_normals,
+        d_uvs
+    };
+}
+
 RT_API __host__ OptixAccelerationStructure makeSphereAccelerationStructure(
     const OptixDeviceContext ctx,
     const Vec3 center,
@@ -56,17 +93,11 @@ RT_API __host__ OptixAccelerationStructure makeSphereAccelerationStructure(
 
 RT_API __host__ OptixAccelerationStructure makeMeshAccelerationStructure(
     OptixDeviceContext ctx,
-    const struct Vec3* vertices, /* packed */
-    size_t verticesLen, /* number of float3's */
-    const struct Vec3u* tris, /* packed */
-    size_t trisLen /* number of uint3's */
+    struct DeviceGeometryData geometry_data
 ) {
     return makeMeshGAS(
         ctx,
-        vertices,
-        verticesLen,
-        tris,
-        trisLen
+        geometry_data
     );
 }
 
@@ -99,7 +130,7 @@ RT_API __host__ AovSbtWrapper makeAovSbt() {
     return new AovSbt();
 }
 
-RT_API __host__ size_t addHitRecordAovSbt(AovSbtWrapper sbt, GeometryData geometryData) {
+RT_API __host__ size_t addHitRecordAovSbt(AovSbtWrapper sbt, DeviceGeometryData geometryData) {
     return sbt->addHitgroupRecord(geometryData);
 }
 
@@ -147,7 +178,7 @@ RT_API __host__ PathtracerSbtWrapper makePathtracerSbt() {
 
 RT_API __host__ size_t addHitRecordPathtracerSbt(
     PathtracerSbtWrapper sbt,
-    GeometryData geometryData,
+    DeviceGeometryData geometryData,
     Material material,
     // -1 = no light
     int area_light

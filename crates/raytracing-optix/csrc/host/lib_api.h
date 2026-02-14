@@ -17,6 +17,8 @@
 RT_API OptixDeviceContext initOptix(bool debug);
 RT_API void destroyOptix(OptixDeviceContext ctx);
 
+RT_API struct DeviceGeometryData uploadGeometryData(struct HostGeometryData data);
+
 /* Scene conversion functions */
 RT_API struct OptixAccelerationStructure makeSphereAccelerationStructure(
     OptixDeviceContext ctx,
@@ -26,10 +28,7 @@ RT_API struct OptixAccelerationStructure makeSphereAccelerationStructure(
 
 RT_API struct OptixAccelerationStructure makeMeshAccelerationStructure(
     OptixDeviceContext ctx,
-    const struct Vec3* vertices, /* packed */
-    size_t verticesLen, /* number of float3's */
-    const struct Vec3u* tris, /* packed */
-    size_t trisLen /* number of uint3's */
+    struct DeviceGeometryData geometry_data
 );
 
 RT_API struct OptixAccelerationStructure makeInstanceAccelerationStructure(
@@ -48,7 +47,7 @@ RT_API AovPipelineWrapper makeAovPipeline(
 );
 
 RT_API AovSbtWrapper makeAovSbt();
-RT_API size_t addHitRecordAovSbt(AovSbtWrapper sbt, struct GeometryData geometryData);
+RT_API size_t addHitRecordAovSbt(AovSbtWrapper sbt, struct DeviceGeometryData geometryData);
 RT_API void finalizeAovSbt(AovSbtWrapper sbt, AovPipelineWrapper pipeline);
 RT_API void releaseAovSbt(AovSbtWrapper sbt);
 
@@ -72,7 +71,7 @@ RT_API PathtracerPipelineWrapper makePathtracerPipeline(
 RT_API PathtracerSbtWrapper makePathtracerSbt();
 RT_API size_t addHitRecordPathtracerSbt(
     PathtracerSbtWrapper,
-    struct GeometryData geometryData,
+    struct DeviceGeometryData geometryData,
     struct Material material,
     // -1 = no light
     int area_light

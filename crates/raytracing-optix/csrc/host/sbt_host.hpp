@@ -11,12 +11,12 @@
 // AOV shader binding table layout: 1 raygen record, 1 miss record (sets all AOV to default / invalid)
 // 1 hitgroup record per primitive. points to appropriate program group based on geometry type
 struct AovSbt {
-    using HitgroupRecordPayload = GeometryData;
+    using HitgroupRecordPayload = DeviceGeometryData;
     std::vector<HitgroupRecordPayload> payloads;
 
     OptixShaderBindingTable sbt;
 
-    size_t addHitgroupRecord(GeometryData geometryData);
+    size_t addHitgroupRecord(DeviceGeometryData geometryData);
     void finalize(AovPipeline& pipeline);
     ~AovSbt();
 };
@@ -25,7 +25,7 @@ struct AovSbt {
 // 2 hitgroup records per primitive, one for shadow rays and one for radiance rays
 struct PathtracerSbt {
     struct StagedHitgroupRecord {
-        GeometryData geometry;
+        DeviceGeometryData geometry;
         Material material;
         std::optional<unsigned int> area_light;
     };
@@ -34,7 +34,7 @@ struct PathtracerSbt {
 
     OptixShaderBindingTable sbt;
 
-    size_t addHitgroupRecord(GeometryData geometryData, Material material, std::optional<unsigned int> area_light);
+    size_t addHitgroupRecord(DeviceGeometryData geometryData, Material material, std::optional<unsigned int> area_light);
     void finalize(PathtracerPipeline& pipeline);
     ~PathtracerSbt();
 };

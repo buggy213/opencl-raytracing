@@ -13,34 +13,74 @@ use crate::optix::{self, CudaArray, OptixAccelerationStructure, Texture, Texture
 // hooks for SBT to be constructed alongside the AS hierarchy. `visit` functions on a node 
 // return corresponding SBT offset which will be used when constructing that node's parent.
 pub(crate) trait SbtVisitor {
-    fn visit_geometry_as(&mut self, shape: &Shape, material: &Material, area_light: Option<u32>) -> u32;
+    fn visit_geometry_as(&mut self, geometry_data: optix::DeviceGeometryData, material: &Material, area_light: Option<u32>) -> u32;
     fn visit_instance_as(&mut self) -> u32;
+}
+
+fn geometry_data_from_shape(shape: &Shape) -> optix::DeviceGeometryData {
+    match shape {
+        Shape::TriangleMesh(mesh) => {
+            let tris: Vec3uSliceWrap = mesh.tris.as_slice().into();
+            let (tris, num_tris) = (tris.as_ptr(), tris.len());
+            
+            let vertices: Vec3SliceWrap = mesh.vertices.as_slice().into();
+            let (vertices, num_vertices) = (vertices.as_ptr(), vertices.len());
+
+            let normals = if mesh.normals.len() == mesh.vertices.len() {
+                let normals: Vec3SliceWrap = mesh.normals.as_slice().into();
+                normals.as_ptr()
+            }
+            else {
+                std::ptr::null()
+            };
+
+            let uvs = if mesh.uvs.len() == mesh.vertices.len() {
+                let uvs: optix::Vec2SliceWrap = mesh.uvs.as_slice().into();
+                uvs.as_ptr()
+            }
+            else {
+                std::ptr::null()
+            };
+
+            let host_geometry_data = optix::HostGeometryData {
+                kind: optix::GeometryKind::TRIANGLE,
+                num_tris,
+                tris,
+                num_vertices,
+                vertices,
+                normals,
+                uvs,
+            };
+
+            unsafe {
+                optix::uploadGeometryData(host_geometry_data)
+            }
+        },
+        Shape::Sphere { .. } => {
+            optix::DeviceGeometryData {
+                kind: optix::GeometryKind::SPHERE,
+                num_tris: 0,
+                d_tris: std::ptr::null(),
+                num_vertices: 0,
+                d_vertices: std::ptr::null(),
+                d_normals: std::ptr::null(),
+                d_uvs: std::ptr::null(),
+            }
+        },
+    }
 }
 
 fn make_leaf_geometry_as(
     ctx: optix::OptixDeviceContext, 
-    shape: &Shape
+    shape: &Shape,
+    device_geometry_data: optix::DeviceGeometryData,
 ) -> OptixAccelerationStructure {
     match shape {
-        Shape::TriangleMesh(mesh) => {
-            let vertices: Vec3SliceWrap = mesh.vertices.as_slice().into();
-
-            #[allow(non_snake_case, reason = "match C++ API")]
-            let (vertices, verticesLen) = (vertices.as_ptr(), vertices.len());
-            
-            let tris: Vec3uSliceWrap = mesh.tris.as_slice().into();
-
-            #[allow(non_snake_case, reason = "match C++ API")]
-            let (tris, trisLen) = (tris.as_ptr(), tris.len());
-
-            // SAFETY: verticesLen and trisLen are valid lengths for vertices / tris
+        Shape::TriangleMesh(_) => {
             unsafe {
                 optix::makeMeshAccelerationStructure(
                     ctx, 
-                    vertices, 
-                    verticesLen, 
-                    tris, 
-                    trisLen
+                    device_geometry_data
                 )
             }
         },
@@ -102,9 +142,10 @@ pub(crate) fn prepare_optix_acceleration_structures(
             
             match scene.get_primitive(primitive_index) {
                 Primitive::Basic(basic) => {
-                    let leaf_gas = make_leaf_geometry_as(ctx, &basic.shape);
+                    let leaf_geometry_data = geometry_data_from_shape(&basic.shape);
+                    let leaf_gas = make_leaf_geometry_as(ctx, &basic.shape, leaf_geometry_data);
                     let leaf_gas_material = &scene.materials[basic.material as usize];
-                    let leaf_gas_sbt_offset = sbt_visitor.visit_geometry_as(&basic.shape, leaf_gas_material, basic.area_light);
+                    let leaf_gas_sbt_offset = sbt_visitor.visit_geometry_as(leaf_geometry_data, leaf_gas_material, basic.area_light);
                     descendant_acceleration_structures.push(leaf_gas);
                     descendant_sbt_offsets.push(leaf_gas_sbt_offset);
                 }

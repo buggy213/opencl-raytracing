@@ -44,8 +44,10 @@ pub(crate) use detail::{
     makePathtracerPipeline,
     launchPathtracerPipeline,
 
-    GeometryData,
+    HostGeometryData,
+    DeviceGeometryData,
     GeometryKind,
+    uploadGeometryData,
 
     AovSbtWrapper,
     makeAovSbt,

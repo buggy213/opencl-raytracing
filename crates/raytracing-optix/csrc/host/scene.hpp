@@ -12,10 +12,7 @@ OptixAccelerationStructure makeSphereGAS(
 
 OptixAccelerationStructure makeMeshGAS(
     OptixDeviceContext ctx,
-    const Vec3* vertices, /* packed */
-    size_t verticesLen, /* number of float3's */
-    const Vec3u* tris, /* packed */
-    size_t trisLen /* number of uint3's */
+    DeviceGeometryData geometryData
 );
 
 OptixAccelerationStructure makeIAS(
