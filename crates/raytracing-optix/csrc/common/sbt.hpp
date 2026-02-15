@@ -4,7 +4,6 @@
  * SBT record definitions, shared between host/device C++ code
  */
 
-#define CCCL_DISABLE_INT128_SUPPORT
 #include <cuda/std/optional>
 #include <optix_types.h>
 

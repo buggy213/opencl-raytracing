@@ -1,6 +1,5 @@
 #pragma once
 
-#define CCCL_DISABLE_INT128_SUPPORT
 #include <cuda/std/optional>
 
 #include "kernel_math.hpp"

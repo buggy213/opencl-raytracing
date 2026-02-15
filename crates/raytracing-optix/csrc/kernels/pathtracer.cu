@@ -1,3 +1,10 @@
+// libcu++ and Optix-IR compilation don't play super nicely
+// see https://github.com/NVIDIA/cccl/issues/1227
+#define CCCL_DISABLE_INT128_SUPPORT
+// faster complex math
+#define LIBCUDACXX_ENABLE_SIMPLIFIED_COMPLEX_OPERATIONS
+
+
 #include "pathtracer.hpp"
 
 #include <optix_device.h>

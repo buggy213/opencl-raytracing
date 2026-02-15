@@ -1,8 +1,5 @@
 #pragma once
 
-// libcu++ and Optix-IR compilation don't play super nicely
-// see https://github.com/NVIDIA/cccl/issues/1227
-#define CCCL_DISABLE_INT128_SUPPORT
 #include <cuda/std/optional>
 #include <cuda/std/variant>
 
