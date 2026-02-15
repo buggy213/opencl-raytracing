@@ -815,6 +815,9 @@ pub(crate) trait CpuMaterial {
     // evaluate what mip-level the "primary" (usually albedo / color) texture
     // associated with a material is, or None if it's not applicable (i.e. it's not an image texture)
     fn get_mip_level(&self, eval_ctx: &MaterialEvalContext, textures: &CpuTextures) -> Option<f32>;
+
+    // evaluate albedo (for denoising)
+    fn get_albedo(&self, eval_ctx: &MaterialEvalContext, textures: &CpuTextures) -> Vec3;
 }
 
 impl CpuMaterial for Material {
@@ -963,6 +966,27 @@ impl CpuMaterial for Material {
 
         textures.texture_mip_level(main_tex, eval_ctx)
     }
+    
+    fn get_albedo(&self, eval_ctx: &MaterialEvalContext, textures: &CpuTextures) -> Vec3 {
+        let albedo_tex = match self {
+            Material::Diffuse { albedo } => Some(albedo),
+            Material::SmoothDielectric { .. } => None,
+            Material::SmoothConductor { .. } => None,
+            Material::RoughDielectric { .. } => None,
+            Material::RoughConductor { .. } => None,
+            Material::CoatedDiffuse { diffuse_albedo, .. } => Some(diffuse_albedo), // TODO: would be good to take into account the transmittance of coat layer / albedo from top layer
+        };
+
+        if let Some(&albedo_tex) = albedo_tex {
+            let albedo = textures.sample(albedo_tex, eval_ctx);
+            Vec3(albedo.0, albedo.1, albedo.2)
+        }
+        else {
+            Vec3(1.0, 1.0, 1.0)
+        }
+    }
+
+    
 }
 
 fn refract(mut eta: f32, wo: Vec3, mut normal: Vec3) -> Option<Vec3> {

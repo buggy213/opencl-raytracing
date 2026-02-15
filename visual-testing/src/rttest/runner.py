@@ -107,7 +107,7 @@ def run_single_test(
         scene_path = test.scene_path
         if scenes_dir and not Path(scene_path).is_absolute():
             scene_path = str(scenes_dir / scene_path)
-        cmd.extend(["--scene", scene_path])
+        cmd.extend(["--scene-path", scene_path])
     else:
         return TestResult(
             scene=scene,

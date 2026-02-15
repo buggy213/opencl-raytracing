@@ -4,20 +4,29 @@ use crate::{geometry::{Vec2, Vec3}, sampling::Sampler};
 
 // AOV pass is separated from main render; the intention is that most AOVs are cheap to compute
 // and thus spending one extra ray is basically trivial compared to the cost of computing the main
-// "beauty" result. should try to ensure the AOV matches the first actual sample taken within that pixel
-// TODO: implement more deterministic sampler so that can actually be done
+// "beauty" result. 
+// AOVs can match camera / lens samples with beauty pass, but this is not always desirable
+// For debugging, it can be nice to have clean / unjittered output, while for denoising
+// it is good to have supersampled, jittered values for best denoising performance
+
 // TODO: light path expression support? looks cool but is certainly not cheap to compute.
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct AovFlags: u32 {
         const BEAUTY = 1 << 0;
+
+        // TODO: normal / albedo auxiliaries for denoising are a little different than what we want for debug
+        //       specifically, for dielectric / conductor, it is better to take the albedo at the next
+        //       point on the path, and they should be supersampled as well
         const NORMALS = 1 << 1;
-        const UV_COORDS = 1 << 2;
+        const ALBEDO = 1 << 2;
+
+        const UV_COORDS = 1 << 3;
         
         // mip-level also depends on resolution of underlying image too; if textures
         // are not uniformly sized then directly comparing mip-levels is not really valid.
         // it might make sense to create a "normalized" mip-level which takes this into account
-        const MIP_LEVEL = 1 << 3;
+        const MIP_LEVEL = 1 << 4;
 
         // ray differentials, uv derivatives, hit-point derivatives, bvh traversal depth
         // material properties? might be useful for materials themselves to be able to define
@@ -25,11 +34,13 @@ bitflags! {
 
         const DEBUG =
             AovFlags::NORMALS.bits()
+            | AovFlags::ALBEDO.bits()
             | AovFlags::UV_COORDS.bits()
             | AovFlags::MIP_LEVEL.bits();
 
         const FIRST_HIT_AOVS =
             AovFlags::NORMALS.bits()
+            | AovFlags::ALBEDO.bits()
             | AovFlags::UV_COORDS.bits()
             | AovFlags::MIP_LEVEL.bits();
     }
@@ -42,6 +53,7 @@ pub struct RenderOutput {
 
     pub beauty: Option<Vec<Vec3>>,
     pub normals: Option<Vec<Vec3>>,
+    pub albedo: Option<Vec<Vec3>>,
     pub uv: Option<Vec<Vec2>>,
     pub mip_level: Option<Vec<f32>>,
 }
@@ -53,6 +65,7 @@ impl RenderOutput {
             height,
             beauty: None,
             normals: None,
+            albedo: None,
             uv: None,
             mip_level: None
         }

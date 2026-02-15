@@ -396,6 +396,7 @@ struct FirstHitAOVData {
     hit: bool,
     uv: Vec2,
     normals: Vec3,
+    albedo: Vec3,
     mip_level: Option<f32>,
 }
 
@@ -419,6 +420,7 @@ fn first_hit_aovs(
             hit: false, 
             uv: Vec2::zero(), 
             normals: Vec3::zero(),
+            albedo: Vec3::zero(),
             mip_level: None
         };
     };
@@ -427,12 +429,16 @@ fn first_hit_aovs(
     let material = &context.scene.materials[hit.material_idx as usize];
     let material_eval_ctx = 
         MaterialEvalContext::new_from_ray_differentials(&hit, camera_ray, camera_ray_differentials);
+    
+    let albedo = material.get_albedo(&material_eval_ctx, &context.cpu_textures);
     let mip_level = material.get_mip_level(&material_eval_ctx, &context.cpu_textures);
+
 
     FirstHitAOVData { 
         hit: true, 
         uv: hit.uv, 
         normals: hit.normal, 
+        albedo,
         mip_level,
     }
 }
@@ -560,6 +566,9 @@ fn render_aovs(
     if raytracer_settings.outputs.contains(AovFlags::NORMALS) {
         render_output.normals = Some(Vec::with_capacity(output_buffer_size));
     }
+    if raytracer_settings.outputs.contains(AovFlags::ALBEDO) {
+        render_output.albedo = Some(Vec::with_capacity(output_buffer_size));
+    }
     if raytracer_settings.outputs.contains(AovFlags::UV_COORDS) {
         render_output.uv = Some(Vec::with_capacity(output_buffer_size));
     }
@@ -595,11 +604,15 @@ fn render_aovs(
                 hit: _, 
                 uv, 
                 normals, 
+                albedo,
                 mip_level 
             } = first_hit_aovs;
 
             if raytracer_settings.outputs.contains(AovFlags::NORMALS) {
                 render_output.normals.as_mut().unwrap().push(normals);
+            }
+            if raytracer_settings.outputs.contains(AovFlags::ALBEDO) {
+                render_output.albedo.as_mut().unwrap().push(albedo);
             }
             if raytracer_settings.outputs.contains(AovFlags::UV_COORDS) {
                 render_output.uv.as_mut().unwrap().push(uv);

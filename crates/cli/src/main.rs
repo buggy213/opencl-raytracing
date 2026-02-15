@@ -237,6 +237,7 @@ fn main() {
         for aov_str in aov.iter().flatten() {
             match aov_str.as_str() {
                 "n" | "normal" => aov_flags.insert(AovFlags::NORMALS),
+                "a" | "albedo" => aov_flags.insert(AovFlags::ALBEDO),
                 "u" | "uv" => aov_flags.insert(AovFlags::UV_COORDS),
                 "m" | "mip" => aov_flags.insert(AovFlags::MIP_LEVEL),
                 "b" | "beauty" => warn!("beauty is implicit"),
@@ -362,6 +363,16 @@ fn save_to_png(mut render_output: RenderOutput, aov_flags: AovFlags, output_path
                     &output_path
                 );
             }
+            AovFlags::ALBEDO => {
+                let output_path = add_suffix(output_path, name);
+                raytracing_cpu::utils::png::save_png(
+                    render_output.albedo.as_ref().unwrap(),
+                    1.0,
+                    render_output.width,
+                    render_output.height,
+                    &output_path
+                );
+            }
             AovFlags::UV_COORDS => {
                 let output_path = add_suffix(output_path, name);
                 let uv_rgb = raytracing_cpu::utils::png::uvs_to_rgb(render_output.uv.as_ref().unwrap());
@@ -404,6 +415,15 @@ fn save_to_exr(render_output: RenderOutput, aov_flags: AovFlags, output_path: &P
                         &mut channels,
                         &["Normal.X", "Normal.Y", "Normal.Z"],
                         normals
+                    );
+                }
+            }
+            AovFlags::ALBEDO => {
+                if let Some(ref albedo) = render_output.albedo {
+                    raytracing_cpu::utils::exr::channels_from_vec3(
+                        &mut channels, 
+                        &["Albedo.X", "Albedo.Y", "Albedo.Z"], 
+                        albedo
                     );
                 }
             }

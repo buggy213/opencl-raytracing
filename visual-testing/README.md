@@ -170,6 +170,8 @@ skip_visual = true                 # Optional: skip visual comparison (perf only
 [test.settings]                    # Optional: override defaults for this test
 samples_per_pixel = 4
 light_samples = 2
+aov = ["albedo", "normal"]         # Optional: AOVs to render (implies `full` subcommand)
+no_beauty = true                   # Optional: disable beauty output
 ```
 
 ### Test Entry Fields
@@ -178,13 +180,22 @@ light_samples = 2
 |-------|----------|-------------|
 | `name` | Yes | Unique test identifier, used for output filenames |
 | `builtin_scene` | No* | Name of a builtin scene (from `cli list-scenes`) |
-| `scene_path` | No* | Path to a scene file (.gltf, .glb, etc.) |
+| `scene_path` | No* | Path to a scene file (.gltf, .glb, etc.). Either an absolute path or relative to `scenes` directory |
 | `description` | No | Human-readable description |
 | `tags` | No | List of strings for filtering |
 | `skip_visual` | No | If `true`, skip visual comparison (default: `false`) |
-| `settings` | No | Table with `samples_per_pixel` and/or `light_samples` |
+| `settings` | No | Table with render settings (see below) |
 
 *One of `builtin_scene` or `scene_path` should be specified.
+
+### Settings Fields
+
+| Field | Description |
+|-------|-------------|
+| `samples_per_pixel` | Number of samples per pixel (`-s` flag) |
+| `light_samples` | Number of light samples (`-l` flag) |
+| `aov` | List of AOVs to render, e.g. `["albedo", "normal"]` (implies `full` subcommand) |
+| `no_beauty` | If `true`, disable beauty output (`--no-beauty` flag) |
 
 ## Adding New Test Scenes
 

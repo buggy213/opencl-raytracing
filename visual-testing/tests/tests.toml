@@ -51,3 +51,11 @@ builtin_scene = "environment_light"
 [[test]]
 name = "coated_diffuse_bunny"
 builtin_scene = "coated_diffuse_bunny"
+
+[[test]]
+name = "bathroom_albedo"
+scene_path = "bathroom/scene-v4.pbrt"
+
+[test.settings]
+aov = ["albedo"]
+no_beauty = true

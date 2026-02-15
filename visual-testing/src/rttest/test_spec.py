@@ -20,9 +20,13 @@ class TestSettings:
     Attributes:
         samples_per_pixel: Number of samples per pixel (-s flag)
         light_samples: Number of light samples (-l flag)
+        aov: List of AOVs to render (e.g. ["albedo", "normal"])
+        no_beauty: If True, disable beauty output (--no-beauty flag)
     """
     samples_per_pixel: int | None = None
     light_samples: int | None = None
+    aov: list[str] | None = None
+    no_beauty: bool = False
 
 
 @dataclass
@@ -54,6 +58,14 @@ class TestSpec:
             args = _replace_arg(args, ["-s", "--samples"], str(self.settings.samples_per_pixel))
         if self.settings.light_samples is not None:
             args = _replace_arg(args, ["-l", "--light-samples"], str(self.settings.light_samples))
+
+        if self.settings.aov is not None or self.settings.no_beauty:
+            if "full" not in args:
+                args.append("full")
+            if self.settings.aov:
+                args.extend(["--aov", ",".join(self.settings.aov)])
+            if self.settings.no_beauty:
+                args.append("--no-beauty")
 
         return args
 
@@ -137,6 +149,8 @@ def load_test_suite(path: Path) -> TestSuite:
         settings = TestSettings(
             samples_per_pixel=settings_data.get("samples_per_pixel", defaults.samples_per_pixel),
             light_samples=settings_data.get("light_samples", defaults.light_samples),
+            aov=settings_data.get("aov"),
+            no_beauty=settings_data.get("no_beauty", False),
         )
 
         test = TestSpec(

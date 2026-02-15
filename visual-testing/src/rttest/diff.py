@@ -15,8 +15,9 @@ class ComparisonResult:
 
 # channel groups we know how to compare, in order of preference
 CHANNEL_GROUPS = [
-    ["R", "G", "B"],                           # beauty
+    ["R", "G", "B"],                            # beauty
     ["Normal.X", "Normal.Y", "Normal.Z"],       # normals
+    ["Albedo.X", "Albedo.Y", "Albedo.Z"],       # albedo
     ["U", "V"],                                 # UVs
 ]
 
