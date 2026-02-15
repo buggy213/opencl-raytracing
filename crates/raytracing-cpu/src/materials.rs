@@ -1359,7 +1359,7 @@ mod microfacet {
         #[allow(non_snake_case, reason = "physics convention")]
         let F = fresnel_dielectric(
             Vec3::dot(wo, wm), 
-            eta
+            eta // not eta_wm, since fresnel_dielectric accounts for medium flip also
         );
 
         if reflect {

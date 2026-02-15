@@ -107,6 +107,10 @@ pub(crate) use detail::{
     Material_MaterialKind,
     Material_MaterialVariant,
     Material_MaterialVariant_Diffuse,
+    Material_MaterialVariant_SmoothDielectric,
+    Material_MaterialVariant_SmoothConductor,
+    Material_MaterialVariant_RoughDielectric,
+    Material_MaterialVariant_RoughConductor,
 
     Light_LightKind,
     Light_LightVariant,

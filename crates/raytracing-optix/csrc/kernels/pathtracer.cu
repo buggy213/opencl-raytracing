@@ -179,38 +179,41 @@ inline __device__ const Material& get_material_data() {
     return *material_ptr;
 }
 
-extern "C" __global__ void __closesthit__radiance_diffuse() {
-    optixSetPayloadTypes(RADIANCE_RAY_PAYLOAD_TYPE);
-
-    const Scene& scene = pipeline_params.scene;
-    const OptixRaytracerSettings& settings = pipeline_params.settings;
-
-    Ray ray = get_ray();
-    PerRayData& prd = get_ray_data();
-    HitInfo hit {};
+// common geometry dispatch for closest-hit programs
+// returns nullopt for unsupported geometry types (and writes a "done" payload)
+inline __device__ cuda::std::optional<HitInfo> get_hit_info_dispatch()
+{
     unsigned int hit_kind = optixGetHitKind();
     OptixPrimitiveType geometry = optixGetPrimitiveType(hit_kind);
 
     switch (geometry) {
         case OPTIX_PRIMITIVE_TYPE_SPHERE:
-            hit = get_hit_info_sphere();
-            break;
+            return get_hit_info_sphere();
         case OPTIX_PRIMITIVE_TYPE_TRIANGLE:
-            hit = get_hit_info_tri();
-            break;
+            return get_hit_info_tri();
         default:
-            // TODO: handle more geometry types
             RadianceRayPayloadCHWrite payload_out = {};
             payload_out.done = true;
             payload_out.radiance = float3_zero;
             writeRadiancePayloadCH(payload_out);
-            return;
+            return cuda::std::nullopt;
     }
+}
+
+// generic closest-hit for a specific BSDF type
+// templated to avoid duplicating boilerplate across material types
+template<typename Bsdf>
+inline __device__ void closesthit_radiance_impl(Bsdf bsdf, const HitInfo& hit)
+{
+    const Scene& scene = pipeline_params.scene;
+    const OptixRaytracerSettings& settings = pipeline_params.settings;
+
+    Ray ray = get_ray();
+    PerRayData& prd = get_ray_data();
 
     RadianceRayPayloadCHRead payload_in = readRadiancePayloadCH();
     auto [path_weight, specular_bounce, depth] = payload_in;
     float3 radiance = float3_zero;
-
 
     bool add_zero_bounce = settings.accumulate_bounces || settings.max_ray_depth == depth;
     if (specular_bounce && add_zero_bounce && hit.area_light)
@@ -219,7 +222,6 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
         radiance += path_weight * lights::light_radiance(light);
     }
 
-    const Material& material = get_material_data();
     float3 o2w_x, o2w_y;
     cuda::std::tie(o2w_x, o2w_y) = geometry::make_orthonormal_basis(hit.normal);
 
@@ -241,7 +243,6 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
     };
 
     float3 wo = matrix4x4_apply_vector(w2o, -ray.direction);
-    // some divergence, see note in raygen program
     depth += 1;
     if (depth > settings.max_ray_depth)
     {
@@ -252,9 +253,7 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
         return;
     }
 
-    materials::OptixBsdfDiffuse bsdf = materials::get_diffuse_bsdf(material, hit.uv);
-
-    bool delta_bsdf = materials::OptixBsdfDiffuse::is_delta_bsdf();
+    bool delta_bsdf = Bsdf::is_delta_bsdf();
     bool add_direct_illumination = settings.accumulate_bounces || optixGetRemainingTraceDepth() == 1;
     if (!delta_bsdf && add_direct_illumination)
     {
@@ -267,7 +266,6 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
             for (int sample_idx = 0; sample_idx < light_samples; sample_idx += 1)
             {
                 lights::LightSample light_sample = lights::sample_light(light, hit.point, prd.sampler);
-                // traces a shadow ray
                 bool occluded = lights::occluded(light_sample);
 
                 if (!occluded)
@@ -289,7 +287,6 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
 
     materials::BsdfSample bsdf_sample = materials::sample_bsdf(bsdf, wo, materials::BsdfComponentFlags::ALL(), prd.sampler);
 
-    // some divergence: see note in raygen program
     if (!bsdf_sample.valid || bsdf_sample.bsdf == float3_zero || bsdf_sample.pdf == 0.0f)
     {
         RadianceRayPayloadCHWrite payload_out = {};
@@ -319,6 +316,55 @@ extern "C" __global__ void __closesthit__radiance_diffuse() {
     };
 
     writeRadiancePayloadCH(payload_out);
+}
+
+extern "C" __global__ void __closesthit__radiance_diffuse() {
+    optixSetPayloadTypes(RADIANCE_RAY_PAYLOAD_TYPE);
+    auto hit = get_hit_info_dispatch();
+    if (!hit) return;
+    const Material& material = get_material_data();
+    auto bsdf = materials::get_diffuse_bsdf(material, hit->uv);
+    closesthit_radiance_impl(bsdf, *hit);
+}
+
+extern "C" __global__ void __closesthit__radiance_smooth_dielectric() {
+    optixSetPayloadTypes(RADIANCE_RAY_PAYLOAD_TYPE);
+    auto hit = get_hit_info_dispatch();
+    if (!hit) return;
+    const Material& material = get_material_data();
+    auto bsdf = materials::get_smooth_dielectric_bsdf(material, hit->uv);
+    closesthit_radiance_impl(bsdf, *hit);
+}
+
+extern "C" __global__ void __closesthit__radiance_smooth_conductor() {
+    optixSetPayloadTypes(RADIANCE_RAY_PAYLOAD_TYPE);
+    auto hit = get_hit_info_dispatch();
+    if (!hit) return;
+    const Material& material = get_material_data();
+    auto bsdf = materials::get_smooth_conductor_bsdf(material, hit->uv);
+    closesthit_radiance_impl(bsdf, *hit);
+}
+
+extern "C" __global__ void __closesthit__radiance_rough_dielectric() {
+    optixSetPayloadTypes(RADIANCE_RAY_PAYLOAD_TYPE);
+    auto hit = get_hit_info_dispatch();
+    if (!hit) return;
+    const Material& material = get_material_data();
+    auto bsdf_variant = materials::get_rough_dielectric_bsdf(material, hit->uv);
+    cuda::std::visit([&hit](auto bsdf) {
+        closesthit_radiance_impl(bsdf, *hit);
+    }, bsdf_variant);
+}
+
+extern "C" __global__ void __closesthit__radiance_rough_conductor() {
+    optixSetPayloadTypes(RADIANCE_RAY_PAYLOAD_TYPE);
+    auto hit = get_hit_info_dispatch();
+    if (!hit) return;
+    const Material& material = get_material_data();
+    auto bsdf_variant = materials::get_rough_conductor_bsdf(material, hit->uv);
+    cuda::std::visit([&hit](auto bsdf) {
+        closesthit_radiance_impl(bsdf, *hit);
+    }, bsdf_variant);
 }
 
 // one miss program for shadow rays

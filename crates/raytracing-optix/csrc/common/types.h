@@ -250,6 +250,24 @@ struct Material {
         struct Diffuse {
             TextureId albedo;
         } diffuse;
+        struct SmoothDielectric {
+            TextureId eta;
+        } smooth_dielectric;
+        struct SmoothConductor {
+            TextureId eta;
+            TextureId kappa;
+        } smooth_conductor;
+        struct RoughDielectric {
+            TextureId eta;
+            bool remap_roughness;
+            TextureId roughness;
+        } rough_dielectric;
+        struct RoughConductor {
+            TextureId eta;
+            TextureId kappa;
+            bool remap_roughness;
+            TextureId roughness;
+        } rough_conductor;
         // TODO: add other variants
     } variant;
 };

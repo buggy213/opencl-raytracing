@@ -354,3 +354,68 @@ inline __device__ float3 matrix4x4_apply_vector(const Matrix4x4& transform, floa
 
     return make_float3(va, vb, vc);
 }
+
+// cuda::std::complex is problematicaly slow, so we just roll our own
+// https://github.com/NVIDIA/cccl/issues/1000
+// @crates/raytracing/src/geometry/complex.rs
+struct complex
+{
+    float real;
+    float imag;
+
+    __device__ complex() : real(0.0f), imag(0.0f) {}
+    __device__ complex(float re, float im) : real(re), imag(im) {}
+    // implicit conversion from float is "ok"
+    __device__ complex(float re) : real(re), imag(0.0f) {}
+
+    __device__ float square_magnitude() const { return real * real + imag * imag; }
+
+    __device__ float modulus() const { return sqrtf(square_magnitude()); }
+
+    static __device__ complex from_polar(float r, float theta) {
+        return { r * cosf(theta), r * sinf(theta) };
+    }
+    __device__ complex sqrt() const
+    {
+        float r = modulus();
+        float theta = atan2f(imag, real);
+        return from_polar(sqrtf(r), theta * 0.5f);
+    }
+
+    // Squared magnitude, matching cuda::std::norm
+    __device__ float norm() const { return square_magnitude(); }
+
+    __device__ complex operator+(complex b) const { return { real + b.real, imag + b.imag }; }
+    __device__ complex operator+(float b) const { return { real + b, imag }; }
+    __device__ void operator+=(complex b) { real += b.real; imag += b.imag; }
+    __device__ void operator+=(float b) { real += b; }
+
+    __device__ complex operator-() const { return { -real, -imag }; }
+    __device__ complex operator-(complex b) const { return { real - b.real, imag - b.imag }; }
+    __device__ complex operator-(float b) const { return { real - b, imag }; }
+    __device__ void operator-=(complex b) { real -= b.real; imag -= b.imag; }
+    __device__ void operator-=(float b) { real -= b; }
+
+    __device__ complex operator*(complex b) const {
+        return { real * b.real - imag * b.imag, imag * b.real + real * b.imag };
+    }
+    __device__ complex operator*(float b) const { return { real * b, imag * b }; }
+    __device__ void operator*=(complex b) { *this = *this * b; }
+    __device__ void operator*=(float b) { real *= b; imag *= b; }
+
+    __device__ complex operator/(complex b) const {
+        float denom = b.real * b.real + b.imag * b.imag;
+        return {
+            (real * b.real + imag * b.imag) / denom,
+            (imag * b.real - real * b.imag) / denom
+        };
+    }
+    __device__ complex operator/(float b) const { return { real / b, imag / b }; }
+    __device__ void operator/=(complex b) { *this = *this / b; }
+    __device__ void operator/=(float b) { real /= b; imag /= b; }
+};
+
+__device__ inline complex operator+(float a, complex b) { return b + a; }
+__device__ inline complex operator-(float a, complex b) { return complex(a, 0.0f) - b; }
+__device__ inline complex operator*(float a, complex b) { return b * a; }
+__device__ inline complex operator/(float a, complex b) { return complex(a, 0.0f) / b; }

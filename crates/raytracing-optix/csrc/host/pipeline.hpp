@@ -49,6 +49,10 @@ struct PathtracerPipeline {
 
     enum MaterialType {
         DIFFUSE,
+        SMOOTH_DIELECTRIC,
+        SMOOTH_CONDUCTOR,
+        ROUGH_DIELECTRIC,
+        ROUGH_CONDUCTOR,
         MATERIAL_TYPE_COUNT
     };
 
@@ -58,7 +62,11 @@ struct PathtracerPipeline {
     };
 
     static constexpr std::string_view hitProgramNamesRadiance[MaterialType::MATERIAL_TYPE_COUNT] = {
-        "__closesthit__radiance_diffuse"
+        "__closesthit__radiance_diffuse",
+        "__closesthit__radiance_smooth_dielectric",
+        "__closesthit__radiance_smooth_conductor",
+        "__closesthit__radiance_rough_dielectric",
+        "__closesthit__radiance_rough_conductor"
     };
     static constexpr std::string_view hitProgramNameShadow = "__closesthit__shadow";
 
